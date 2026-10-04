@@ -91,4 +91,23 @@ run --slice 99
 [ "$code" -eq 2 ] && s=0 || s=1
 expect "an unknown slice is an error, not a pass" "$s"
 
+# A slice may be split into lettered parts (03a, 03b). The number covers every part; a part covers only itself.
+printf '03a V2_A_001\n03b V2_B_001 V2_A_002\n031 V2_A_0010\n' > "$work/slices.txt"
+echo '// V2_A_001' > "$work/tests/t.test.ts"
+run --slice 03
+grep -q "slice 03: 1/3 covered, 2 MISSING" <<<"$out" && s=0 || s=1
+expect "--slice 03 covers its parts 03a and 03b, not slice 031" "$s"
+
+run --slice 03a
+grep -q "slice 03a: 1/1 covered" <<<"$out" && s=0 || s=1
+expect "--slice 03a covers only its own IDs" "$s"
+
+run --require --slice 03b
+[ "$code" -eq 1 ] && grep -q "missing: V2_B_001$" <<<"$out" && s=0 || s=1
+expect "--require fails for an unfinished part" "$s"
+
+run --slice 03c
+[ "$code" -eq 2 ] && s=0 || s=1
+expect "an unknown part is an error, not a pass" "$s"
+
 if [ "$failures" -eq 0 ]; then echo "all passed"; else echo "$failures failed"; exit 1; fi

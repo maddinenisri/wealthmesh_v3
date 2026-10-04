@@ -5,7 +5,8 @@
 #   scripts/scenario-coverage.sh [--require] [--slice NN] [filter]
 #
 # filter   substring of a feature file path, e.g. household/setup (default: every feature file)
-# --slice NN  check only the IDs of session NN in docs/features/slices.txt (a slice spans files, so no filter applies)
+# --slice NN  check only the IDs of session NN in docs/features/slices.txt (a slice spans files, so no filter applies).
+#             NN also covers its lettered parts (01a, 01b); --slice 01a covers that part only
 # --require  exit 1 if any scenario in the matched files is neither covered nor deferred
 #
 # Deferred scenarios are listed in docs/features/deferred.txt as "<ID> <reason>".
@@ -38,7 +39,7 @@ is_deferred() { [ -f "$deferred_file" ] && grep -qE "^$1([[:space:]]|$)" "$defer
 
 # One slice: report its IDs from slices.txt, whichever feature files they live in.
 if [ -n "$slice" ]; then
-  ids="$(awk -v n="$slice" '$1 == n { for (i = 2; i <= NF; i++) print $i }' "$slices_file" 2>/dev/null || true)"
+  ids="$(awk -v n="$slice" '$1 == n || $1 ~ ("^" n "[a-z]$") { for (i = 2; i <= NF; i++) print $i }' "$slices_file" 2>/dev/null || true)"
   if [ -z "$ids" ]; then
     echo "No slice $slice in $slices_file" >&2
     exit 2

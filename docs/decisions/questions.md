@@ -25,3 +25,4 @@
 | Q-021 | 2026-10-04 | Dissolve rows 02 and 03 (Q-F)? | resolved | Yes (2026-10-04) | D-018 |
 | Q-022 | 2026-10-04 | Five investment types in one session (Q-G)? | resolved | Yes; split at a type boundary if time runs out (2026-10-04) | D-018 |
 | Q-023 | 2026-10-04 | Keep `V2_MONTHLY_005` in slice 01 (Q-H)? | resolved | Either; slice 01 may run as 01a first (2026-10-04) | |
+| Q-024 | 2026-10-04 | Fold the overdraft-as-debt rule into basic wealth (W1) so `V2_CHECKING_015` moves from slice 12 to slice 01? | resolved | Yes, as recommended (go ahead, 2026-10-04) | D-022 |

@@ -29,7 +29,7 @@ One row per session. Do not start a second row, even if time remains.
 | --- | --- | --- | --- | ---: | :-: | --- | --- | --- | --- |
 | 00a | foundations: `docs/guides/domain-foundations.md` | - | - | - | - | done | 2026-10-04 | see git log | Notes: `00-foundations.md` |
 | 00b | checking setup, old row 01 | B1 to B4 | CHECKING 001, 003, 004, 005, 017 | 5 | S | done | 2026-10-04 | see git log | 002 returns in 01, 006 in 04. Notes: `accounts-checking-setup.md` |
-| 01 | Checking money in and out | P1, P4, L1, L2, L3, L4, S1, W1 | CHECKING 002, 011; EXPENSE 001, 010; HOUSEHOLD_SETUP 003; INCOME 001, 005; MEMBERS 001; MONTHLY 004, 005 | 10 | L | todo | | | Resolves deferred CHECKING_002 and MEMBERS_001. Seeded category list (D-020). Input: `accounts-checking-activity.md` gap analysis |
+| 01 | Checking money in and out | P1, P4, L1, L2, L3, L4, S1, W1 | CHECKING 002, 011, 015; EXPENSE 001, 010; HOUSEHOLD_SETUP 003; INCOME 001, 005; MEMBERS 001; MONTHLY 004, 005 | 11 | L | todo | | | Runs as 01a (5 IDs: CHECKING 011; EXPENSE 001, 010; MEMBERS 001; MONTHLY 005) then 01b (6 IDs: CHECKING 002, 015; HOUSEHOLD_SETUP 003; INCOME 001, 005; MONTHLY 004) (D-023). Resolves deferred CHECKING_002 and MEMBERS_001. Seeded category list (D-020). Input: `accounts-checking-activity.md` gap analysis |
 | 02 | Edit, remove, Undo and reminders | P2, P3, P5 | CHECKING 008; EXPENSE 006, 009, 011; INCOME 004, 006 | 6 | M | todo | | | Edit as replacement, soft remove, Undo, reminders, applied to income and expenses on checking |
 | 03 | Balance corrections | L5 | CHECKING 009, 013, 014, 018; MEMBERS 003 | 5 | S | todo | | | Update balance with review, reason, backdating and replace-with-fee |
 | 04 | Starting-balance recovery, tracking start, statements | L8, L9, P6 | CHECKING 006, 016; JOURNEY 004; SUPPORTING_RECORD 003; WEALTH 005 | 5 | S | todo | | | Resolves deferred CHECKING_006 |
@@ -41,7 +41,7 @@ One row per session. Do not start a second row, even if time remains.
 | 09 | Batch entry | L7 | EXPENSE 002, 003, 004, 005 | 4 | S | todo | | | Small; three of four need a card |
 | 10 | Category management and classes | S2, S3 | CATEGORIES 001, 002, 003, 004, 005, 006, 007, 008 | 8 | M | todo | | | Thin: category management only needs checking |
 | 11 | Split expenses | S4 | SPLITS 001, 002, 003, 004, 005 | 5 | S | todo | | | Thin: splits only need checking |
-| 12 | Bank and debt groups, account lifecycle | W2, A1, A2, A3 | ACCOUNT_LIFECYCLE 001, 002, 003, 004, 005, 006; CHECKING 012, 015; WEALTH 003, 011 | 10 | L | todo | | | Wealth groups for bank money and debts, archive, close, delete |
+| 12 | Bank and debt groups, account lifecycle | W2, A1, A2, A3 | ACCOUNT_LIFECYCLE 001, 002, 003, 004, 005, 006; CHECKING 012; WEALTH 003, 011 | 9 | L | todo | | | Wealth groups for bank money and debts, archive, close, delete |
 | 13 | Budgets | S5 | BUDGET 001, 002, 003, 004, 005, 006, 007; MONTHLY 003 | 8 | M | todo | | | Thin: budgets only need the month summary |
 | 14 | Recurring bills | S6 | RECURRING 001, 002, 003, 004, 005, 006, 007, 008, 009, 010 | 10 | L | todo | | | Thin: recurring only needs checking and expenses |
 | | **Milestone B** | | everyday money complete (categories, splits, groups, lifecycle, budgets, recurring). | | | | | | |

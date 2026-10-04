@@ -8,7 +8,7 @@ Date: 2026-10-04. Sources: all 39 files in `docs/requirements/v2` (262 scenarios
 - 5 of 262 scenarios are citeable today (all in `checking/setup`). Every other scenario needs at least one capability that does not exist.
 - 49 capabilities are missing. 4 exist (household and members, account record, amount parsing, clock).
 - Rows fail by file because files cut across capabilities: the 11 scenarios of `checking/activity` land in 6 different slices (1, 2, 3, 4, 7, 12); `record-expenses` in 5; `understand-wealth` in 7. Row 02 and row 03 failed the same way.
-- The order below makes 25 sessions, each ending with every listed scenario citeable. Cumulative, counting the 5 done: 15 after slice 1, 34 after slice 5, 72 after slice 8 (milestone A), 117 after slice 14, 188 after slice 18, 262 after slice 25.
+- The order below makes 25 sessions, each ending with every listed scenario citeable. Cumulative, counting the 5 done: 16 after slice 1, 35 after slice 5, 73 after slice 8 (milestone A), 117 after slice 14, 188 after slice 18, 262 after slice 25.
 - Savings is the biggest hidden dependency of wave 1: 38 scenarios need it, 27 of them outside the savings files, 16 of them inside rows 03 to 07 of the current board. See Q-B.
 - Cards are the second: 32 scenarios need them, 18 outside the card files.
 - Five investment account types are one capability. The 34 IDs across the five files are near copies (setup, empty, draft, validation, mismatch, owner). Slice 17 cites 20 of them plus 2 others.
@@ -51,8 +51,8 @@ One shared list. "Needed by" counts scenarios that list the code. "Slice" is whe
 | P6 | Supporting statements | Attach, revise (latest version), remove, Undo; statement never replaces the calculated Balance | P1, P3 | 9 | 4 |
 | L1 | Activity ledger and dated Balance | activity table; Balance = opening + activity up to a date; account activity list; earlier-date view | B2 | 25 | 1 |
 | L2 | Category catalog | Seeded spending and income categories chosen on an entry (Rent, Groceries, Salary, Interest...); no management UI | L1 | 42 | 1 |
-| L3 | Income entry | Record received money; amount > 0; received into an account | L1, L2, P1, P4 | 20 | 1 |
-| L4 | Expense, refund and charge entry | Pay from bank, card or HSA cash; refund; card interest and fees; overdraft warning; amount > 0 | L1, L2, P1, P4 | 62 | 1 |
+| L3 | Income entry | Record received money; amount > 0; received into an account | L1, L2, P1, P4 | 21 | 1 |
+| L4 | Expense, refund and charge entry | Pay from bank, card or HSA cash; refund; card interest and fees; overdraft warning; amount > 0 | L1, L2, P1, P4 | 63 | 1 |
 | L5 | Balance correction | Update balance review (current, requested, difference, reason, as-of date); never income or spending; replace a correction with the actual fee | L1, P1, P2, P4 | 19 | 3 |
 | L6 | Linked movement | Transfer and card payment as one pair: create, edit, remove, Undo; two different accounts; convert an expense to a transfer | L1, P1 | 39 | 7 |
 | L7 | Batch entry | Save and add another; review several entries; all or none; no double save | L4 | 4 | 9 |
@@ -79,8 +79,8 @@ One shared list. "Needed by" counts scenarios that list the code. "Slice" is whe
 | M2 | Joint owners | More than one owner on an account; owner text; owner choice from active members | B2 | 8 | 5 |
 | M3 | Per-person account view | Whole household / each member filter; joint appears in each view, counts once | M2, W1 | 1 | 18 |
 | M4 | Individual-owner rule | Retirement, HSA, plan: exactly one member; owner change reviewed with history | B2, P1, P2 | 13 | 18 |
-| W1 | Household total | Assets, debts, net worth over built account types, each counted once; empty state; same Balance in list, detail, wealth | L1 | 65 | 1 |
-| W2 | Bank money and Debts groups | Overdraft counted as debt, card credit as asset, archived label, open an account behind a total | W1 | 9 | 12 |
+| W1 | Household total | Assets, debts, net worth over built account types, each counted once; a negative bank balance (overdraft) counts as debt; empty state; same Balance in list, detail, wealth | L1 | 65 | 1 |
+| W2 | Bank money and Debts groups | Card credit as asset, archived label, open an account behind a total | W1 | 8 | 12 |
 | W3 | Investment, Retirement, Health, Property groups | Group membership, overlap explanation, never added to wealth | W1 | 17 | 18 |
 | W4 | As-of date, trend, stale dates | Wealth on an earlier date, trend, mixed value dates noticed | W1 | 7 | 15 |
 | W5 | Wealth change explanation | Income minus spending, growth, value change, corrections, shared events counted once | W1, S1 | 12 | 15 |
@@ -101,18 +101,18 @@ Derived from the scenario table: a scenario lands in the first slice whose cumul
 
 | Slice | Session | New capabilities | IDs | Size | Cumulative |
 | ---: | --- | --- | ---: | :-: | ---: |
-| 1 | Checking money in and out | P1 P4 L1 L2 L3 L4 S1 W1 | 10 | L | 15 |
-| 2 | Edit, remove, Undo and reminders | P2 P3 P5 | 6 | M | 21 |
-| 3 | Balance corrections | L5 | 5 | S | 26 |
-| 4 | Starting-balance recovery, tracking start, statements | L8 L9 P6 | 5 | S | 31 |
-| 5 | Member lifecycle and joint owners | M1 M2 | 3 | S | 34 |
-| 6 | Savings accounts | T1 | 9 | L | 43 |
-| 7 | Linked transfers and card payments | L6 | 13 | L | 56 |
-| 8 | Credit cards | T2 | 16 | L | 72 |
-| 9 | Batch entry | L7 | 4 | S | 76 |
-| 10 | Category management and classes | S2 S3 | 8 | M | 84 |
-| 11 | Split expenses | S4 | 5 | S | 89 |
-| 12 | Bank and debt groups, account lifecycle | W2 A1 A2 A3 | 10 | L | 99 |
+| 1 | Checking money in and out | P1 P4 L1 L2 L3 L4 S1 W1 | 11 | L | 16 |
+| 2 | Edit, remove, Undo and reminders | P2 P3 P5 | 6 | M | 22 |
+| 3 | Balance corrections | L5 | 5 | S | 27 |
+| 4 | Starting-balance recovery, tracking start, statements | L8 L9 P6 | 5 | S | 32 |
+| 5 | Member lifecycle and joint owners | M1 M2 | 3 | S | 35 |
+| 6 | Savings accounts | T1 | 9 | L | 44 |
+| 7 | Linked transfers and card payments | L6 | 13 | L | 57 |
+| 8 | Credit cards | T2 | 16 | L | 73 |
+| 9 | Batch entry | L7 | 4 | S | 77 |
+| 10 | Category management and classes | S2 S3 | 8 | M | 85 |
+| 11 | Split expenses | S4 | 5 | S | 90 |
+| 12 | Bank and debt groups, account lifecycle | W2 A1 A2 A3 | 9 | L | 99 |
 | 13 | Budgets | S5 | 8 | M | 107 |
 | 14 | Recurring bills | S6 | 10 | L | 117 |
 | 15 | Property and other assets, dated values | T3 W4 W5 | 12 | L | 129 |
@@ -130,8 +130,8 @@ Derived from the scenario table: a scenario lands in the first slice whose cumul
 ### Slice 1: Checking money in and out
 
 - Adds: P1 Review, confirm, cancel, P4 Entered-by chooser, L1 Activity ledger and dated Balance, L2 Category catalog, L3 Income entry, L4 Expense, refund and charge entry, S1 Month summary, W1 Household total
-- Becomes citeable (10): CHECKING 002, 011; EXPENSE 001, 010; HOUSEHOLD_SETUP 003; INCOME 001, 005; MEMBERS 001; MONTHLY 004, 005
-- Note: Smallest set that makes any ledger scenario passable. Heavy on capabilities (8), light per capability. Resolves deferred CHECKING_002 and MEMBERS_001 (Q-012: the entered-by chooser now has a form to live in). Optional split: 1a without L3 (6 IDs), 1b income (4 IDs).
+- Becomes citeable (11): CHECKING 002, 011, 015; EXPENSE 001, 010; HOUSEHOLD_SETUP 003; INCOME 001, 005; MEMBERS 001; MONTHLY 004, 005
+- Note: Smallest set that makes any ledger scenario passable. Heavy on capabilities (8), light per capability. Resolves deferred CHECKING_002 and MEMBERS_001 (Q-012: the entered-by chooser now has a form to live in). Runs as two sessions (D-023): 01a without income entry (CHECKING 011; EXPENSE 001, 010; MEMBERS 001; MONTHLY 005) and 01b with income and basic wealth (CHECKING 002, 015; HOUSEHOLD_SETUP 003; INCOME 001, 005; MONTHLY 004).
 
 ### Slice 2: Edit, remove, Undo and reminders
 
@@ -197,8 +197,8 @@ Derived from the scenario table: a scenario lands in the first slice whose cumul
 ### Slice 12: Bank and debt groups, account lifecycle
 
 - Adds: W2 Bank money and Debts groups, A1 Archive and restore, A2 Close and reopen, A3 Delete with Undo
-- Becomes citeable (10): ACCOUNT_LIFECYCLE 001, 002, 003, 004, 005, 006; CHECKING 012, 015; WEALTH 003, 011
-- Note: Wealth groups for bank money and debts, archive, close, delete. Overdraft and card credit show here.
+- Becomes citeable (9): ACCOUNT_LIFECYCLE 001, 002, 003, 004, 005, 006; CHECKING 012; WEALTH 003, 011
+- Note: Wealth groups for bank money and debts, archive, close, delete. Card credit shows here; the overdraft-as-debt rule moved into W1 (D-022).
 
 ### Slice 13: Budgets
 
@@ -308,7 +308,7 @@ Capabilities needed beyond the four built ones. "Slice" 0 means done in row 01.
 | V2_CHECKING_012 | accounts/checking/activity | A1, L1, L6, T1 | 12 |  |
 | V2_CHECKING_013 | accounts/checking/activity | L1, L2, L4, L5, P1, P2, P4, S1 | 3 |  |
 | V2_CHECKING_014 | accounts/checking/activity | L1, L2, L4, L5, P1, P2, S1 | 3 |  |
-| V2_CHECKING_015 | accounts/checking/activity | L2, L4, P1, S1, W1, W2 | 12 | U |
+| V2_CHECKING_015 | accounts/checking/activity | L2, L4, P1, S1, W1 | 1 |  |
 | V2_CHECKING_016 | accounts/checking/activity | L1, L2, L4, L8, P1, P2, S1 | 4 |  |
 | V2_CHECKING_018 | accounts/checking/activity | L1, L3, L5, P1, P2, P4, S1 | 3 |  |
 | V2_CHECKING_001 | accounts/checking/setup | - | 0 |  |
@@ -537,7 +537,7 @@ Capabilities needed beyond the four built ones. "Slice" 0 means done in row 01.
 | V2_MONTHLY_001 | spending/monthly-review/review-spending | I4, L2, L3, L4, L6, S1, S3, T1, T2, T7 | 21 |  |
 | V2_MONTHLY_002 | spending/monthly-review/review-spending | L2, L4, L6, S1, T2 | 8 |  |
 | V2_MONTHLY_003 | spending/monthly-review/review-spending | S1, S5 | 13 |  |
-| V2_MONTHLY_004 | spending/monthly-review/review-spending | L1, S1 | 1 |  |
+| V2_MONTHLY_004 | spending/monthly-review/review-spending | L1, L3, L4, S1 | 1 |  |
 | V2_MONTHLY_005 | spending/monthly-review/review-spending | S1 | 1 |  |
 | V2_RECURRING_001 | spending/recurring/manage-recurring | L2, L4, S6 | 14 |  |
 | V2_RECURRING_002 | spending/recurring/manage-recurring | L4, P1, S6 | 14 |  |
@@ -647,3 +647,11 @@ uniq -d /tmp/ids.map                                              # empty
 ```
 
 Also checked by script on the written tables: every capability code in the scenario table exists in the capability list and every unbuilt capability is used by at least one scenario; each capability is built no earlier than the capabilities it requires; each scenario's slice equals the latest slice among its capabilities; slice counts sum to 262 including the 5 done.
+
+## Review corrections (2026-10-04)
+
+Found when the owner reviewed the adopted map. The slice order and every other mapping are unchanged.
+
+- `V2_CHECKING_015` moves from slice 12 to slice 1 (part 01b). The step "household wealth treats the overdraft as debt" only needs W1 to count a negative bank balance as debt (D-022). Slice 1 becomes 11 scenarios, slice 12 becomes 9, and the cumulative counts before slice 12 rise by one.
+- `V2_MONTHLY_004` now lists L3 and L4. Its Givens ("September Salary income is $6,000.00 and recorded expenses total $3,660.00") need income and expense entry, so it belongs to part 01b, not 01a. Its slice is unchanged.
+- Slice 1 is split into 01a (5 IDs) and 01b (6 IDs) in `slices.txt` (D-023).
