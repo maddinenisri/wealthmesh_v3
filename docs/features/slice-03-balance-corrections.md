@@ -2,7 +2,7 @@
 
 - Slice: 03 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `accounts/checking/activity.feature`, `household/members/manage-members.feature`
 - Status: done
-- Started: 2026-10-04 18:29  Finished: 2026-10-04  Commit: see git log (feat(corrections) and fix(ui) commits)
+- Started: 2026-10-04 18:29  Finished: 2026-10-04  Commit: `02851d2`, `4ad7a55`, `f9fd8ac`, `4ddb5b8` (pushed)
 
 ## Prompts and directions
 
@@ -82,10 +82,11 @@ Fee kind (`expense` + Bank fees vs `fee`), decision 5; optional zero-difference 
 - The Update balance form is live; the old inactive form and its tests were replaced (`CheckingSetup.test.tsx`, `02-checking-setup.spec.ts`).
 - Left for later (owner's review, not done): tables still scroll inside their card at 710px (Activity 7px too wide, history Reason column cut off); history rows are tall and repetitive; long correction descriptions wrap to five lines; the replacement offer is the default whenever amount and date match, and "separate" does not reset when the amount or date changes. If a fee expense is later removed its replaced correction does not return, so the Balance moves (slice 02 rules).
 - Account detail: Balance and Initial Balance use the page font at the same size (the `Amount` component stays serif elsewhere; owner may want it everywhere).
+- Fee replacement checks amount and date only, not the category; the scenario uses Bank fees (D-029).
 - Watch for: `post()` in `LedgerApiTestBase` encodes a slash in its path argument, so nested paths need `webTestClient` directly; `Amount` keeps cents in a nested span, so use `toHaveTextContent`.
 
 ## Retro (3 lines, also appended to `docs/process/retro.md`)
 
-- What slowed this session: the validator found a retry bug and a concurrent-save race after the build, third session in a row with a post-build race; owner found form usability gaps (reason message off-screen, empty edit form) at checkpoint 2.
+- What slowed this session: the validator found a retry bug and a concurrent-save race after the build, second session in a row with a post-build race; owner found form usability gaps (reason message off-screen, empty edit form) at checkpoint 2.
 - What went well: three groups on one service, a server-computed amount, a stored requested figure and an account lock; mutation check caught the edit rule.
 - Process change to try: for any save with an idempotency key, test the retry after the ledger changed and a concurrent save before the validator; for edit forms, prefill and show original values.

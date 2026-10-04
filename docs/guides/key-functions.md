@@ -17,6 +17,10 @@ The files that carry the design, and what breaks or gets harder without each. Pa
 | `activity/service/EntryChangeService`          | `replace` (edit as replacement), `remove`, `undo`, `history` with who/when events (`activity_event`) | Money rows are never updated in place; a replacement and the original swap in one transaction |
 | `activity/service/EntryValidator`              | `parse` (entries) and `parseReminder`: amount, date, category kind, member    | One place for entry rules; the date rule differs for reminders |
 | `reminder/service/ReminderService`             | `save` (repeat-safe, D-024) and `all`; table `reminder` (V4)                  | Reminders never reach `activity`, so Balance and totals cannot count them |
+| `activity/service/BalanceCorrectionService`    | `balanceAsOf`, `preview`, `save` (new correction or edit as replacement)       | Amount is computed at save under an account lock; a retry replays from `requested_balance` (V6, D-028) |
+| `activity/BalanceController`                   | `GET /accounts/{id}/balance?asOf=`, `GET .../balance-corrections/preview`, `POST .../balance-corrections` | Preview is informational only |
+| `frontend/src/features/activity/BalanceCorrection.tsx` | Update balance form, review, reason, edit of a correction          | Edit starts from the Balance the correction made |
+| `frontend/src/features/activity/signedAmount.ts` | Effect of a row on the Balance (expense negative, others as stored)           | Shared by the list and history |
 | `activity/repository/ActivityStore`            | SQL: Balance deltas, account activity, month totals and entries by kind       | Removed rows never count; transfers and corrections stay out of income and spending |
 | `spending/service/SpendingService`             | Month income, spending, `review` (Income minus spending), history              | The month review reads only `income` and `expense` rows    |
 | `wealth/service/WealthService`                 | `summary`: positive bank Balances are assets, negative are debts (D-022)       | The one place household totals are computed                |
