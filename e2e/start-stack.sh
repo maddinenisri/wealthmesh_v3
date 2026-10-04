@@ -16,6 +16,8 @@ docker compose -f "$here/compose.yaml" up -d --wait
 
 export DB_PASSWORD=e2e-password
 export SERVER_PORT="$APP_PORT"
+# Same "today" as the scenarios and the UI date defaults (the UI reads it from GET /api/v1/today).
+export WEALTHMESH_CLOCK_FIXED_TODAY="${WEALTHMESH_CLOCK_FIXED_TODAY:-2026-10-03}"
 export SPRING_R2DBC_URL="r2dbc:postgresql://localhost:${WM_E2E_DB_PORT}/wealthmesh_e2e"
 export SPRING_FLYWAY_URL="jdbc:postgresql://localhost:${WM_E2E_DB_PORT}/wealthmesh_e2e"
 export DB_USERNAME=wealthmesh
