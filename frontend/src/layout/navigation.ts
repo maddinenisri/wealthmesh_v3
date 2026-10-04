@@ -1,6 +1,7 @@
 /** Primary navigation. Keep in step with the routes in routes.tsx. */
 export const navigation = [
   { to: '/', label: 'Household', end: true },
+  { to: '/accounts', label: 'Accounts', end: false },
   { to: '/design', label: 'Design system', end: false },
 ] as const
 

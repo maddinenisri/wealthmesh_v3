@@ -1,4 +1,7 @@
 import { createBrowserRouter, type RouteObject } from 'react-router'
+import { AccountDetailPage } from './features/accounts/AccountDetailPage'
+import { AccountsPage } from './features/accounts/AccountsPage'
+import { EditAccountPage, NewAccountPage } from './features/accounts/AccountFormPages'
 import { HouseholdPage } from './features/household/HouseholdPage'
 import { AppLayout } from './layout/AppLayout'
 import type { RouteHandle } from './layout/navigation'
@@ -13,6 +16,10 @@ export const routes: RouteObject[] = [
     Component: AppLayout,
     children: [
       { index: true, Component: HouseholdPage, handle: handle('Household') },
+      { path: 'accounts', Component: AccountsPage, handle: handle('Accounts') },
+      { path: 'accounts/new', Component: NewAccountPage, handle: handle('Add checking account') },
+      { path: 'accounts/:id', Component: AccountDetailPage, handle: handle('Account') },
+      { path: 'accounts/:id/edit', Component: EditAccountPage, handle: handle('Edit account') },
       { path: 'design', Component: Showcase, handle: handle('Design system') },
       { path: '*', Component: NotFoundPage, handle: handle('Page not found') },
     ],
