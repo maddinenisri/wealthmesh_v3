@@ -4,7 +4,7 @@ One feature file per session, in this order. Order follows dependencies, not the
 starts with the whole-journey file, but that is the acceptance thread, so it is built last and its e2e spec grows a
 step in each session. After wave 1 there is a usable product; later waves add breadth.
 
-**Updating:** the session that works a row edits it (status, date, commit). Statuses: `todo`, `in-progress`,
+**Updating:** the session that works a row edits it (status, date, commit) and links the feature notes file in the Notes column. Statuses: `todo`, `in-progress`,
 `partial` (some scenarios deferred or blocked, see `deferred.txt`), `done`. Done means the coverage script reports no
 missing scenarios for the file, the validator report is clean, `npm run e2e` passes and the work is pushed.
 
@@ -13,7 +13,7 @@ scenario-group boundary; note the split in the row.
 
 ## Starting a session
 
-Open a new Claude Code session in the repo and paste:
+Open a new Claude Code session in the repo and paste the kickoff prompt from `docs/process/prompts.md`:
 
 ```text
 Work in /Users/srini/workspace/mdstect_ws/wealthmesh_v3. Run the feature-session skill for <row> below.
@@ -27,7 +27,7 @@ One row per session. Do not start a second row, even if time remains; finish the
 
 | # | Feature file | Scenarios | Size | Status | Date | Commit | Notes |
 | --- | --- | ---: | :-: | --- | --- | --- | --- |
-| 00 | foundations: `docs/05-domain-foundations.md` | - | - | todo | | | Decide money, dated balance, clock, account model before any feature |
+| 00 | foundations: `docs/guides/domain-foundations.md` | - | - | todo | | | Decide money, dated balance, clock, account model before any feature |
 | | **Wave 1: walking skeleton (usable product after these)** | | | | | | |
 | 01 | `household/setup/set-up-household.feature` | 5 | S | todo | | | |
 | 02 | `household/members/manage-members.feature` | 6 | M | todo | | | |

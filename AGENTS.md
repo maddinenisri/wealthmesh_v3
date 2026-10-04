@@ -8,9 +8,11 @@ Household finance app. Monorepo: `backend/` (Java 25, Spring Boot 4.1 WebFlux, R
 
 ## Read first
 
-- Setting up or rebuilding the stack: `docs/01-setup-playbook.md`, after the `preflight` skill.
-- Writing code: `docs/02-patterns.md`. Finding things: `docs/03-key-functions.md`.
-- Something fails or surprises you: `docs/04-pitfalls.md` before debugging from scratch.
+- How we work and how it improves: `docs/process/workflow.md`. Choices already made and open questions:
+  `docs/decisions/decisions.md` and `docs/decisions/questions.md` (check them before asking the user anything).
+- Setting up or rebuilding the stack: `docs/guides/setup-playbook.md`, after the `preflight` skill.
+- Writing code: `docs/guides/patterns.md`. Finding things: `docs/guides/key-functions.md`.
+- Something fails or surprises you: `docs/guides/pitfalls.md` before debugging from scratch.
 
 ## Commands (run from the repo root)
 
@@ -39,13 +41,15 @@ stable `@V2_...` IDs; a read-only snapshot). Status board: `docs/features/INDEX.
 - Every test cites the scenario ID(s) it covers. `npm run coverage -- --require <path>` checks it.
 - v1 is running at `http://localhost:3000` as a read-only UX reference. Never change its data or its repository.
 - Never edit a `.feature` file. Record deviations as decisions in the feature's notes.
-- Each session ends green: `npm run e2e` passes on `main`. Add a retro row in `docs/features/RETRO.md`.
+- Each session ends green: `npm run e2e` passes on `main`. Add a retro row in `docs/process/retro.md`.
+- Keep the kickoff prompt and the owner's checkpoint answers in the feature's notes. Never store transcripts or secrets.
+- Cross-cutting choices go to `docs/decisions/decisions.md`; feature-local ones stay in the feature's notes.
 
 ## Skills and agents
 
 Claude Code skills in `.claude/skills/`: `preflight`, `bootstrap-fullstack`, `feature-session`, `feature-slice`, `release-jar`.
 Claude Code agents in `.claude/agents/` (use on request): `validator` (independent evidence, no edits),
-`pattern-reviewer` (conformance to `docs/02`).
+`pattern-reviewer` (conformance to `docs/guides/patterns.md`).
 
 Other tools: the skill files are plain Markdown runbooks. Open the matching `SKILL.md` and follow it step by step;
 the validator and reviewer files describe the checks to run and report.

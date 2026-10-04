@@ -7,14 +7,24 @@ the session working it. Keep it short; it exists so the next session needs no me
 - Status: todo / in-progress / partial / done (mirror the row in `INDEX.md`)
 - Started: <date>  Finished: <date>  Commit: <hash>
 
+## Prompts and directions
+
+Paste, verbatim, the kickoff prompt that started this session (see `docs/process/prompts.md`, note its version), then
+add each instruction or answer the product owner gave at a checkpoint, with the date. No transcripts, no secrets.
+
+- Kickoff prompt (v1):
+- <date> Checkpoint 1 answer:
+- <date> Checkpoint 2 answer:
+
 ## Scope
 
 Scenario IDs in this session (all of them, unless a split is recorded): `@V2_...`
 
 ## Decisions
 
-Choices made that the feature file does not settle, each with the reason. Foundation rules live in
-`docs/05-domain-foundations.md`; do not restate them, only link.
+Choices made that the feature file does not settle, each with the reason. Keep feature-local choices here; promote
+a choice to `docs/decisions/decisions.md` only when other features will rely on it. Foundation rules live in
+`docs/guides/domain-foundations.md`; do not restate them, only link.
 
 ## Task list (approved at checkpoint 1)
 
@@ -32,13 +42,14 @@ Filled from `npm run coverage -- <path>`: ID, test file, level. Deferred or bloc
 
 ## Open questions
 
-Anything that needs the product owner. Mark the answer and date when resolved.
+Anything that needs the product owner. Add it to `docs/decisions/questions.md` as well (that is the register the
+next session reads), and mark the answer and date in both places when resolved.
 
 ## Handoff
 
 What the next session must know that is not in the code: what is half-built, what to watch for, what v1 showed.
 
-## Retro (3 lines, also appended to `RETRO.md`)
+## Retro (3 lines, also appended to `docs/process/retro.md`)
 
 - What slowed this session:
 - What went well:

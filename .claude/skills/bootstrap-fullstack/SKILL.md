@@ -5,7 +5,7 @@ description: Use when creating a new full-stack project from an empty folder, re
 
 # Bootstrap full-stack
 
-The procedure lives in `docs/01-setup-playbook.md`. This skill only enforces how to follow it, so the two cannot drift.
+The procedure lives in `docs/guides/setup-playbook.md`. This skill only enforces how to follow it, so the two cannot drift.
 
 **REQUIRED SUB-SKILL:** run `preflight` first.
 
@@ -13,7 +13,7 @@ The procedure lives in `docs/01-setup-playbook.md`. This skill only enforces how
 
 1. Read "Decide first" in the playbook. Ask the user only for answers they have not already given, in one message.
 2. Do phases 2 to 8 in order. After each phase run its **gate** and show the actual output.
-3. A red gate stops the run: check `docs/04-pitfalls.md` for the symptom, fix, re-run the gate.
+3. A red gate stops the run: check `docs/guides/pitfalls.md` for the symptom, fix, re-run the gate.
 4. Replace names, package and ports from the decisions; verify versions with the playbook's registry commands.
 5. Before calling hooks done, plant one defect per hook and see it fail (playbook phase 7).
 

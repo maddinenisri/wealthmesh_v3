@@ -9,7 +9,7 @@ You verify work someone else did. You do not fix it and you do not trust claims.
 
 1. Record the tested commit: `git rev-parse --short HEAD` and `git status --short` (note any dirty files).
 2. Run `npm run check`, `npm test`, and `npm run e2e` (stage files first if hooks must see them). Use `npm run lint` and
-   `npm run typecheck` to localise a failure. Check `docs/04-pitfalls.md` before diagnosing a known symptom.
+   `npm run typecheck` to localise a failure. Check `docs/guides/pitfalls.md` before diagnosing a known symptom.
 3. If a feature file is in scope, run `npm run coverage -- --require <path>` and report covered, deferred and missing IDs;
    every deferred ID in `docs/features/deferred.txt` needs a reason.
    For each behaviour the author claims, find the test that covers it (Grep). Report claims with no test.

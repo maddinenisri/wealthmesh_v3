@@ -5,7 +5,7 @@ description: Use when adding a new entity, endpoint or screen to this app end to
 
 # Feature slice
 
-One vertical slice, in this order. Patterns are in `docs/02-patterns.md`; file roles in `docs/03-key-functions.md`.
+One vertical slice, in this order. Patterns are in `docs/guides/patterns.md`; file roles in `docs/guides/key-functions.md`.
 
 **REQUIRED SUB-SKILL:** `superpowers:test-driven-development`. Write the failing test, watch it fail, then implement.
 
@@ -25,4 +25,4 @@ One vertical slice, in this order. Patterns are in `docs/02-patterns.md`; file r
 - Every test names the scenario ID it covers (`V2_..._001` in the title or a comment). Check with `npm run coverage -- --require <feature path>`.
 - Break one behavior on purpose, watch a test fail, restore it.
 - `npm run check` and `npm test` pass; report what you ran.
-- Update `docs/03-key-functions.md` if the slice adds a file others should know about.
+- Update `docs/guides/key-functions.md` if the slice adds a file others should know about.

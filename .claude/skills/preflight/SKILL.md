@@ -30,7 +30,7 @@ curl -s https://start.spring.io/metadata/client | python3 -c 'import sys,json;d=
 
 | Finding | Action |
 | --- | --- |
-| Needed JDK missing, or an alias reports another version | `docs/04-pitfalls.md` #10, #11 |
+| Needed JDK missing, or an alias reports another version | `docs/guides/pitfalls.md` #10, #11 |
 | A needed port is in use | Pick another and set it in `.env`; do not stop the other project's process |
 | Other pm2 apps present | Leave them alone; keep `wm-*` names |
 | A dependency is a major behind latest | State it and ask: upgrade now or keep |

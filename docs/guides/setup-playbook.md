@@ -30,7 +30,7 @@ git config user.name; git config user.email
 ```
 
 Resolve everything that fails here first. If an installed JDK alias points at the wrong version, fix it now
-(see [04-pitfalls.md](04-pitfalls.md), JDK section).
+(see [pitfalls.md](pitfalls.md), JDK section).
 
 ### Verify the latest versions (do not trust memory)
 
@@ -80,7 +80,7 @@ Order: `build.gradle` → `settings.gradle` → wrapper → `.gitignore` / `.git
 5. `V1__init_schema.sql`: `CREATE SCHEMA IF NOT EXISTS`, tables qualified with the schema, UUID primary keys with
    `gen_random_uuid()` defaults.
 6. Code layout per feature: `domain/`, `dto/`, `mapper/`, `repository/`, `service/`, controller (see
-   [02-patterns.md](02-patterns.md)).
+   [patterns.md](patterns.md)).
 7. Tests: one Testcontainers config shared by the context test and the API tests.
 
 **Gate:** `./gradlew test checkstyleMain checkstyleTest` is green (needs Docker for Testcontainers).

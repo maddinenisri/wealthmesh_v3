@@ -4,7 +4,7 @@ The feedback loop. Each session appends one row when it finishes: what slowed it
 not rewrite old rows.
 
 **Promotion rule:** when the same problem appears in two rows, change the process in that session: update a skill,
-`AGENTS.md`, a doc or a script, and put the commit hash in the last column. A problem that only shows up once stays
+`AGENTS.md`, a doc or a script, put the commit hash in the last column and add a row to `improvements.md`. A problem that only shows up once stays
 a note.
 
 | Date | Session | What slowed it | Change to try | Promoted (commit) |
