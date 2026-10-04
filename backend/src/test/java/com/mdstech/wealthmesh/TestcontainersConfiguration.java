@@ -1,7 +1,10 @@
 package com.mdstech.wealthmesh;
 
+import java.time.ZoneId;
+
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.DynamicPropertyRegistrar;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
@@ -18,6 +21,13 @@ public class TestcontainersConfiguration {
     @Bean
     PostgreSQLContainer postgresContainer() {
         return new PostgreSQLContainer(DockerImageName.parse("postgres:17"));
+    }
+
+    /** Replaces the production clock so tests can say what today is. */
+    @Bean
+    @Primary
+    MutableClock testClock() {
+        return new MutableClock(ZoneId.of("America/New_York"));
     }
 
     @Bean
