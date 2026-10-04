@@ -4,8 +4,8 @@ Copy this file to `docs/features/slice-NN-<name>.md` at the start of the session
 the session working it. Keep it short; it exists so the next session needs no memory of this one.
 
 - Slice: 02 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `accounts/checking/activity.feature`, `spending/expenses/record-expenses.feature`, `spending/income/record-income.feature`
-- Status: in-progress (built and proved; waiting for checkpoint 2)
-- Started: 2026-10-04  Finished:  Commit:
+- Status: done
+- Started: 2026-10-04  Finished: 2026-10-04  Commit: 844763a
 
 ## Prompts and directions
 
@@ -25,7 +25,7 @@ Before you start it, two things from 01b are still open: board row 01 still said
 
 - 2026-10-04 Pre-start answer: board row and retro row fixed, commits pushed (`470021f`).
 - 2026-10-04 Checkpoint 1 answer: approved as proposed (six decisions, groups A, B, C).
-- <date> Checkpoint 2 answer:
+- 2026-10-04 Checkpoint 2 answer: reviewed; fixed panels, history layout, who/when events, formats, labels; kept "Save reminder"; reminder actions deferred to slice 14; approved to commit and push.
 
 ## Scope
 
@@ -101,6 +101,6 @@ next session reads), and mark the answer and date in both places when resolved.
 
 ## Retro (3 lines, also appended to `docs/process/retro.md`)
 
-- What slowed this session:
-- What went well:
-- Process change to try:
+- What slowed this session: UI faults found only at checkpoint 2; validator found a non-atomic swap and a race after build.
+- What went well: TDD per group; mutation checks caught test gaps; one entry service kept edit, remove and reminders small.
+- Process change to try: click new paths at 710px and 1280px before checkpoint 2 (in the skill).

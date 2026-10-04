@@ -15,6 +15,7 @@ commit, so the effect can be judged in later retro rows.
 | 2026-10-04 | Third ordering miss: board by folder name, row 02 by position, row 03 by keyword count (0 of 11 citeable) | Capability dependency map; one session per slice; `--slice` coverage; seeded categories, strict Givens (D-018 to D-021) | `features/dependency-map.md`, `features/INDEX.md`, `features/slices.txt`, `scripts/scenario-coverage.sh`, `feature-session` skill | see git log |
 | 2026-10-04 | Scripted edits misapplied again and again (three times in one session, plus the row 01 retro): a paren mismatch, a clobbered config, a silently failed insert | Rule: scripted edits assert the match or use the Edit tool; grep to prove a multi-file change landed | `AGENTS.md` | see git log |
 | 2026-10-04 | Slice 01a retro said "run lint before reporting backend work done" but the skill's Prove step never listed it (`check` skips Checkstyle) | `npm run lint` added to the Prove step and the feature-slice finish line; a retro lesson that is a command goes into the skill at once | `.claude/skills/feature-session`, `.claude/skills/feature-slice` | see git log |
+| 2026-10-04 | UI faults found only at checkpoint 2, twice (01a state bugs; 02 panels opening off-screen, history overflow, mismatched formats) | Checkpoint 2 now requires clicking each new path at 710px and 1280px first | `.claude/skills/feature-session/SKILL.md`, see git log |
 
 ## How to judge a change
 
