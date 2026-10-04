@@ -49,7 +49,7 @@ you during setup; the first three explain most of the time spent on the database
 | 25 | `ls dir/*.jar \| grep -v plain` flagged (SC2010)                      | Parsing `ls` output                                                      | Loop over the glob and `case` on `*-plain.jar`                                               |
 | 26 | `check-json` rejects `tsconfig*.json`                                | They are JSON with comments                                              | Exclude `tsconfig.*\.json` from `check-json`                                                  |
 | 27 | Prettier fails on first run across the repo                          | Code was written before the config                                       | Add the config, run `--write` once, re-run tests and build to prove nothing changed          |
-| 33 | `unzip -l jar \| grep -q entry` under `set -o pipefail` always says the entry is missing | `grep -q` exits on the first match, `unzip` is killed by SIGPIPE (pipe status `141 0`), and `pipefail` turns that into failure | Ask `unzip` for the entry directly: `unzip -l jar entry >/dev/null`. Test guards by running the script, not only the command |
+| 33 | `unzip -l jar \| grep -q entry` under `set -o pipefail` always says the entry is missing | `grep -q` exits on the first match, `unzip` is killed by SIGPIPE (pipe status `141 0`), and `pipefail` turns that into failure | Ask `unzip` for the entry directly: `unzip -l jar entry >/dev/null`. Test guards by running the script; `scripts/test-run-backend-jar.sh` does this and fails on the old pipe version |
 
 ## Process
 

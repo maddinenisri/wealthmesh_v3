@@ -66,6 +66,13 @@ repos:
         language: system
         files: '\.sh$'
 
+      - id: script-tests
+        name: script tests (run-backend-jar guard)
+        entry: scripts/test-run-backend-jar.sh
+        language: system
+        files: '^scripts/'
+        pass_filenames: false
+
       # Slower checks run on push, not on every commit.
       - id: frontend-typecheck-and-test
         name: frontend typecheck and tests

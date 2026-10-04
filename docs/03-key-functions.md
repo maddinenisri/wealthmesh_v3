@@ -57,6 +57,7 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | `scripts/java-env.sh` `find_jdk25`     | Finds a JDK 25 from `WM_JAVA_HOME`, `JAVA_HOME`, jenv, `java_home`; exports it       |
 | `scripts/gradle.sh`                    | Runs the wrapper under that JDK                                                      |
 | `scripts/run-backend-jar.sh`           | Finds the jar (skips `-plain`), optionally requires the bundled UI, runs it          |
+| `scripts/test-run-backend-jar.sh`      | Tests the jar runner's UI guard with a fake JDK and fake jars; pass another script path to test it  |
 | `scripts/db.sh`                        | `up`, `down`, `reset`, `logs`, `status` for the dev database                         |
 | `e2e/start-stack.sh`                   | Disposable DB, then jar as a child; `trap` removes the DB on exit                    |
 | `e2e/playwright.config.ts`             | `webServer` runs the stack, `workers: 1`, health URL, graceful shutdown              |
