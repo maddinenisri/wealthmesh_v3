@@ -1,0 +1,21 @@
+name: wealthmesh-v3
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:17}
+    environment:
+      POSTGRES_DB: wealthmesh_v3
+      POSTGRES_USER: wealthmesh
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+    ports:
+      - '127.0.0.1:${WM_DB_PORT:-5433}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wealthmesh -d wealthmesh_v3']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    stop_grace_period: 20s
+volumes:
+  postgres_data:
+    name: wealthmesh-v3_postgres_data
