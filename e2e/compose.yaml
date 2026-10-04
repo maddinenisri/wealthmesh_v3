@@ -1,0 +1,19 @@
+# Disposable Postgres for end-to-end runs. Data lives in tmpfs and nothing is named or
+# persisted, so it can never touch the development database (backend/compose.yaml).
+name: wealthmesh-e2e
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: wealthmesh_e2e
+      POSTGRES_USER: wealthmesh
+      POSTGRES_PASSWORD: e2e-password
+    ports:
+      - '127.0.0.1:${WM_E2E_DB_PORT:-5435}:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wealthmesh -d wealthmesh_e2e']
+      interval: 1s
+      timeout: 3s
+      retries: 30
