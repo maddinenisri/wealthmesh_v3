@@ -1,0 +1,2 @@
+V2_CHECKING_002 Salary step needs income recording (row 04); the zero-start half is built and tested without citing this ID
+V2_CHECKING_006 Older saved file, legacy "Starting balance needed" and reviewed history need activity and expenses (rows 03, 05)

@@ -11,6 +11,11 @@ The files that carry the design, and what breaks or gets harder without each. Pa
 | `household/mapper/HouseholdMemberMapper`       | `toResponse`, `toNewEntity`, `toUpdatedEntity` (two sources), `@Named` helpers| Normalises names, builds keys and timestamps for records    |
 | `household/mapper/HouseholdMapper`             | Same for the household                                                        | Keeps entities out of controllers                           |
 | `household/domain/*`                           | Table-mapped records with `@Id UUID`                                          | DB-generated ids; null id means insert                      |
+| `account/service/AccountService`               | `create`, `update`, `findAll`, `findById`; `parse` validates (name, amount, type, date); owners must belong to the household | One place for account rules; edit never touches money (D-017) |
+| `account/repository/AccountOwnerStore`         | Owner links (composite key) with plain SQL: `replace`, `ownersByAccount`, `ownersOf` | Joint accounts later need no schema change                  |
+| `account/mapper/AccountMapper`                 | Abstract mapper; `balance(account)` is the one place Balance is computed      | Row 03 adds activity to this method                         |
+| `money/Money`                                  | `parse` (string, two decimals) and `format`                                   | JSON money is a string (foundations 1)                      |
+| `clock/ClockConfiguration`, `TodayController`  | The one `Clock` bean (zone, `wealthmesh.clock.fixed-today`) and `GET /api/v1/today` | Never call `now()` without it; the UI reads today from here |
 | `web/SpaFallbackFilter.isPageRequest`          | Decides which GET/HEAD requests get `index.html`                              | Refresh and deep links work; assets and API are untouched   |
 | `resources/application.yaml`                   | R2DBC `options: search_path`, `spring.flyway.url`, error messages             | Three of the four setup traps live here                     |
 | `resources/db/migration/V1__init_schema.sql`   | Schema, tables, constraints                                                   | Source of truth, applied by Flyway in dev, jar and tests    |
@@ -23,6 +28,8 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | --------------------------------------- | -------------------------------------------------------------------------------- |
 | `TestcontainersConfiguration`           | Starts `postgres:17`; `DynamicPropertyRegistrar` sets R2DBC and Flyway properties|
 | `HouseholdMemberApiTests`               | Ordered end-to-end API journey: create, conflict, validate, edit, list, delete   |
+| `AccountApiTests`                       | Ordered API journey for accounts and `/today`; `@DirtiesContext` gives it its own database |
+| `MutableClock`                          | `@Primary` test clock (from `TestcontainersConfiguration`); `setToday(date)`     |
 | `web/SpaFallbackFilterTests`            | Parameterised cases for `isPageRequest` plus rewrite behaviour                   |
 
 ## Frontend (`frontend/src/`)
@@ -39,6 +46,10 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | `design-system/forms/FormAlert.tsx`           | Form-level error with `role="alert"`                                            | Consistent server-error display                              |
 | `design-system/components/Container.tsx`      | Width and gutter wrapper (`sm`/`md`/`lg`, `as`)                                 | Shared page width                                            |
 | `design-system/components/Amount.tsx`         | Money formatting with `Intl.NumberFormat`, small cents, sign colour             | Figures are the core content of a finance app                |
+| `lib/money.ts` `parseAmount`                  | "$5,000.00" to "5000.00", or null when it is not an amount                      | Same rule as the backend, so the form and API agree          |
+| `api/accounts.ts`, `hooks/useAccounts.ts`     | Account calls with parsers; `useToday` reads the server date                    | Date defaults come from the server, never `new Date()`       |
+| `features/accounts/*`                         | List, detail, setup and edit forms; `useAccountContext` loads household + members | Reference for a second screen set                            |
+| `design-system/components/Select.tsx`, `forms/SelectField.tsx` | Labelled select and its react-hook-form binding        | Counterpart of Field and TextField                           |
 | `routes.tsx`                                  | Exported `routes` array and `createAppRouter()`                                 | Same routes in the app and in tests                          |
 | `layout/AppLayout.tsx`, `AppFooter.tsx`       | Shell: skip link, nav, main, sticky footer                                      | Accessibility and consistent chrome                          |
 | `layout/useDocumentTitle.ts`                  | Sets the tab title from `handle.title` of the deepest route                     | Titles stay next to the route definition                     |
@@ -59,8 +70,9 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | `scripts/run-backend-jar.sh`           | Finds the jar (skips `-plain`), optionally requires the bundled UI, runs it          |
 | `scripts/test-run-backend-jar.sh`      | Tests the jar runner's UI guard with a fake JDK and fake jars; pass another script path to test it  |
 | `scripts/db.sh`                        | `up`, `down`, `reset`, `logs`, `status` for the dev database                         |
-| `e2e/start-stack.sh`                   | Disposable DB, then jar as a child; `trap` removes the DB on exit                    |
+| `e2e/start-stack.sh`                   | Disposable DB, then jar as a child; exports `WEALTHMESH_CLOCK_FIXED_TODAY=2026-10-03`; `trap` removes the DB |
 | `e2e/playwright.config.ts`             | `webServer` runs the stack, `workers: 1`, health URL, graceful shutdown              |
-| `e2e/tests/household.spec.ts`          | The ordered journey from an empty database                                           |
+| `e2e/tests/01-household.spec.ts`       | The ordered journey from an empty database; specs run by file name, so the number is the order |
+| `e2e/tests/02-checking-setup.spec.ts`  | Checking setup journey; needs the household and members left by 01                  |
 | `e2e/tests/shell.spec.ts`              | Shell, navigation without reload, not-found view, API and health endpoints           |
 | `.pre-commit-config.yaml`              | All hooks, grouped by stage                                                          |

@@ -18,3 +18,4 @@
 | D-014 | 2026-10-04 | Process records | Four homes: guides, process, decisions, features. No coordinator role or cross-linked registers | v2's registers cost more than they saved | active |
 | D-015 | 2026-10-04 | Savings setup order | `accounts/savings/setup` stays in wave 2 | Product owner answer (Q-006) | active |
 | D-016 | 2026-10-04 | Partly buildable scenarios | Defer the whole scenario ID with a reason in `deferred.txt`; no test cites it until it fully passes | Product owner answer (Q-007); coverage never overstates | active |
+| D-017 | 2026-10-04 | Opening amount | The opening amount lives on the account row (`opening_amount`, `opened_on`), not as an activity row; balance = opening + signed activity. Refines foundations 5 and 10 | Product owner answer (Q-009); keeps income and spending queries free of opening rows | active |

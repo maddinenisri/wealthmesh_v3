@@ -50,6 +50,8 @@ you during setup; the first three explain most of the time spent on the database
 | 26 | `check-json` rejects `tsconfig*.json`                                | They are JSON with comments                                              | Exclude `tsconfig.*\.json` from `check-json`                                                  |
 | 27 | Prettier fails on first run across the repo                          | Code was written before the config                                       | Add the config, run `--write` once, re-run tests and build to prove nothing changed          |
 | 33 | `unzip -l jar \| grep -q entry` under `set -o pipefail` always says the entry is missing | `grep -q` exits on the first match, `unzip` is killed by SIGPIPE (pipe status `141 0`), and `pipefail` turns that into failure | Ask `unzip` for the entry directly: `unzip -l jar entry >/dev/null`. Test guards by running the script; `scripts/test-run-backend-jar.sh` does this and fails on the old pipe version |
+| 34 | Two `@SpringBootTest` classes with the same config share one context and one database; a test that needs an empty database fails depending on class order | Spring caches the context, and the Testcontainers bean lives in it | Put `@DirtiesContext(classMode = AFTER_CLASS)` on every API test class that creates the household |
+| 35 | Playwright specs share one database and run in file-name order; `household.spec.ts` needs it empty | A new spec named `accounts.spec.ts` would run first | Number the specs (`01-household`, `02-checking-setup`) and say in the file what earlier spec it needs |
 
 ## Process
 
