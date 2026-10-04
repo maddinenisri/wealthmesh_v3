@@ -5,12 +5,13 @@ One slice (capabilities plus the scenario IDs they make citeable; D-018) is buil
 
 ## The loop
 
-1. **Start**: paste the kickoff prompt from [prompts.md](prompts.md). The session reads the repo, not any earlier chat.
+1. **Start**: paste the slice kickoff prompt from [prompts.md](prompts.md) (same text as in `features/INDEX.md`). The session reads the repo, not any earlier chat.
 2. **Checkpoint 1**: you approve the task list (scenario groups and test levels). Nothing is built before this.
 3. **Build**: test first, every test cites its scenario ID. Stuck for 15 minutes means defer the scenario with a reason.
 4. **Prove**: `npm run coverage -- --require --slice NN`, `npm test`, `npm run e2e`, `npm run check`, then the `validator` agent.
 5. **Checkpoint 2**: you look at the running app.
-6. **Land**: commit in logical pieces, push, update the board, write the handoff in the feature notes.
+6. **Land**: commit in logical pieces, update the board, write the handoff in the feature notes, and write the retro row
+   before the closing commit. Push only when you say so (D-002); a slice is `done` once pushed.
 7. **Retro**: one row in [retro.md](retro.md). The same problem twice means a process change, logged in
    [improvements.md](improvements.md).
 

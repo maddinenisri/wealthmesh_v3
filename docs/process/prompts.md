@@ -18,11 +18,11 @@ ID to its tests, and its task group appears in the task list.
 ## Kickoff: slice session (v2)
 
 ```text
-Work in /Users/srini/workspace/mdstect_ws/wealthmesh_v3. Run the feature-session skill for slice <NN> in docs/features/INDEX.md.
+Work in /Users/srini/workspace/mdstect_ws/wealthmesh_v3. Run the feature-session skill for slice <NN> in docs/features/INDEX.md (IDs in docs/features/slices.txt).
 Repository facts supersede this prompt. Stop at the task-list approval and again when the app is ready to look at.
 ```
 
-## Kickoff: foundations session (v1)
+## Kickoff: foundations session (v1, used once, done)
 
 ```text
 Work in /Users/srini/workspace/mdstect_ws/wealthmesh_v3. Run the feature-session skill for row 00 foundations.
@@ -50,3 +50,4 @@ line and the guide section for each. Say briefly what conforms.
 | --- | --- | --- | --- |
 | 2026-10-04 | all | Created at version 1 | Preserve what starts and checks each session |
 | 2026-10-04 | kickoff | Feature session v1 becomes slice session v2: names a slice, not a feature path (D-018) | Feature files cut across capabilities; rows 02 and 03 stalled |
+| 2026-10-04 | kickoff | Slice prompt names `slices.txt`; foundations prompt marked done | The INDEX.md prompt had drifted from this file |
