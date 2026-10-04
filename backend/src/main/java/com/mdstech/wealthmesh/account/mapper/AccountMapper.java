@@ -13,6 +13,7 @@ import org.mapstruct.Named;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.account.dto.AccountResponse;
 import com.mdstech.wealthmesh.account.dto.AccountUpdateRequest;
 import com.mdstech.wealthmesh.money.Money;
@@ -25,8 +26,8 @@ public abstract class AccountMapper {
 
     @Mapping(target = "ownerMemberIds", source = "owners")
     @Mapping(target = "openingAmount", source = "account.openingAmount", qualifiedByName = "money")
-    @Mapping(target = "balance", source = "account")
-    public abstract AccountResponse toResponse(Account account, List<UUID> owners);
+    @Mapping(target = "balance", source = "balance")
+    public abstract AccountResponse toResponse(Account account, List<UUID> owners, AccountResponse.Balance balance);
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "householdId", source = "householdId")
@@ -53,9 +54,14 @@ public abstract class AccountMapper {
     @Mapping(target = "updatedAt", expression = "java(now())")
     public abstract Account toUpdatedEntity(AccountUpdateRequest request, Account existing);
 
-    /** With no activity yet, the Balance is the opening amount as of the opening date. */
-    protected AccountResponse.Balance balance(Account account) {
-        return new AccountResponse.Balance(Money.format(account.openingAmount()), account.openedOn());
+    /**
+     * Balance = opening amount plus the signed activity (summed in SQL, see ActivityStore), as of the later of the
+     * opening date and the latest entry. With no activity it is the opening amount as of the opening date.
+     */
+    public AccountResponse.Balance balance(Account account, ActivityStore.Delta delta) {
+        LocalDate asOf = delta.latest() != null && delta.latest().isAfter(account.openedOn())
+                ? delta.latest() : account.openedOn();
+        return new AccountResponse.Balance(Money.format(account.openingAmount().add(delta.amount())), asOf);
     }
 
     protected Instant now() {

@@ -1,9 +1,13 @@
 import { screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { mockApi } from '../test/mockApi'
 import { renderRoute } from '../test/render'
 
 describe('AppLayout', () => {
+  beforeEach(() => {
+    mockApi()
+  })
+
   it('wraps pages with the header, main navigation and a skip link', async () => {
     renderRoute('/design')
 
@@ -16,7 +20,7 @@ describe('AppLayout', () => {
       within(nav)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['Household', 'Accounts', 'Design system'])
+    ).toEqual(['Household', 'Accounts', 'Spending', 'Design system'])
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main')
   })
 

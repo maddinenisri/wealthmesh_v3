@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import type { Account } from '../../api/accounts'
+import type { Member } from '../../api/household'
 import {
   Amount,
   Button,
@@ -12,6 +13,8 @@ import {
   buttonStyles,
 } from '../../design-system'
 import { useAccount, useToday } from '../../hooks/useAccounts'
+import { AddExpense } from '../activity/AddExpense'
+import { ActivityList } from '../activity/ActivityList'
 import { ownerNames } from './ownerNames'
 import { useAccountContext } from './useAccountContext'
 
@@ -55,7 +58,7 @@ export function AccountDetailPage() {
             owners={ownerNames(account.data.ownerMemberIds, members)}
           />
           <UpdateBalance />
-          <Activity />
+          <Activity account={account.data} members={members} />
         </>
       )}
     </div>
@@ -134,24 +137,47 @@ function UpdateBalance() {
   )
 }
 
-/** There is no activity yet; the actions are visible but inactive until activity is built. */
-function Activity() {
+/** Money out is live; money in and transfers stay visible but inactive until they are built. */
+function Activity({ account, members }: { account: Account; members: Member[] | undefined }) {
+  const [adding, setAdding] = useState(false)
+  const today = useToday()
+
   return (
-    <Card aria-labelledby="activity-heading">
-      <CardTitle id="activity-heading" className="text-lg">
-        Activity
-      </CardTitle>
-      <p className="mb-4 mt-1 text-sm text-ink-muted">No money activity has been recorded yet.</p>
-      <div className="flex flex-wrap gap-2">
-        {['Add money in', 'Add money out', 'Add transfer'].map((label) => (
-          <Button key={label} variant="secondary" size="sm" disabled>
-            {label}
+    <>
+      {adding && today.data && members && (
+        <AddExpense
+          key="add-expense"
+          account={account}
+          members={members}
+          today={today.data}
+          onDone={() => setAdding(false)}
+        />
+      )}
+      <Card aria-labelledby="activity-heading">
+        <CardTitle id="activity-heading" className="text-lg">
+          Activity
+        </CardTitle>
+        <ActivityList accountId={account.id} members={members} />
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" disabled>
+            Add money in
           </Button>
-        ))}
-      </div>
-      <p className="mt-3 text-caption text-ink-muted">
-        These actions become available with account activity.
-      </p>
-    </Card>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setAdding(true)}
+            disabled={adding || !today.data || !members}
+          >
+            Add money out
+          </Button>
+          <Button variant="secondary" size="sm" disabled>
+            Add transfer
+          </Button>
+        </div>
+        <p className="mt-3 text-caption text-ink-muted">
+          Money in and transfers become available with later features.
+        </p>
+      </Card>
+    </>
   )
 }

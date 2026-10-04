@@ -19,6 +19,7 @@ import com.mdstech.wealthmesh.account.dto.AccountUpdateRequest;
 import com.mdstech.wealthmesh.account.mapper.AccountMapper;
 import com.mdstech.wealthmesh.account.repository.AccountOwnerStore;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
+import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.household.domain.HouseholdMember;
 import com.mdstech.wealthmesh.household.repository.HouseholdMemberRepository;
 import com.mdstech.wealthmesh.household.repository.HouseholdRepository;
@@ -36,21 +37,25 @@ public class AccountService {
     private final HouseholdRepository households;
     private final HouseholdMemberRepository members;
     private final AccountMapper mapper;
+    private final ActivityStore activity;
     private final Clock clock;
 
     public AccountService(AccountRepository accounts, AccountOwnerStore owners, HouseholdRepository households,
-            HouseholdMemberRepository members, AccountMapper mapper, Clock clock) {
+            HouseholdMemberRepository members, AccountMapper mapper, ActivityStore activity, Clock clock) {
         this.accounts = accounts;
         this.owners = owners;
         this.households = households;
         this.members = members;
         this.mapper = mapper;
+        this.activity = activity;
         this.clock = clock;
     }
 
     public Flux<AccountResponse> findAll() {
-        return owners.ownersByAccount().flatMapMany(byAccount -> accounts.findAllByOrderByNameAscCreatedAtAsc()
-                .map(account -> mapper.toResponse(account, byAccount.getOrDefault(account.id(), List.of()))));
+        return Mono.zip(owners.ownersByAccount(), activity.deltasByAccount()).flatMapMany(known ->
+                accounts.findAllByOrderByNameAscCreatedAtAsc().map(account -> mapper.toResponse(account,
+                        known.getT1().getOrDefault(account.id(), List.of()),
+                        mapper.balance(account, known.getT2().getOrDefault(account.id(), ActivityStore.Delta.NONE)))));
     }
 
     public Mono<AccountResponse> findById(UUID id) {
@@ -69,7 +74,8 @@ public class AccountService {
                                         parsed.openingAmount()))
                                         .flatMap(saved -> owners.replace(household.id(), saved.id(), ownerIds)
                                                 .thenReturn(saved))
-                                        .map(saved -> mapper.toResponse(saved, ownerIds)))));
+                                        .map(saved -> mapper.toResponse(saved, ownerIds,
+                                                mapper.balance(saved, ActivityStore.Delta.NONE))))));
     }
 
     @Transactional
@@ -80,7 +86,8 @@ public class AccountService {
                         .flatMap(ownerIds -> accounts.save(mapper.toUpdatedEntity(request, existing))
                                 .flatMap(saved -> owners.replace(saved.householdId(), saved.id(), ownerIds)
                                         .thenReturn(saved))
-                                .map(saved -> mapper.toResponse(saved, ownerIds))));
+                                .flatMap(saved -> activity.deltaOf(saved.id()).map(delta -> mapper.toResponse(
+                                        saved, ownerIds, mapper.balance(saved, delta))))));
     }
 
     /** The validated parts of a create request. */
@@ -151,7 +158,8 @@ public class AccountService {
     }
 
     private Mono<AccountResponse> respond(Account account) {
-        return owners.ownersOf(account.id()).map(ids -> mapper.toResponse(account, ids));
+        return Mono.zip(owners.ownersOf(account.id()), activity.deltaOf(account.id()))
+                .map(known -> mapper.toResponse(account, known.getT1(), mapper.balance(account, known.getT2())));
     }
 
     private Mono<Account> load(UUID id) {

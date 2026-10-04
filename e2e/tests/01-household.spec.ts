@@ -61,8 +61,8 @@ test.describe.serial('household journey', () => {
     await row.getByLabel('Member name').fill('Samira Rivera')
     await row.getByRole('button', { name: 'Save member' }).click()
 
-    await expect(page.getByText('Samira Rivera')).toBeVisible()
-    await expect(page.getByText('Sam Rivera', { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('main').getByText('Samira Rivera')).toBeVisible()
+    await expect(page.getByRole('main').getByText('Sam Rivera', { exact: true })).toHaveCount(0)
   })
 
   test('renames the household', async ({ page }) => {
@@ -78,7 +78,7 @@ test.describe.serial('household journey', () => {
     await page.goto('/')
 
     await expect(page.getByRole('heading', { name: 'Doe-Rivera Family' })).toBeVisible()
-    await expect(page.getByText('Alex Doe')).toBeVisible()
-    await expect(page.getByText('Samira Rivera')).toBeVisible()
+    await expect(page.getByRole('main').getByText('Alex Doe')).toBeVisible()
+    await expect(page.getByRole('main').getByText('Samira Rivera')).toBeVisible()
   })
 })

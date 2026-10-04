@@ -15,6 +15,56 @@ export type MockAccount = {
   status: string
 }
 
+export type MockActivity = {
+  id: string
+  accountId: string
+  key?: string
+  kind: string
+  amount: string
+  occurredOn: string
+  description: string | null
+  categoryId: string
+  enteredByMemberId: string | null
+}
+
+type ExpenseBody = {
+  description: string
+  amount: string
+  occurredOn: string
+  categoryId: string
+  enteredByMemberId: string
+}
+
+/** The seeded category list the backend ships (names and kinds only). */
+export const CATEGORIES = [
+  { id: 'c0000000-0000-4000-8000-000000000001', name: 'Rent', kind: 'spending' },
+  { id: 'c0000000-0000-4000-8000-000000000002', name: 'Utilities', kind: 'spending' },
+  { id: 'c0000000-0000-4000-8000-000000000003', name: 'Groceries', kind: 'spending' },
+  { id: 'c0000000-0000-4000-8000-000000000004', name: 'Salary', kind: 'income' },
+]
+
+function decorate(a: MockActivity, accounts: MockAccount[]) {
+  return {
+    ...a,
+    accountName: accounts.find((x) => x.id === a.accountId)?.name ?? '',
+    categoryName: CATEGORIES.find((c) => c.id === a.categoryId)?.name ?? null,
+  }
+}
+
+function monthsThrough(from: string, to: string): string[] {
+  const out: string[] = []
+  let [y, m] = from.split('-').map(Number)
+  while (`${y}-${String(m).padStart(2, '0')}` <= to) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`)
+    m += 1
+    if (m > 12) {
+      m = 1
+      y += 1
+    }
+  }
+  return out
+}
+
 function problem(status: number, message: string) {
   return HttpResponse.json({ status, error: 'Error', message }, { status })
 }
@@ -31,6 +81,8 @@ export function mockApi(
     members?: MockMember[]
     accounts?: MockAccount[]
     today?: string
+    /** Expenses already recorded, by account. */
+    activity?: MockActivity[]
   } = {},
 ) {
   const today = seed.today ?? '2026-10-03'
@@ -38,6 +90,11 @@ export function mockApi(
     household: seed.household ?? (null as MockHousehold | null),
     members: [...(seed.members ?? [])],
     accounts: [...(seed.accounts ?? [])],
+    activity: [...(seed.activity ?? [])],
+    /** Save keys seen on POST expenses, in order. */
+    keys: [] as string[],
+    /** When true the next expense is stored but its response is lost (a slow or dropped answer). */
+    loseNextExpenseResponse: false,
     /** "METHOD /path" for every request the UI made, in order. */
     requests: [] as string[],
   }
@@ -109,6 +166,109 @@ export function mockApi(
     http.get('*/api/v1/accounts', ({ request }) => {
       log(request)
       return HttpResponse.json(state.accounts)
+    }),
+    http.get('*/api/v1/categories', ({ request }) => {
+      log(request)
+      const kind = new URL(request.url).searchParams.get('kind')
+      return HttpResponse.json(CATEGORIES.filter((c) => !kind || c.kind === kind))
+    }),
+    http.get('*/api/v1/accounts/:id/activity', ({ request, params }) => {
+      log(request)
+      return HttpResponse.json(
+        state.activity
+          .filter((a) => a.accountId === params.id)
+          .map((a) => decorate(a, state.accounts))
+          .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn)),
+      )
+    }),
+    http.post('*/api/v1/accounts/:id/expenses', async ({ request, params }) => {
+      log(request)
+      const key = request.headers.get('Idempotency-Key') ?? ''
+      state.keys.push(key)
+      const body = (await request.json()) as ExpenseBody
+      const account = state.accounts.find((a) => a.id === params.id)
+      if (!account) return problem(404, 'Account not found')
+      const amount = Number(body.amount)
+      if (!(amount > 0)) return problem(400, 'Enter an amount greater than zero')
+      if (body.occurredOn > today)
+        return problem(400, 'Future activity is not saved as completed history yet')
+      const existing = state.activity.find((a) => a.key === key)
+      if (existing) return HttpResponse.json(decorate(existing, state.accounts), { status: 200 })
+      const entry: MockActivity = {
+        id: newId(),
+        accountId: account.id,
+        key,
+        kind: 'expense',
+        amount: amount.toFixed(2),
+        occurredOn: body.occurredOn,
+        description: body.description.trim() || null,
+        categoryId: body.categoryId,
+        enteredByMemberId: body.enteredByMemberId,
+      }
+      state.activity.push(entry)
+      account.balance = {
+        amount: (Number(account.balance.amount) - amount).toFixed(2),
+        asOf: entry.occurredOn > account.balance.asOf ? entry.occurredOn : account.balance.asOf,
+      }
+      if (state.loseNextExpenseResponse) {
+        state.loseNextExpenseResponse = false
+        return problem(503, 'The server took too long to answer')
+      }
+      return HttpResponse.json(decorate(entry, state.accounts), { status: 201 })
+    }),
+    http.get('*/api/v1/spending', ({ request }) => {
+      log(request)
+      const month = new URL(request.url).searchParams.get('month') ?? ''
+      const rows = state.activity.filter((a) => a.occurredOn.startsWith(month))
+      const byCategory = new Map<string, { total: number; count: number }>()
+      rows.forEach((a) => {
+        const row = byCategory.get(a.categoryId) ?? { total: 0, count: 0 }
+        byCategory.set(a.categoryId, { total: row.total + Number(a.amount), count: row.count + 1 })
+      })
+      return HttpResponse.json({
+        month,
+        total: rows.reduce((sum, a) => sum + Number(a.amount), 0).toFixed(2),
+        categories: [...byCategory].map(([categoryId, row]) => ({
+          categoryId,
+          name: CATEGORIES.find((c) => c.id === categoryId)?.name,
+          total: row.total.toFixed(2),
+          count: row.count,
+        })),
+      })
+    }),
+    http.get('*/api/v1/spending/entries', ({ request }) => {
+      log(request)
+      const query = new URL(request.url).searchParams
+      return HttpResponse.json(
+        state.activity
+          .filter(
+            (a) =>
+              a.occurredOn.startsWith(query.get('month') ?? '') &&
+              a.categoryId === query.get('categoryId'),
+          )
+          .map((a) => decorate(a, state.accounts)),
+      )
+    }),
+    http.get('*/api/v1/spending/history', ({ request }) => {
+      log(request)
+      const totals = new Map<string, number>()
+      state.activity.forEach((a) => {
+        const month = a.occurredOn.slice(0, 7)
+        totals.set(month, (totals.get(month) ?? 0) + Number(a.amount))
+      })
+      const recorded = [...totals.keys()].sort()
+      const sum = [...totals.values()].reduce((a, b) => a + b, 0)
+      const months = recorded.length ? monthsThrough(recorded[0], today.slice(0, 7)) : []
+      return HttpResponse.json({
+        months: months.map((m) => ({
+          month: m,
+          total: (totals.get(m) ?? 0).toFixed(2),
+          recorded: totals.has(m),
+        })),
+        recordedMonths: recorded.length,
+        averageRecordedMonth: recorded.length ? (sum / recorded.length).toFixed(2) : null,
+        annualEstimate: recorded.length ? ((sum * 12) / recorded.length).toFixed(2) : null,
+      })
     }),
     http.get('*/api/v1/accounts/:id', ({ request, params }) => {
       log(request)

@@ -38,14 +38,19 @@ async function errorFrom(response: Response): Promise<ApiError> {
 /** Calls the backend under /api/v1 and returns the parsed JSON body, or undefined for 204. */
 export async function request<T>(
   path: string,
-  options: { method?: string; body?: unknown; parse?: (value: unknown) => T } = {},
+  options: {
+    method?: string
+    body?: unknown
+    headers?: Record<string, string>
+    parse?: (value: unknown) => T
+  } = {},
 ): Promise<T> {
-  const { method = 'GET', body, parse } = options
+  const { method = 'GET', body, headers, parse } = options
   let response: Response
   try {
     response = await fetch(new URL(`/api/v1${path}`, window.location.origin), {
       method,
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      headers: body === undefined ? headers : { 'Content-Type': 'application/json', ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {

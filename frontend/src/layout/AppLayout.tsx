@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router'
 import { cn, Container } from '../design-system'
+import { EnteringAs } from './EnteringAs'
 import { AppFooter } from './AppFooter'
 import { appName, navigation } from './navigation'
 import { useDocumentTitle } from './useDocumentTitle'
@@ -36,6 +37,7 @@ export function AppLayout() {
               </NavLink>
             ))}
           </nav>
+          <EnteringAs />
         </Container>
       </header>
       <Container as="main" id="main" tabIndex={-1} className="flex-1 py-8 outline-none">
