@@ -1,5 +1,5 @@
 import { screen, within } from '@testing-library/react'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { mockApi } from '../../test/mockApi'
 import { renderWithProviders } from '../../test/render'
@@ -60,6 +60,26 @@ describe('with a household', () => {
 
     expect(await screen.findByText('Alex Doe')).toBeInTheDocument()
     expect(screen.getByText('Parent')).toBeInTheDocument()
+  })
+
+  it('says members are loading instead of claiming there are none', async () => {
+    mockApi({ household, members: [alex] })
+    server.use(
+      http.get('*/api/v1/household-members', async () => {
+        await delay(150)
+        return HttpResponse.json([alex])
+      }),
+    )
+    renderWithProviders(<HouseholdPage />)
+
+    expect(await screen.findByRole('heading', { name: 'Doe Family' })).toBeInTheDocument()
+    expect(screen.getByText('Loading members')).toBeInTheDocument()
+    expect(
+      screen.queryByText('No members yet. Add the first person below.'),
+    ).not.toBeInTheDocument()
+
+    expect(await screen.findByText('Alex Doe')).toBeInTheDocument()
+    expect(screen.queryByText('Loading members')).not.toBeInTheDocument()
   })
 
   it('renames the household', async () => {

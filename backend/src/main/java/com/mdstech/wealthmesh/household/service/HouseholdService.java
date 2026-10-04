@@ -42,7 +42,7 @@ public class HouseholdService {
                 .map(mapper::toResponse)));
     }
 
-    private static Mono<Void> validate(HouseholdRequest request) {
+    static Mono<Void> validate(HouseholdRequest request) {
         String name = request.name() == null ? "" : request.name().strip();
         if (name.isEmpty() || name.length() > 120) {
             return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,

@@ -42,7 +42,7 @@ export function HouseholdPage() {
               action={<Button onClick={() => void members.refetch()}>Try again</Button>}
             />
           ) : (
-            <Members householdId={household.data.id} members={members.data ?? []} />
+            <Members householdId={household.data.id} members={members.data} />
           )}
         </>
       )}
@@ -69,7 +69,8 @@ function HouseholdDetails({ household }: { household: Household }) {
   )
 }
 
-function Members({ householdId, members }: { householdId: string; members: Member[] }) {
+/** `members` is undefined while the list is still loading. */
+function Members({ householdId, members }: { householdId: string; members: Member[] | undefined }) {
   const [editingId, setEditingId] = useState<string>()
 
   return (
@@ -79,7 +80,9 @@ function Members({ householdId, members }: { householdId: string; members: Membe
         Members are names you attach to account ownership. They do not sign in.
       </p>
 
-      {members.length === 0 ? (
+      {members === undefined ? (
+        <p className="mb-6 text-sm text-ink-muted">Loading members</p>
+      ) : members.length === 0 ? (
         <p className="mb-6 text-sm text-ink-muted">No members yet. Add the first person below.</p>
       ) : (
         <ul className="mb-6 divide-y divide-line border-y border-line">

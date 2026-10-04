@@ -7,7 +7,7 @@ spring:
   main:
     web-application-type: reactive
   r2dbc:
-    url: r2dbc:postgresql://localhost:5433/wealthmesh_v3
+    url: r2dbc:postgresql://localhost:5434/wealthmesh_v3
     username: ${DB_USERNAME:wealthmesh}
     password: ${DB_PASSWORD}
     properties:
@@ -17,14 +17,14 @@ spring:
       max-size: 20
   # Boot skips the JDBC DataSource when R2DBC is present, so Flyway needs its own JDBC connection
   flyway:
-    url: jdbc:postgresql://localhost:5433/wealthmesh_v3
+    url: jdbc:postgresql://localhost:5434/wealthmesh_v3
     user: ${DB_USERNAME:wealthmesh}
     password: ${DB_PASSWORD}
     schemas: wealthmesh
     create-schemas: true
 
 server:
-  port: 8080
+  port: 8081
 
 management:
   endpoints:

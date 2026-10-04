@@ -60,7 +60,7 @@ public class HouseholdMemberService {
         return load(id).flatMap(repository::delete);
     }
 
-    private static Mono<Void> validate(HouseholdMemberRequest request) {
+    static Mono<Void> validate(HouseholdMemberRequest request) {
         String name = request.name() == null ? "" : request.name().strip();
         String label = request.label() == null ? "" : request.label().strip();
         if (name.isEmpty() || name.length() > 120) {

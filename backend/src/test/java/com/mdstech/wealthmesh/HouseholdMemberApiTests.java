@@ -1,5 +1,8 @@
 package com.mdstech.wealthmesh;
 
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -24,6 +27,17 @@ class HouseholdMemberApiTests {
 
     @Autowired
     WebTestClient webTestClient;
+
+    @Order(0)
+    @Test
+    void householdIsNotFoundBeforeItIsCreated() {
+        webTestClient.get()
+                .uri("/api/v1/household")
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody()
+                .jsonPath("$.message").isEqualTo("No household has been created yet");
+    }
 
     @Order(1)
     @Test
@@ -126,6 +140,38 @@ class HouseholdMemberApiTests {
 
     @Order(6)
     @Test
+    void updatesAMemberAndRejectsConflictsMissingMembersAndBlankNames() {
+        String samId = createSam();
+
+        put(samId, "Samira Rivera", "Child")
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.name").isEqualTo("Samira Rivera")
+                .jsonPath("$.label").isEqualTo("Child")
+                .jsonPath("$.householdId").isEqualTo(householdId);
+
+        put(samId, "alex doe", "JOINT")
+                .expectStatus().isEqualTo(409)
+                .expectBody()
+                .jsonPath("$.message").isEqualTo(
+                        "A member with this name and label already exists, or the household does not exist");
+
+        put(UUID.randomUUID().toString(), "Nobody", "")
+                .expectStatus().isNotFound();
+
+        put(samId, "  ", "Child")
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.message").isEqualTo("Member name must be 1 to 120 characters");
+
+        put(samId, "Samira", "x".repeat(81))
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.message").isEqualTo("Label must be 80 characters or fewer");
+    }
+
+    @Order(7)
+    @Test
     void deleteMember() {
         webTestClient.delete()
                 .uri("/api/v1/household-members/{id}", memberId)
@@ -136,5 +182,26 @@ class HouseholdMemberApiTests {
                 .uri("/api/v1/household-members/{id}", memberId)
                 .exchange()
                 .expectStatus().isNotFound();
+    }
+    private String createSam() {
+        AtomicReference<String> id = new AtomicReference<>();
+        webTestClient.post()
+                .uri("/api/v1/household-members")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"householdId\": \"%s\", \"name\": \"Sam Rivera\", \"label\": \"Child\"}"
+                        .formatted(householdId))
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody()
+                .jsonPath("$.id").value(String.class, id::set);
+        return id.get();
+    }
+
+    private WebTestClient.ResponseSpec put(String id, String name, String label) {
+        return webTestClient.put()
+                .uri("/api/v1/household-members/{id}", id)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"name\": \"%s\", \"label\": \"%s\"}".formatted(name, label))
+                .exchange();
     }
 }
