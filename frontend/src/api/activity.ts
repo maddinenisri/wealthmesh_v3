@@ -15,6 +15,24 @@ export type Activity = {
   enteredByMemberId: string | null
 }
 
+/** One ledger row as history shows it: effective, replaced by a later edit, or removed. */
+export type HistoryEntry = {
+  id: string
+  kind: string
+  amount: string
+  occurredOn: string
+  description: string | null
+  categoryName: string | null
+  enteredByName: string | null
+  createdAt: string
+  reason: string | null
+  replacesId: string | null
+  replacedById: string | null
+  status: 'effective' | 'replaced' | 'removed'
+  /** Who replaced, removed or restored the entry and when, oldest first. */
+  events: { action: 'replaced' | 'removed' | 'restored'; byName: string; at: string }[]
+}
+
 /** One money-in or money-out entry as the form sends it. */
 export type NewEntry = {
   description: string
@@ -23,6 +41,8 @@ export type NewEntry = {
   categoryId: string
   enteredByMemberId: string
 }
+
+export type EditedEntry = NewEntry & { reason: string }
 
 export type CategorySpending = {
   categoryId: string | null
@@ -88,6 +108,32 @@ function parseActivity(value: unknown): Activity {
   }
 }
 
+function parseHistoryEntry(value: unknown): HistoryEntry {
+  const data = record(value)
+  const status = str(data.status)
+  if (status !== 'effective' && status !== 'replaced' && status !== 'removed') throw bad()
+  return {
+    id: str(data.id),
+    kind: str(data.kind),
+    amount: str(data.amount),
+    occurredOn: str(data.occurredOn),
+    description: strOrNull(data.description),
+    categoryName: strOrNull(data.categoryName),
+    enteredByName: strOrNull(data.enteredByName),
+    createdAt: str(data.createdAt),
+    reason: strOrNull(data.reason),
+    replacesId: strOrNull(data.replacesId),
+    replacedById: strOrNull(data.replacedById),
+    status,
+    events: list(data.events, (entry) => {
+      const event = record(entry)
+      const action = str(event.action)
+      if (action !== 'replaced' && action !== 'removed' && action !== 'restored') throw bad()
+      return { action, byName: str(event.byName), at: str(event.at) }
+    }),
+  }
+}
+
 function parseSummary(value: unknown): SpendingSummary {
   const data = record(value)
   return {
@@ -136,6 +182,82 @@ export const recordEntry = (accountId: string, kind: EntryKind, key: string, ent
     headers: { 'Idempotency-Key': key },
     body: entry,
     parse: parseActivity,
+  })
+
+/** Edit as replacement: the original stays in history. `key` makes a repeated save safe (D-024). */
+export const replaceEntry = (
+  accountId: string,
+  activityId: string,
+  key: string,
+  entry: EditedEntry,
+) =>
+  request(`/accounts/${accountId}/activity/${activityId}/replacement`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+    body: entry,
+    parse: parseActivity,
+  })
+
+/** Removes an entry (soft) or restores a removed one. Who did it is recorded (D-025). */
+export const changeEntry = (
+  accountId: string,
+  activityId: string,
+  action: 'removal' | 'undo',
+  enteredByMemberId: string,
+) =>
+  request(`/accounts/${accountId}/activity/${activityId}/${action}`, {
+    method: 'POST',
+    body: { enteredByMemberId },
+    parse: parseHistoryEntry,
+  })
+
+/** A future bill or expected income: kept as a plan, never counted as money (foundations 2). */
+export type Reminder = {
+  id: string
+  accountId: string
+  accountName: string
+  kind: 'expense' | 'income'
+  amount: string
+  dueOn: string
+  description: string | null
+  categoryName: string
+  enteredByName: string
+}
+
+export type NewReminder = Omit<NewEntry, 'occurredOn'> & { kind: EntryKind; dueOn: string }
+
+function parseReminder(value: unknown): Reminder {
+  const data = record(value)
+  const kind = str(data.kind)
+  if (kind !== 'expense' && kind !== 'income') throw bad()
+  return {
+    id: str(data.id),
+    accountId: str(data.accountId),
+    accountName: str(data.accountName),
+    kind,
+    amount: str(data.amount),
+    dueOn: str(data.dueOn),
+    description: strOrNull(data.description),
+    categoryName: str(data.categoryName),
+    enteredByName: str(data.enteredByName),
+  }
+}
+
+/** `key` identifies one form instance, as for entries (D-024). */
+export const saveReminder = (accountId: string, key: string, reminder: NewReminder) =>
+  request(`/accounts/${accountId}/reminders`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+    body: reminder,
+    parse: parseReminder,
+  })
+
+export const listReminders = () =>
+  request('/reminders', { parse: (value) => list(value, parseReminder) })
+
+export const listHistory = (accountId: string) =>
+  request(`/accounts/${accountId}/activity/history`, {
+    parse: (value) => list(value, parseHistoryEntry),
   })
 
 export const getSpending = (month: string) =>

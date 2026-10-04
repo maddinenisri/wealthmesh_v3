@@ -1,10 +1,8 @@
 package com.mdstech.wealthmesh.activity.service;
 
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.UUID;
 
 import org.springframework.dao.DuplicateKeyException;
@@ -19,10 +17,6 @@ import com.mdstech.wealthmesh.activity.dto.ActivityResponse;
 import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
 import com.mdstech.wealthmesh.activity.repository.ActivityRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
-import com.mdstech.wealthmesh.category.domain.Category;
-import com.mdstech.wealthmesh.category.repository.CategoryRepository;
-import com.mdstech.wealthmesh.household.repository.HouseholdMemberRepository;
-import com.mdstech.wealthmesh.money.Money;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -39,17 +33,15 @@ public class EntryService {
     }
 
     private final AccountRepository accounts;
-    private final CategoryRepository categories;
-    private final HouseholdMemberRepository members;
+    private final EntryValidator validator;
     private final ActivityRepository activities;
     private final ActivityStore store;
     private final Clock clock;
 
-    public EntryService(AccountRepository accounts, CategoryRepository categories,
-            HouseholdMemberRepository members, ActivityRepository activities, ActivityStore store, Clock clock) {
+    public EntryService(AccountRepository accounts, EntryValidator validator, ActivityRepository activities,
+            ActivityStore store, Clock clock) {
         this.accounts = accounts;
-        this.categories = categories;
-        this.members = members;
+        this.validator = validator;
         this.activities = activities;
         this.store = store;
         this.clock = clock;
@@ -63,19 +55,15 @@ public class EntryService {
     public Mono<Saved> record(UUID accountId, String key, String kind, ExpenseRequest request) {
         return Mono.fromCallable(() -> requireKey(key))
                 .then(Mono.defer(() -> load(accountId)))
-                .flatMap(account -> parse(account, kind, request).flatMap(entry -> save(entry, key)));
+                .flatMap(account -> validator.parse(account, kind, request).flatMap(entry -> save(entry, key)));
     }
 
-    /** The validated parts of an expense request. */
-    record Entry(UUID accountId, String kind, BigDecimal amount, LocalDate occurredOn, String description,
-            UUID categoryId, UUID memberId) {
-    }
-
-    private Mono<Saved> save(Entry entry, String key) {
+    private Mono<Saved> save(EntryValidator.Entry entry, String key) {
         Instant now = clock.instant();
         Instant cutoff = now.minus(KEY_LIFETIME);
         Mono<Saved> insert = activities.save(new Activity(null, entry.accountId(), entry.kind(), entry.amount(),
-                        entry.occurredOn(), entry.description(), entry.categoryId(), entry.memberId(), key, now))
+                        entry.occurredOn(), entry.description(), entry.categoryId(), entry.memberId(), key, now,
+                        null, null, null))
                 .flatMap(saved -> store.byId(saved.id())).map(a -> new Saved(a, true));
         return store.expireKey(key, cutoff)
                 .then(activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
@@ -87,73 +75,13 @@ public class EntryService {
                         .flatMap(existing -> replay(existing, entry)));
     }
 
-    private Mono<Saved> replay(Activity existing, Entry entry) {
-        boolean same = existing.accountId().equals(entry.accountId())
-                && existing.kind().equals(entry.kind())
-                && existing.amount().compareTo(entry.amount()) == 0
-                && existing.occurredOn().equals(entry.occurredOn())
-                && java.util.Objects.equals(existing.description(), entry.description())
-                && java.util.Objects.equals(existing.categoryId(), entry.categoryId())
-                && java.util.Objects.equals(existing.enteredByMemberId(), entry.memberId());
+    private Mono<Saved> replay(Activity existing, EntryValidator.Entry entry) {
+        boolean same = entry.matches(existing) && existing.replacesId() == null;
         if (!same) {
             return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
                     "This save was already used with different details. Start a new entry."));
         }
         return store.byId(existing.id()).map(a -> new Saved(a, false));
-    }
-
-    private Mono<Entry> parse(Account account, String kind, ExpenseRequest request) {
-        return Mono.fromCallable(() -> {
-            BigDecimal amount = amount(request.amount());
-            LocalDate today = LocalDate.now(clock);
-            if (request.occurredOn() == null) {
-                throw bad("Enter a date");
-            }
-            if (request.occurredOn().isAfter(today)) {
-                throw bad("Future activity is not saved as completed history yet");
-            }
-            if (request.occurredOn().isBefore(account.openedOn())) {
-                throw bad("This date is before the account's opening date");
-            }
-            String description = request.description() == null || request.description().isBlank() ? null
-                    : request.description().strip();
-            if (description != null && description.length() > 200) {
-                throw bad("Description must be 200 characters or fewer");
-            }
-            return new Object[] { amount, description };
-        }).flatMap(parts -> category(kind, request)
-                .flatMap(category -> member(account, request.enteredByMemberId())
-                        .map(memberId -> new Entry(account.id(), kind, (BigDecimal) parts[0], request.occurredOn(),
-                                (String) parts[1], category.id(), memberId))));
-    }
-
-    private Mono<Category> category(String kind, ExpenseRequest request) {
-        String categoryKind = "income".equals(kind) ? "income" : "spending";
-        Mono<Category> found = request.categoryId() != null ? categories.findById(request.categoryId())
-                : request.category() != null && !request.category().isBlank()
-                        ? categories.findByName(request.category().strip()) : Mono.empty();
-        return found.filter(c -> categoryKind.equals(c.kind()))
-                .switchIfEmpty(Mono.error(bad("Choose " + ("income".equals(categoryKind) ? "an income" : "a spending")
-                        + " category")));
-    }
-
-    private Mono<UUID> member(Account account, UUID memberId) {
-        if (memberId == null) {
-            return Mono.error(bad("Choose who entered this"));
-        }
-        return members.findById(memberId).filter(m -> m.householdId().equals(account.householdId()))
-                .map(m -> m.id()).switchIfEmpty(Mono.error(bad("Choose who entered this from this household")));
-    }
-
-    static BigDecimal amount(Object value) {
-        if (!(value instanceof String text) || Money.parse(text).isEmpty()) {
-            throw bad("Enter a valid amount");
-        }
-        BigDecimal amount = Money.parse(text).orElseThrow();
-        if (amount.signum() <= 0) {
-            throw bad("Enter an amount greater than zero");
-        }
-        return amount;
     }
 
     private static String requireKey(String key) {
@@ -171,6 +99,6 @@ public class EntryService {
     }
 
     private static ResponseStatusException bad(String message) {
-        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        return EntryValidator.bad(message);
     }
 }

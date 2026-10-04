@@ -3,6 +3,7 @@ package com.mdstech.wealthmesh.activity.repository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -11,6 +12,7 @@ import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Repository;
 
 import com.mdstech.wealthmesh.activity.dto.ActivityResponse;
+import com.mdstech.wealthmesh.activity.dto.HistoryEntry;
 import com.mdstech.wealthmesh.money.Money;
 
 import reactor.core.publisher.Flux;
@@ -117,6 +119,77 @@ public class ActivityStore {
                 GROUP BY 1 ORDER BY 1""")
                 .map((row, meta) -> new MonthTotal(row.get("month", String.class), row.get("total", BigDecimal.class)))
                 .all();
+    }
+
+    /** Brings back a removed entry that nothing replaced. Zero rows means it was not removable. */
+    public Mono<Long> clearRemoved(UUID id) {
+        return client.sql("UPDATE activity SET removed_at = NULL, removed_by_member_id = NULL WHERE id = :id "
+                        + "AND removed_at IS NOT NULL AND NOT EXISTS "
+                        + "(SELECT 1 FROM activity r WHERE r.replaces_id = :id)")
+                .bind("id", id).fetch().rowsUpdated();
+    }
+
+    /** Marks an entry as removed or replaced: it leaves Balance and totals but stays in history. */
+    public Mono<Long> markRemoved(UUID id, UUID byMemberId, Instant at) {
+        return client.sql("UPDATE activity SET removed_at = :at, removed_by_member_id = :by WHERE id = :id "
+                        + "AND removed_at IS NULL")
+                .bind("at", at).bind("by", byMemberId).bind("id", id).fetch().rowsUpdated();
+    }
+
+    /** Records who replaced, removed or restored an entry, and when. */
+    public Mono<Long> recordEvent(UUID activityId, String action, UUID memberId, Instant at) {
+        return client.sql("INSERT INTO activity_event (activity_id, action, member_id, occurred_at) "
+                        + "VALUES (:activity, :action, :member, :at)")
+                .bind("activity", activityId).bind("action", action).bind("member", memberId).bind("at", at)
+                .fetch().rowsUpdated();
+    }
+
+    private Mono<Map<UUID, List<HistoryEntry.Event>>> eventsOf(UUID accountId) {
+        return client.sql("""
+                SELECT e.activity_id, e.action, m.name, e.occurred_at
+                FROM activity_event e JOIN activity a ON a.id = e.activity_id
+                JOIN household_member m ON m.id = e.member_id
+                WHERE a.account_id = :account ORDER BY e.seq""")
+                .bind("account", accountId)
+                .map((row, meta) -> Map.entry(row.get("activity_id", UUID.class),
+                        new HistoryEntry.Event(row.get("action", String.class), row.get("name", String.class),
+                                instant(row, "occurred_at"))))
+                .all().collect(Collectors.groupingBy(Map.Entry::getKey,
+                        Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
+    }
+
+    /** All rows of an account, including replaced and removed ones, newest first. */
+    public Flux<HistoryEntry> history(UUID accountId) {
+        return eventsOf(accountId).flatMapMany(events -> historyRows(accountId, events));
+    }
+
+    private Flux<HistoryEntry> historyRows(UUID accountId, Map<UUID, List<HistoryEntry.Event>> events) {
+        return client.sql("""
+                SELECT a.id, a.kind, a.amount, a.occurred_on, a.description, c.name AS category_name,
+                       a.entered_by_member_id, m.name AS entered_by_name, a.created_at, a.reason, a.replaces_id,
+                       r.id AS replaced_by_id,
+                       CASE WHEN r.id IS NOT NULL THEN 'replaced' WHEN a.removed_at IS NOT NULL THEN 'removed'
+                            ELSE 'effective' END AS status
+                FROM activity a LEFT JOIN category c ON c.id = a.category_id
+                LEFT JOIN household_member m ON m.id = a.entered_by_member_id
+                LEFT JOIN activity r ON r.replaces_id = a.id
+                WHERE a.account_id = :account AND a.kind IN ('expense', 'income')
+                ORDER BY a.created_at DESC, a.occurred_on DESC""")
+                .bind("account", accountId)
+                .map((row, meta) -> new HistoryEntry(row.get("id", UUID.class), row.get("kind", String.class),
+                        Money.format(row.get("amount", BigDecimal.class)), row.get("occurred_on", LocalDate.class),
+                        row.get("description", String.class), row.get("category_name", String.class),
+                        row.get("entered_by_member_id", UUID.class), row.get("entered_by_name", String.class),
+                        instant(row, "created_at"), row.get("reason", String.class),
+                        row.get("replaces_id", UUID.class), row.get("replaced_by_id", UUID.class),
+                        row.get("status", String.class),
+                        events.getOrDefault(row.get("id", UUID.class), List.of())))
+                .all();
+    }
+
+    private static Instant instant(io.r2dbc.spi.Readable row, String column) {
+        java.time.OffsetDateTime value = row.get(column, java.time.OffsetDateTime.class);
+        return value == null ? null : value.toInstant();
     }
 
     private static ActivityResponse entry(io.r2dbc.spi.Readable row, io.r2dbc.spi.RowMetadata meta) {

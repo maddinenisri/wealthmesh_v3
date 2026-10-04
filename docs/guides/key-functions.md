@@ -14,6 +14,9 @@ The files that carry the design, and what breaks or gets harder without each. Pa
 | `account/service/AccountService`               | `create`, `update`, `findAll`, `findById`; `parse` validates (name, amount, type, date); owners must belong to the household | One place for account rules; edit never touches money (D-017) |
 | `account/repository/AccountOwnerStore`         | Owner links (composite key) with plain SQL: `replace`, `ownersByAccount`, `ownersOf` | Joint accounts later need no schema change                  |
 | `activity/service/EntryService`                | `record(accountId, key, kind, request)`: validates and saves an expense or income; replay by key (D-024) | One place for money in and out; `kind` picks the category kind and the Balance direction |
+| `activity/service/EntryChangeService`          | `replace` (edit as replacement), `remove`, `undo`, `history` with who/when events (`activity_event`) | Money rows are never updated in place; a replacement and the original swap in one transaction |
+| `activity/service/EntryValidator`              | `parse` (entries) and `parseReminder`: amount, date, category kind, member    | One place for entry rules; the date rule differs for reminders |
+| `reminder/service/ReminderService`             | `save` (repeat-safe, D-024) and `all`; table `reminder` (V4)                  | Reminders never reach `activity`, so Balance and totals cannot count them |
 | `activity/repository/ActivityStore`            | SQL: Balance deltas, account activity, month totals and entries by kind       | Removed rows never count; transfers and corrections stay out of income and spending |
 | `spending/service/SpendingService`             | Month income, spending, `review` (Income minus spending), history              | The month review reads only `income` and `expense` rows    |
 | `wealth/service/WealthService`                 | `summary`: positive bank Balances are assets, negative are debts (D-022)       | The one place household totals are computed                |
@@ -54,6 +57,9 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | `api/accounts.ts`, `hooks/useAccounts.ts`     | Account calls with parsers; `useToday` reads the server date                    | Date defaults come from the server, never `new Date()`       |
 | `features/accounts/*`                         | List, detail, setup and edit forms; `useAccountContext` loads household + members | Reference for a second screen set                            |
 | `design-system/components/Select.tsx`, `forms/SelectField.tsx` | Labelled select and its react-hook-form binding        | Counterpart of Field and TextField                           |
+| `features/activity/AddEntry.tsx`              | Money in or out, and edit (`editing` prop); a date after today becomes "Save reminder" | One form for add, correct and reminder; review before save |
+| `features/activity/ChangeEntry.tsx`           | Review for remove and Undo with the Balance and month figure after             | Nothing changes until Confirm; Cancel leaves it as it was    |
+| `features/activity/EntryHistory.tsx`, `RemindersCard.tsx` | History table (replaced and removed rows, Undo) and the account's reminders | Where the originals and plans are visible                    |
 | `routes.tsx`                                  | Exported `routes` array and `createAppRouter()`                                 | Same routes in the app and in tests                          |
 | `layout/AppLayout.tsx`, `AppFooter.tsx`       | Shell: skip link, nav, main, sticky footer                                      | Accessibility and consistent chrome                          |
 | `layout/useDocumentTitle.ts`                  | Sets the tab title from `handle.title` of the deepest route                     | Titles stay next to the route definition                     |

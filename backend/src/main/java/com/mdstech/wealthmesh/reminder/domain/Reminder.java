@@ -1,4 +1,4 @@
-package com.mdstech.wealthmesh.activity.domain;
+package com.mdstech.wealthmesh.reminder.domain;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -8,20 +8,17 @@ import java.util.UUID;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Table;
 
-/** One row of the activity ledger (foundations 6). Money fields are never updated in place. */
-@Table("activity")
-public record Activity(
+/** A future bill or expected income. Never counted in Balance, income or spending. */
+@Table("reminder")
+public record Reminder(
         @Id UUID id,
         UUID accountId,
         String kind,
         BigDecimal amount,
-        LocalDate occurredOn,
+        LocalDate dueOn,
         String description,
         UUID categoryId,
         UUID enteredByMemberId,
         String idempotencyKey,
-        Instant createdAt,
-        String reason,
-        UUID replacesId,
-        Instant removedAt) {
+        Instant createdAt) {
 }

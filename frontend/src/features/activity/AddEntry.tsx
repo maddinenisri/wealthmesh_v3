@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
 import {
@@ -8,18 +8,28 @@ import {
   Card,
   CardTitle,
   FormAlert,
-  Select,
   SelectField,
   TextField,
 } from '../../design-system'
-import type { EntryKind } from '../../api/activity'
-import { useCategories, useRecordEntry } from '../../hooks/useActivity'
+import type { Activity, EntryKind } from '../../api/activity'
+import {
+  useCategories,
+  useRecordEntry,
+  useReplaceEntry,
+  useSaveReminder,
+} from '../../hooks/useActivity'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney, parseAmount } from '../../lib/money'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
-import { memberLabel } from '../accounts/ownerNames'
+import { EnteredBy } from './EnteredBy'
 
-type Values = { description: string; amount: string; occurredOn: string; categoryId: string }
+type Values = {
+  description: string
+  amount: string
+  occurredOn: string
+  categoryId: string
+  reason: string
+}
 
 /** One id per form instance: a repeat of the same save carries the same id (D-024). */
 function newKey(): string {
@@ -49,57 +59,77 @@ export function AddEntry({
   account,
   members,
   today,
+  editing,
   onDone,
 }: {
   kind: EntryKind
   account: Account
   members: Member[]
   today: string
+  /** An effective entry being corrected: the form starts from it and saving replaces it. */
+  editing?: Activity
   onDone: () => void
 }) {
   const words = WORDS[kind]
   const categories = useCategories(kind)
   const record = useRecordEntry(account.id, kind)
+  const replace = useReplaceEntry(account.id, editing?.id ?? '')
+  const remind = useSaveReminder(account.id)
   const { member, setMemberId } = useEnteringAs(members)
   const [reviewing, setReviewing] = useState<Values | null>(null)
-  const [changingMember, setChangingMember] = useState(false)
   const [key] = useState(newKey)
   const { control, handleSubmit } = useForm<Values>({
-    defaultValues: { description: '', amount: '', occurredOn: today, categoryId: '' },
+    defaultValues: {
+      description: editing?.description ?? '',
+      amount: editing?.amount ?? '',
+      occurredOn: editing?.occurredOn ?? today,
+      categoryId: editing?.categoryId ?? '',
+      reason: '',
+    },
   })
+
+  // A date after today is a plan, saved as a reminder: it never changes the Balance or a month's totals.
+  const isReminder = (date: string) => !editing && date > today
+  const futureDate = useWatch({ control, name: 'occurredOn' })
+  const save = editing ? replace : reviewing && isReminder(reviewing.occurredOn) ? remind : record
 
   const categoryName = (id: string) => categories.data?.find((c) => c.id === id)?.name ?? ''
 
   const confirm = () => {
     if (!reviewing || !member) return
-    record.mutate(
-      {
-        key,
-        entry: {
-          description: reviewing.description.trim(),
-          amount: parseAmount(reviewing.amount)!,
-          occurredOn: reviewing.occurredOn,
-          categoryId: reviewing.categoryId,
-          enteredByMemberId: member.id,
-        },
-      },
-      { onSuccess: onDone },
-    )
+    const entry = {
+      description: reviewing.description.trim(),
+      amount: parseAmount(reviewing.amount)!,
+      occurredOn: reviewing.occurredOn,
+      categoryId: reviewing.categoryId,
+      enteredByMemberId: member.id,
+    }
+    if (isReminder(reviewing.occurredOn)) {
+      const { occurredOn: dueOn, ...rest } = entry
+      remind.mutate({ key, reminder: { ...rest, kind, dueOn } }, { onSuccess: onDone })
+    } else if (editing) {
+      replace.mutate(
+        { key, entry: { ...entry, reason: reviewing.reason.trim() } },
+        { onSuccess: onDone },
+      )
+    } else {
+      record.mutate({ key, entry }, { onSuccess: onDone })
+    }
   }
 
   if (reviewing) {
-    const choosing = changingMember || !member
+    const reminder = isReminder(reviewing.occurredOn)
     // Advisory only: money that really left the account is still recorded (the bill was paid).
     const shortBy =
-      kind === 'expense'
+      kind === 'expense' && !reminder
         ? Number(parseAmount(reviewing.amount)) - Number(account.balance.amount)
         : 0
     return (
       <Card aria-labelledby="review-heading">
         <CardTitle id="review-heading" className="text-lg">
-          {words.review}
+          {editing ? 'Review change' : reminder ? 'Review reminder' : words.review}
         </CardTitle>
-        <FormAlert message={record.error?.message} />
+        <FormAlert message={save.error?.message} />
         {shortBy > 0 && (
           <p role="alert" className="mt-3 max-w-md rounded-control border border-line p-3 text-sm">
             This will leave {account.name} overdrawn by {formatMoney(shortBy)}. {OVERDRAFT_NOTICE}
@@ -107,51 +137,29 @@ export function AddEntry({
         )}
         <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
           <Item label={words.place}>{account.name}</Item>
-          <Item label="Date">{reviewing.occurredOn}</Item>
+          <Item label="Date">{changed(editing?.occurredOn, reviewing.occurredOn)}</Item>
           <Item label="Amount">
-            <Amount value={Number(parseAmount(reviewing.amount))} />
+            {editing && Number(editing.amount) !== Number(parseAmount(reviewing.amount)) ? (
+              `${formatMoney(Number(editing.amount))} changed to ${formatMoney(Number(parseAmount(reviewing.amount)))}`
+            ) : (
+              <Amount value={Number(parseAmount(reviewing.amount))} />
+            )}
           </Item>
-          <Item label="Category">{categoryName(reviewing.categoryId)}</Item>
+          <Item label="Category">
+            {changed(editing?.categoryName ?? undefined, categoryName(reviewing.categoryId))}
+          </Item>
           {reviewing.description.trim() && <Item label="Description">{reviewing.description}</Item>}
+          {reviewing.reason.trim() && <Item label="Reason">{reviewing.reason.trim()}</Item>}
         </dl>
-        <div className="mt-3 max-w-md text-sm">
-          {choosing ? (
-            <Select
-              label="Entered by"
-              value={member?.id ?? ''}
-              onChange={(event) => {
-                setMemberId(event.target.value)
-                setChangingMember(false)
-              }}
-            >
-              <option value="">Choose who is entering this</option>
-              {members.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>
-                  {memberLabel(candidate)}
-                </option>
-              ))}
-            </Select>
-          ) : (
-            <p>
-              Entered by: <strong>{member ? memberLabel(member) : ''}</strong>{' '}
-              <Button variant="ghost" size="sm" onClick={() => setChangingMember(true)}>
-                Change
-              </Button>
-            </p>
-          )}
-        </div>
+        <EnteredBy members={members} member={member} setMemberId={setMemberId} />
         <div className="mt-4 flex gap-2">
-          <Button onClick={confirm} disabled={record.isPending || !member}>
-            {record.isPending ? 'Saving' : 'Confirm saving'}
+          <Button onClick={confirm} disabled={save.isPending || !member}>
+            {save.isPending ? 'Saving' : reminder ? 'Confirm reminder' : 'Confirm saving'}
           </Button>
-          <Button
-            variant="secondary"
-            onClick={() => setReviewing(null)}
-            disabled={record.isPending}
-          >
+          <Button variant="secondary" onClick={() => setReviewing(null)} disabled={save.isPending}>
             Back
           </Button>
-          <Button variant="ghost" onClick={onDone} disabled={record.isPending}>
+          <Button variant="ghost" onClick={onDone} disabled={save.isPending}>
             Cancel
           </Button>
         </div>
@@ -162,7 +170,7 @@ export function AddEntry({
   return (
     <Card aria-labelledby="entry-heading">
       <CardTitle id="entry-heading" className="text-lg">
-        {words.add}
+        {editing ? `Edit ${kind === 'income' ? 'money in' : 'money out'}` : words.add}
       </CardTitle>
       <form
         noValidate
@@ -191,7 +199,7 @@ export function AddEntry({
             validate: (value) =>
               value <= today
                 ? value >= account.openedOn || "This date is before the account's opening date"
-                : 'Future activity cannot be saved as completed yet',
+                : !editing || 'Future activity cannot replace a saved entry',
           }}
         />
         <SelectField
@@ -207,8 +215,18 @@ export function AddEntry({
             </option>
           ))}
         </SelectField>
+        {editing && <TextField control={control} name="reason" label="Reason" />}
+        {!editing && futureDate > today && (
+          <p role="status" className="max-w-md rounded-control border border-line p-3 text-sm">
+            {kind === 'income'
+              ? 'A future date cannot be recorded as completed income. Save it as a reminder: it will not change your Balance or income.'
+              : 'Future activity is a plan or reminder, not completed spending. Save it as a reminder: it will not change your Balance or spending.'}
+          </p>
+        )}
         <div className="flex gap-2">
-          <Button type="submit">Review</Button>
+          <Button type="submit">
+            {!editing && futureDate > today ? 'Save reminder' : 'Review'}
+          </Button>
           <Button variant="ghost" onClick={onDone}>
             Cancel
           </Button>
@@ -216,6 +234,11 @@ export function AddEntry({
       </form>
     </Card>
   )
+}
+
+/** "Dining changed to Groceries" when an edit changes a value, otherwise the value. */
+function changed(before: string | undefined, after: string): string {
+  return before !== undefined && before !== after ? `${before} changed to ${after}` : after
 }
 
 function Item({ label, children }: { label: string; children: React.ReactNode }) {

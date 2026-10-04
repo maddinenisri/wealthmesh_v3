@@ -13,7 +13,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.mdstech.wealthmesh.activity.dto.ActivityResponse;
+import com.mdstech.wealthmesh.activity.dto.ChangeRequest;
 import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
+import com.mdstech.wealthmesh.activity.dto.HistoryEntry;
+import com.mdstech.wealthmesh.activity.dto.ReplacementRequest;
+import com.mdstech.wealthmesh.activity.service.EntryChangeService;
 import com.mdstech.wealthmesh.activity.service.EntryService;
 
 import reactor.core.publisher.Flux;
@@ -24,9 +28,25 @@ import reactor.core.publisher.Mono;
 public class ActivityController {
 
     private final EntryService service;
+    private final EntryChangeService changes;
 
-    public ActivityController(EntryService service) {
+    public ActivityController(EntryService service, EntryChangeService changes) {
         this.service = service;
+        this.changes = changes;
+    }
+
+    @GetMapping("/activity/history")
+    public Flux<HistoryEntry> history(@PathVariable UUID accountId) {
+        return changes.history(accountId);
+    }
+
+    /** Edit as replacement: 201 when created, 200 for a repeated save key (D-024). */
+    @PostMapping("/activity/{activityId}/replacement")
+    public Mono<ResponseEntity<ActivityResponse>> replace(@PathVariable UUID accountId,
+            @PathVariable UUID activityId, @RequestHeader(name = "Idempotency-Key", required = false) String key,
+            @RequestBody ReplacementRequest request) {
+        return changes.replace(accountId, activityId, key, request).map(saved -> ResponseEntity
+                .status(saved.created() ? HttpStatus.CREATED : HttpStatus.OK).body(saved.activity()));
     }
 
     @GetMapping("/activity")
@@ -47,6 +67,18 @@ public class ActivityController {
             @RequestHeader(name = "Idempotency-Key", required = false) String key,
             @RequestBody ExpenseRequest request) {
         return save(accountId, key, "income", request);
+    }
+
+    @PostMapping("/activity/{activityId}/removal")
+    public Mono<HistoryEntry> remove(@PathVariable UUID accountId, @PathVariable UUID activityId,
+            @RequestBody ChangeRequest request) {
+        return changes.remove(accountId, activityId, request.enteredByMemberId());
+    }
+
+    @PostMapping("/activity/{activityId}/undo")
+    public Mono<HistoryEntry> undo(@PathVariable UUID accountId, @PathVariable UUID activityId,
+            @RequestBody ChangeRequest request) {
+        return changes.undo(accountId, activityId, request.enteredByMemberId());
     }
 
     private Mono<ResponseEntity<ActivityResponse>> save(UUID accountId, String key, String kind,

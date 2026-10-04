@@ -25,6 +25,24 @@ export type MockActivity = {
   description: string | null
   categoryId: string
   enteredByMemberId: string | null
+  createdAt?: string
+  reason?: string | null
+  replacesId?: string | null
+  /** Set when the entry was removed or replaced; such rows never count. */
+  removedAt?: string | null
+  events?: { action: string; byName: string; at: string }[]
+}
+
+type MockReminder = {
+  id: string
+  accountId: string
+  key: string
+  kind: string
+  amount: string
+  dueOn: string
+  description: string | null
+  categoryId: string
+  enteredByMemberId: string
 }
 
 type ExpenseBody = {
@@ -41,6 +59,7 @@ export const CATEGORIES = [
   { id: 'c0000000-0000-4000-8000-000000000002', name: 'Utilities', kind: 'spending' },
   { id: 'c0000000-0000-4000-8000-000000000003', name: 'Groceries', kind: 'spending' },
   { id: 'c0000000-0000-4000-8000-000000000004', name: 'Salary', kind: 'income' },
+  { id: 'c0000000-0000-4000-8000-000000000005', name: 'Dining', kind: 'spending' },
 ]
 
 function decorate(a: MockActivity, accounts: MockAccount[]) {
@@ -91,6 +110,7 @@ export function mockApi(
     members: [...(seed.members ?? [])],
     accounts: [...(seed.accounts ?? [])],
     activity: [...(seed.activity ?? [])],
+    reminders: [] as MockReminder[],
     /** Save keys seen on POST expenses, in order. */
     keys: [] as string[],
     /** When true the next expense is stored but its response is lost (a slow or dropped answer). */
@@ -103,8 +123,11 @@ export function mockApi(
   const log = (request: Request) =>
     state.requests.push(`${request.method} ${new URL(request.url).pathname}`)
 
+  const nameOf = (id: string | null | undefined) =>
+    state.members.find((m) => m.id === id)?.name ?? ''
+  const live = () => state.activity.filter((a) => !a.removedAt)
   const monthTotals = (month: string, kind: string) => {
-    const rows = state.activity.filter((a) => a.kind === kind && a.occurredOn.startsWith(month))
+    const rows = live().filter((a) => a.kind === kind && a.occurredOn.startsWith(month))
     const byCategory = new Map<string, { total: number; count: number }>()
     rows.forEach((a) => {
       const row = byCategory.get(a.categoryId) ?? { total: 0, count: 0 }
@@ -194,12 +217,181 @@ export function mockApi(
     http.get('*/api/v1/accounts/:id/activity', ({ request, params }) => {
       log(request)
       return HttpResponse.json(
-        state.activity
+        live()
           .filter((a) => a.accountId === params.id)
           .map((a) => decorate(a, state.accounts))
           .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn)),
       )
     }),
+    http.get('*/api/v1/accounts/:id/activity/history', ({ request, params }) => {
+      log(request)
+      const name = (id: string | null | undefined) => nameOf(id) || null
+      return HttpResponse.json(
+        state.activity
+          .filter((a) => a.accountId === params.id)
+          .map((a) => {
+            const replacement = state.activity.find((r) => r.replacesId === a.id)
+            return {
+              id: a.id,
+              kind: a.kind,
+              amount: a.amount,
+              occurredOn: a.occurredOn,
+              description: a.description,
+              categoryName: CATEGORIES.find((c) => c.id === a.categoryId)?.name ?? null,
+              enteredByName: name(a.enteredByMemberId),
+              createdAt: a.createdAt ?? '2026-10-03T09:00:00Z',
+              reason: a.reason ?? null,
+              replacesId: a.replacesId ?? null,
+              replacedById: replacement?.id ?? null,
+              events: a.events ?? [],
+              status: replacement ? 'replaced' : a.removedAt ? 'removed' : 'effective',
+            }
+          })
+          .reverse(),
+      )
+    }),
+    http.get('*/api/v1/reminders', ({ request }) => {
+      log(request)
+      return HttpResponse.json(
+        state.reminders.map((r) => ({
+          ...r,
+          accountName: state.accounts.find((a) => a.id === r.accountId)?.name ?? '',
+          categoryName: CATEGORIES.find((c) => c.id === r.categoryId)?.name ?? '',
+          enteredByName: state.members.find((m) => m.id === r.enteredByMemberId)?.name ?? '',
+        })),
+      )
+    }),
+    http.post('*/api/v1/accounts/:id/reminders', async ({ request, params }) => {
+      log(request)
+      const key = request.headers.get('Idempotency-Key') ?? ''
+      const body = (await request.json()) as ExpenseBody & { kind: string; dueOn: string }
+      const account = state.accounts.find((a) => a.id === params.id)
+      if (!account) return problem(404, 'Account not found')
+      if (!(Number(body.amount) > 0)) return problem(400, 'Enter an amount greater than zero')
+      if (body.dueOn <= today) return problem(400, 'A reminder needs a date after today')
+      const existing = state.reminders.find((r) => r.key === key)
+      const reminder: MockReminder = existing ?? {
+        id: newId(),
+        accountId: account.id,
+        key,
+        kind: body.kind,
+        amount: Number(body.amount).toFixed(2),
+        dueOn: body.dueOn,
+        description: body.description.trim() || null,
+        categoryId: body.categoryId,
+        enteredByMemberId: body.enteredByMemberId,
+      }
+      if (!existing) state.reminders.push(reminder)
+      return HttpResponse.json(
+        {
+          ...reminder,
+          accountName: account.name,
+          categoryName: CATEGORIES.find((c) => c.id === reminder.categoryId)?.name ?? '',
+          enteredByName: state.members.find((m) => m.id === reminder.enteredByMemberId)?.name ?? '',
+        },
+        { status: existing ? 200 : 201 },
+      )
+    }),
+    ...(['removal', 'undo'] as const).map((action) =>
+      http.post(
+        `*/api/v1/accounts/:id/activity/:activityId/${action}`,
+        async ({ request, params }) => {
+          log(request)
+          const account = state.accounts.find((a) => a.id === params.id)
+          const entry = state.activity.find((a) => a.id === params.activityId)
+          if (!account || !entry) return problem(404, 'Entry not found')
+          const replaced = state.activity.some((r) => r.replacesId === entry.id)
+          if (action === 'removal' ? entry.removedAt : !entry.removedAt || replaced)
+            return problem(409, 'This entry was already changed or removed.')
+          const sign = entry.kind === 'income' ? 1 : -1
+          const direction = action === 'removal' ? -1 : 1
+          entry.removedAt = action === 'removal' ? '2026-10-03T09:10:00Z' : null
+          const { enteredByMemberId } = (await request.json()) as { enteredByMemberId: string }
+          entry.events = [
+            ...(entry.events ?? []),
+            {
+              action: action === 'removal' ? 'removed' : 'restored',
+              byName: nameOf(enteredByMemberId),
+              at: '2026-10-03T09:10:00Z',
+            },
+          ]
+          account.balance = {
+            ...account.balance,
+            amount: (
+              Number(account.balance.amount) +
+              direction * sign * Number(entry.amount)
+            ).toFixed(2),
+          }
+          return HttpResponse.json({
+            id: entry.id,
+            kind: entry.kind,
+            amount: entry.amount,
+            occurredOn: entry.occurredOn,
+            description: entry.description,
+            categoryName: CATEGORIES.find((c) => c.id === entry.categoryId)?.name ?? null,
+            enteredByName: null,
+            createdAt: entry.createdAt ?? '2026-10-03T09:00:00Z',
+            reason: null,
+            replacesId: entry.replacesId ?? null,
+            replacedById: null,
+            events: entry.events,
+            status: entry.removedAt ? 'removed' : 'effective',
+          })
+        },
+      ),
+    ),
+    http.post(
+      '*/api/v1/accounts/:id/activity/:activityId/replacement',
+      async ({ request, params }) => {
+        log(request)
+        const key = request.headers.get('Idempotency-Key') ?? ''
+        const body = (await request.json()) as ExpenseBody & { reason?: string }
+        const account = state.accounts.find((a) => a.id === params.id)
+        const original = state.activity.find((a) => a.id === params.activityId)
+        if (!account || !original) return problem(404, 'Entry not found')
+        const amount = Number(body.amount)
+        if (!(amount > 0)) return problem(400, 'Enter an amount greater than zero')
+        if (body.occurredOn > today)
+          return problem(400, 'Future activity is not saved as completed history yet')
+        const existing = state.activity.find((a) => a.key === key)
+        if (existing) return HttpResponse.json(decorate(existing, state.accounts), { status: 200 })
+        if (original.removedAt) return problem(409, 'This entry was already changed or removed.')
+        const sign = (kind: string) => (kind === 'income' ? 1 : -1)
+        original.removedAt = '2026-10-03T09:00:00Z'
+        original.events = [
+          ...(original.events ?? []),
+          {
+            action: 'replaced',
+            byName: nameOf(body.enteredByMemberId),
+            at: '2026-10-03T09:05:00Z',
+          },
+        ]
+        const entry: MockActivity = {
+          id: newId(),
+          accountId: account.id,
+          key,
+          kind: original.kind,
+          amount: amount.toFixed(2),
+          occurredOn: body.occurredOn,
+          description: body.description.trim() || null,
+          categoryId: body.categoryId,
+          enteredByMemberId: body.enteredByMemberId,
+          createdAt: '2026-10-03T09:05:00Z',
+          reason: body.reason?.trim() || null,
+          replacesId: original.id,
+        }
+        state.activity.push(entry)
+        account.balance = {
+          ...account.balance,
+          amount: (
+            Number(account.balance.amount) -
+            sign(original.kind) * Number(original.amount) +
+            sign(original.kind) * amount
+          ).toFixed(2),
+        }
+        return HttpResponse.json(decorate(entry, state.accounts), { status: 201 })
+      },
+    ),
     ...(['expenses', 'income'] as const).map((path) =>
       http.post(`*/api/v1/accounts/:id/${path}`, async ({ request, params }) => {
         const kind = path === 'income' ? 'income' : 'expense'
@@ -256,7 +448,7 @@ export function mockApi(
         log(request)
         const query = new URL(request.url).searchParams
         return HttpResponse.json(
-          state.activity
+          live()
             .filter(
               (a) =>
                 a.kind === kind &&
@@ -296,7 +488,7 @@ export function mockApi(
     http.get('*/api/v1/spending/history', ({ request }) => {
       log(request)
       const totals = new Map<string, number>()
-      state.activity
+      live()
         .filter((a) => a.kind === 'expense')
         .forEach((a) => {
           const month = a.occurredOn.slice(0, 7)

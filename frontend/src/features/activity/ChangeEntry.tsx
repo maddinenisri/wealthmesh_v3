@@ -1,0 +1,115 @@
+import type { Account } from '../../api/accounts'
+import type { Member } from '../../api/household'
+import { Button, Card, CardTitle, FormAlert } from '../../design-system'
+import { useChangeEntry, useIncome, useSpending } from '../../hooks/useActivity'
+import { useEnteringAs } from '../../hooks/useEnteringAs'
+import { formatMoney } from '../../lib/money'
+import { EnteredBy } from './EnteredBy'
+
+/** The part of an entry the review shows; both the activity list and history rows fit it. */
+export type ChangeTarget = {
+  id: string
+  kind: string
+  amount: string
+  occurredOn: string
+  description: string | null
+  categoryName: string | null
+}
+
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
+/**
+ * Review before removing an entry, or before bringing a removed one back (Undo). Nothing changes until
+ * the confirm button; Cancel leaves everything as it was.
+ */
+export function ChangeEntry({
+  mode,
+  account,
+  entry,
+  members,
+  onDone,
+}: {
+  mode: 'remove' | 'undo'
+  account: Account
+  entry: ChangeTarget
+  members: Member[]
+  onDone: () => void
+}) {
+  const income = entry.kind === 'income'
+  const month = entry.occurredOn.slice(0, 7)
+  const spending = useSpending(income ? '' : month)
+  const incomeTotal = useIncome(income ? month : '')
+  const monthTotal = income ? incomeTotal : spending
+  const change = useChangeEntry(account.id, entry.id, mode === 'remove' ? 'removal' : 'undo')
+  const { member, setMemberId } = useEnteringAs(members)
+
+  // Money in raises the Balance and the month's income; money out lowers the Balance and counts as spending.
+  const effect = (income ? 1 : -1) * Number(entry.amount) * (mode === 'remove' ? -1 : 1)
+  const balanceAfter = Number(account.balance.amount) + effect
+  const monthAfter = monthTotal.data
+    ? Number(monthTotal.data.total) + Number(entry.amount) * (mode === 'remove' ? -1 : 1)
+    : null
+  const label = `${MONTHS[Number(month.slice(5)) - 1]} ${income ? 'Income' : 'spending'} after ${mode === 'remove' ? 'removal' : 'Undo'}`
+  const title = mode === 'remove' ? 'Review removal' : 'Review Undo'
+
+  return (
+    <Card aria-labelledby="change-heading">
+      <CardTitle id="change-heading" className="text-lg">
+        {title}
+      </CardTitle>
+      <FormAlert message={change.error?.message} />
+      <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
+        <Item label="Entry">
+          {entry.description || entry.categoryName} ({entry.categoryName})
+        </Item>
+        <Item label="Date">{entry.occurredOn}</Item>
+        <Item label="Amount">{formatMoney(Number(entry.amount))}</Item>
+        <Item label={`${account.name} Balance after ${mode === 'remove' ? 'removal' : 'Undo'}`}>
+          {formatMoney(balanceAfter)}
+        </Item>
+        <Item label={label}>{monthAfter === null ? '' : formatMoney(monthAfter)}</Item>
+      </dl>
+      <p className="mt-3 max-w-md text-sm text-ink-muted">
+        {mode === 'undo'
+          ? 'The entry returns on its original date.'
+          : income
+            ? 'This does not reverse a bank deposit. The entry stays in history, where Undo restores it.'
+            : 'Removing a tracked expense does not obtain a merchant refund. The entry stays in history, where Undo restores it.'}
+      </p>
+      <EnteredBy members={members} member={member} setMemberId={setMemberId} />
+      <div className="mt-4 flex gap-2">
+        <Button
+          onClick={() => member && change.mutate(member.id, { onSuccess: onDone })}
+          disabled={change.isPending || !member}
+        >
+          {change.isPending ? 'Saving' : mode === 'remove' ? 'Confirm removal' : 'Confirm Undo'}
+        </Button>
+        <Button variant="ghost" onClick={onDone} disabled={change.isPending}>
+          Cancel
+        </Button>
+      </div>
+    </Card>
+  )
+}
+
+function Item({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-caption text-ink-muted">{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  )
+}

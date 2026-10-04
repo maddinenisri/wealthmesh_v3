@@ -14,8 +14,12 @@ import {
 } from '../../design-system'
 import { useAccount, useToday } from '../../hooks/useAccounts'
 import type { EntryKind } from '../../api/activity'
+import type { Activity as ActivityEntry } from '../../api/activity'
 import { AddEntry } from '../activity/AddEntry'
 import { ActivityList } from '../activity/ActivityList'
+import { Panel } from '../activity/Panel'
+import { RemindersCard } from '../activity/RemindersCard'
+import { ChangeEntry, type ChangeTarget } from '../activity/ChangeEntry'
 import { OVERDRAFT_NOTICE, OverdrawnLabel } from './Overdrawn'
 import { ownerNames } from './ownerNames'
 import { useAccountContext } from './useAccountContext'
@@ -148,26 +152,60 @@ function UpdateBalance() {
 /** Money in and out are live; transfers stay visible but inactive until they are built. */
 function Activity({ account, members }: { account: Account; members: Member[] | undefined }) {
   const [adding, setAdding] = useState<EntryKind | null>(null)
+  const [editing, setEditing] = useState<ActivityEntry | null>(null)
+  const [changing, setChanging] = useState<{ mode: 'remove' | 'undo'; entry: ChangeTarget } | null>(
+    null,
+  )
   const today = useToday()
-  const ready = !adding && !!today.data && !!members
+  const ready = !adding && !editing && !changing && !!today.data && !!members
 
   return (
     <>
       {adding && today.data && members && (
-        <AddEntry
-          key={adding}
-          kind={adding}
-          account={account}
-          members={members}
-          today={today.data}
-          onDone={() => setAdding(null)}
-        />
+        <Panel key={adding}>
+          <AddEntry
+            kind={adding}
+            account={account}
+            members={members}
+            today={today.data}
+            onDone={() => setAdding(null)}
+          />
+        </Panel>
+      )}
+      {editing && today.data && members && (
+        <Panel key={editing.id}>
+          <AddEntry
+            kind={editing.kind === 'income' ? 'income' : 'expense'}
+            account={account}
+            members={members}
+            today={today.data}
+            editing={editing}
+            onDone={() => setEditing(null)}
+          />
+        </Panel>
+      )}
+      {changing && members && (
+        <Panel key={`${changing.mode}-${changing.entry.id}`}>
+          <ChangeEntry
+            mode={changing.mode}
+            account={account}
+            entry={changing.entry}
+            members={members}
+            onDone={() => setChanging(null)}
+          />
+        </Panel>
       )}
       <Card aria-labelledby="activity-heading">
         <CardTitle id="activity-heading" className="text-lg">
           Activity
         </CardTitle>
-        <ActivityList accountId={account.id} members={members} />
+        <ActivityList
+          accountId={account.id}
+          members={members}
+          onEdit={ready ? setEditing : undefined}
+          onRemove={ready ? (entry) => setChanging({ mode: 'remove', entry }) : undefined}
+          onUndo={ready ? (entry) => setChanging({ mode: 'undo', entry }) : undefined}
+        />
         <div className="flex flex-wrap gap-2">
           <Button
             variant="secondary"
@@ -193,6 +231,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
           Transfers become available with a later feature.
         </p>
       </Card>
+      <RemindersCard accountId={account.id} />
     </>
   )
 }
