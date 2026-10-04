@@ -17,7 +17,7 @@ Record the start time. If a limit is hit, apply the stop rule below instead of p
 | Step | Limit | Do |
 | --- | --- | --- |
 | 1 Orient | 10 min | `preflight`. Read `INDEX.md`, the feature file, `docs/guides/domain-foundations.md`, `docs/decisions/decisions.md`, the open rows in `docs/decisions/questions.md`, the last `docs/process/retro.md` rows and the previous feature's handoff. Copy `TEMPLATE.md` to `docs/features/<area>-<name>.md` and paste the kickoff prompt into its "Prompts and directions" |
-| 2 Gap analysis | 10 min | Compare each scenario ID with the code that exists. Open v1 at `http://localhost:3000` only to settle an unclear scenario (read only) |
+| 2 Gap analysis | 10 min | Compare each scenario ID with the code that exists, and count how many are citeable now (not blocked on a later row). If fewer than half, the checkpoint 1 message leads with "move this row later" as the first option, before any task list. Open v1 at `http://localhost:3000` only to settle an unclear scenario (read only) |
 | 3 Task list | | Group scenarios, give each group a test level (unit, API, UI, e2e), write it in the feature notes |
 | **Checkpoint 1** | | Show the task list and stop. Proceed only when the user approves it; record the answer in the notes |
 | 4 Build | 20-30 min per group | `feature-slice`, test first. Every test cites its scenario ID |

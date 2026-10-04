@@ -11,6 +11,7 @@ commit, so the effect can be judged in later retro rows.
 | 2026-10-04 | A pattern review found untested validation and missing API tests after the build | `validator` and `pattern-reviewer` agents; validator runs before landing | `.claude/agents/` | 3e1ff41 |
 | 2026-10-04 | No way to prove every requirement scenario has a test | Scenario coverage script citing `@V2_...` IDs | `scripts/scenario-coverage.sh` | 3e1ff41 |
 | 2026-10-04 | Process notes had no home; v2's heavy registers were rejected | Docs organised into guides, process, decisions, features | `docs/` | see git log |
+| 2026-10-04 | Second row placed by position turned out acceptance-shaped (row 02: 1 of 6 citeable) | Orient counts citeable scenarios; under half, checkpoint 1 offers "move this row later" first | `.claude/skills/feature-session/SKILL.md` | see git log |
 
 ## How to judge a change
 
