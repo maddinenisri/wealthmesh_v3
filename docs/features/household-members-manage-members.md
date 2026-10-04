@@ -1,7 +1,7 @@
 # Manage members (row 02)
 
 - Feature file: `docs/requirements/v2/household/members/manage-members.feature`
-- Status: parked, `todo` on the board (mirror the row in `INDEX.md`)
+- Status: dissolved into slices 01, 03, 05, 18, 21 of `INDEX.md` (D-018, Q-F); this file keeps the gap analysis
 - Started: 2026-10-04  Finished:  Commit:
 
 ## Prompts and directions

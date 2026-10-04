@@ -5,7 +5,7 @@ log says when a prompt caused trouble. Prompts contain no secrets and no real fi
 
 ## What is preserved for each feature
 
-Not transcripts. For each feature session, the feature notes file (`features/<area>-<name>.md`) keeps, under
+Not transcripts. For each feature session, the feature notes file (`features/slice-NN-<name>.md`) keeps, under
 "Prompts and directions":
 
 1. the exact kickoff prompt that started the session (the version and any change you made to it),
@@ -15,10 +15,10 @@ Not transcripts. For each feature session, the feature notes file (`features/<ar
 That is enough to replay or audit a session. Scenarios are not given prompts of their own: a scenario is traced by its
 ID to its tests, and its task group appears in the task list.
 
-## Kickoff: feature session (v1)
+## Kickoff: slice session (v2)
 
 ```text
-Work in /Users/srini/workspace/mdstect_ws/wealthmesh_v3. Run the feature-session skill for <feature path>.
+Work in /Users/srini/workspace/mdstect_ws/wealthmesh_v3. Run the feature-session skill for slice <NN> in docs/features/INDEX.md.
 Repository facts supersede this prompt. Stop at the task-list approval and again when the app is ready to look at.
 ```
 
@@ -49,3 +49,4 @@ line and the guide section for each. Say briefly what conforms.
 | Date | Prompt | Change | Why |
 | --- | --- | --- | --- |
 | 2026-10-04 | all | Created at version 1 | Preserve what starts and checks each session |
+| 2026-10-04 | kickoff | Feature session v1 becomes slice session v2: names a slice, not a feature path (D-018) | Feature files cut across capabilities; rows 02 and 03 stalled |

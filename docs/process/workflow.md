@@ -1,6 +1,6 @@
 # How we work
 
-One requirements feature file is built per session, in a fresh session, in the order on
+One slice (capabilities plus the scenario IDs they make citeable; D-018) is built per session, in a fresh session, in the order on
 [`features/INDEX.md`](../features/INDEX.md). The runbook is the `feature-session` skill; this page is the summary.
 
 ## The loop

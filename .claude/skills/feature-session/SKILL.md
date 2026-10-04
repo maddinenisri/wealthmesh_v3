@@ -1,11 +1,11 @@
 ---
 name: feature-session
-description: Use when starting a session to build one feature file from docs/requirements, or the foundations session, in this repo. One feature per session; also use when asked how a session should be run, time-boxed, validated and handed off.
+description: Use when starting a session to build one slice (a set of scenario IDs from docs/requirements, in docs/features/slices.txt), or the foundations session, in this repo. One slice per session; also use when asked how a session should be run, time-boxed, validated and handed off.
 ---
 
 # Feature session
 
-One row of `docs/features/INDEX.md` per session. All state lives in the repo, so start cold: do not rely on any earlier
+One row (slice) of `docs/features/INDEX.md` per session; its scenario IDs are in `docs/features/slices.txt` and may span several feature files (D-018). All state lives in the repo, so start cold: do not rely on any earlier
 conversation. Never start a second row in the same session.
 
 **REQUIRED SUB-SKILLS:** `preflight` first, then `feature-slice` for the build, and `superpowers:test-driven-development`.
@@ -16,12 +16,12 @@ Record the start time. If a limit is hit, apply the stop rule below instead of p
 
 | Step | Limit | Do |
 | --- | --- | --- |
-| 1 Orient | 10 min | `preflight`. Read `INDEX.md`, the feature file, `docs/guides/domain-foundations.md`, `docs/decisions/decisions.md`, the open rows in `docs/decisions/questions.md`, the last `docs/process/retro.md` rows and the previous feature's handoff. Copy `TEMPLATE.md` to `docs/features/<area>-<name>.md` and paste the kickoff prompt into its "Prompts and directions" |
-| 2 Gap analysis | 10 min | Compare each scenario ID with the code that exists, and count how many are citeable now (not blocked on a later row). If fewer than half, the checkpoint 1 message leads with "move this row later" as the first option, before any task list. Open v1 at `http://localhost:3000` only to settle an unclear scenario (read only) |
+| 1 Orient | 10 min | `preflight`. Read `INDEX.md`, the slice's IDs in `slices.txt`, the feature files that contain them and `dependency-map.md`, `docs/guides/domain-foundations.md`, `docs/decisions/decisions.md`, the open rows in `docs/decisions/questions.md`, the last `docs/process/retro.md` rows and the previous feature's handoff. Copy `TEMPLATE.md` to `docs/features/slice-NN-<name>.md` and paste the kickoff prompt into its "Prompts and directions" |
+| 2 Gap analysis | 10 min | Compare each scenario ID with the code that exists, and confirm each ID of the slice is citeable now (the map says it should be). If one is blocked, say so at checkpoint 1 and defer it whole (D-016); if fewer than half are citeable the map is wrong, so lead with that. Open v1 at `http://localhost:3000` only to settle an unclear scenario (read only) |
 | 3 Task list | | Group scenarios, give each group a test level (unit, API, UI, e2e), write it in the feature notes |
 | **Checkpoint 1** | | Show the task list and stop. Proceed only when the user approves it; record the answer in the notes |
 | 4 Build | 20-30 min per group | `feature-slice`, test first. Every test cites its scenario ID |
-| 5 Prove | | `npm run coverage -- --require <path>`, `npm test`, `npm run e2e`, `npm run check`; then run the `validator` agent |
+| 5 Prove | | `npm run coverage -- --require --slice NN` (plus `--require <path>` for each feature file this slice completes), `npm test`, `npm run e2e`, `npm run check`; then run the `validator` agent |
 | **Checkpoint 2** | | Start the app (`npm run dev`), tell the user what to click, wait for their view |
 | 6 Land | | Commit in logical pieces, push, update the `INDEX.md` row, fill the notes' handoff. Promote cross-cutting choices to `docs/decisions/decisions.md` and add open questions to `docs/decisions/questions.md` |
 | 7 Retro | | Append a row to `docs/process/retro.md`. If the same problem is already there, change the process now (promotion rule) and log it in `docs/process/improvements.md` |
@@ -35,7 +35,7 @@ Record the start time. If a limit is hit, apply the stop rule below instead of p
 
 ## Done
 
-The coverage script shows no missing scenarios for the file (deferred ones listed with reasons), the validator
+The coverage script shows no missing scenarios for the slice (deferred ones listed with reasons), the validator
 report is clean, `npm run e2e` passes, everything is pushed and the row says `done`.
 
 ## Session 0: foundations

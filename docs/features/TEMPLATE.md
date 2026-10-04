@@ -1,9 +1,9 @@
-# <feature name>
+# <slice NN: name>
 
-Copy this file to `docs/features/<area>-<name>.md` at the start of the session. One file per feature, edited only by
+Copy this file to `docs/features/slice-NN-<name>.md` at the start of the session. One file per slice, edited only by
 the session working it. Keep it short; it exists so the next session needs no memory of this one.
 
-- Feature file: `docs/requirements/v2/<path>.feature`
+- Slice: NN in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/<path>.feature`
 - Status: todo / in-progress / partial / done (mirror the row in `INDEX.md`)
 - Started: <date>  Finished: <date>  Commit: <hash>
 

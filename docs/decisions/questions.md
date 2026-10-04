@@ -16,3 +16,12 @@
 | Q-012 | 2026-10-04 | `V2_MEMBERS_001` says both names are available for owner choice and "who entered a record". The entered-by chooser needs activity (rows 03, 05). Build 001 now (owner choice only) or defer it whole (D-016)? Differs from Q-008: there the missing piece was a report, proved structurally; here it is a UI element (the entered-by chooser) with no form to live in. Recommended: defer whole; the owner half is still built and tested without citing the ID. | resolved | Defer whole (2026-10-04) | |
 | Q-013 | 2026-10-04 | Build the per-person account filter and joint-account note now (half of `V2_MEMBERS_002`, without totals) and member name change history (half of 005)? Recommended: yes, both small. | resolved | No for now; build each when a scenario that cites it can pass (2026-10-04) | |
 | Q-014 | 2026-10-04 | `DELETE` of a member who owns an account: answer 409 "Deactivate instead" and keep deleting unowned members? Recommended: yes. | resolved | Yes, fixed now (2026-10-04) | |
+| Q-015 | 2026-10-04 | Row 03 (`checking/activity`) found 0 of 11 citeable: move it later, or build groundwork without citing an ID? | resolved | Dissolve rows 02 and 03; keep their gap analyses as input to slice 01 (2026-10-04) | D-018 |
+| Q-016 | 2026-10-04 | Replace one session per feature file with one per slice (Q-A of the map)? | resolved | Yes (2026-10-04) | D-018 |
+| Q-017 | 2026-10-04 | Move savings to slice 06 (Q-B)? | resolved | Yes; add a new decision, do not edit D-015 (2026-10-04) | D-019 |
+| Q-018 | 2026-10-04 | Seed a default category list (Q-C)? | resolved | Yes, read-only until slice 10 (2026-10-04) | D-020 |
+| Q-019 | 2026-10-04 | May tests set up Givens outside the UI (Q-D)? | resolved | Keep strict; revisit after slice 08 (2026-10-04) | D-021 |
+| Q-020 | 2026-10-04 | Which file opens the build (Q-E)? | resolved | None: open with slice 01 (2026-10-04) | D-018 |
+| Q-021 | 2026-10-04 | Dissolve rows 02 and 03 (Q-F)? | resolved | Yes (2026-10-04) | D-018 |
+| Q-022 | 2026-10-04 | Five investment types in one session (Q-G)? | resolved | Yes; split at a type boundary if time runs out (2026-10-04) | D-018 |
+| Q-023 | 2026-10-04 | Keep `V2_MONTHLY_005` in slice 01 (Q-H)? | resolved | Either; slice 01 may run as 01a first (2026-10-04) | |

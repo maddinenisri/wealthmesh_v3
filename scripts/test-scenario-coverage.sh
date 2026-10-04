@@ -25,7 +25,7 @@ FEATURE
 failures=0
 run() { # <args...> ; sets out and code
   set +e
-  out="$(WM_REQUIREMENTS_DIR="$work/req" WM_TEST_DIRS="$work/tests" WM_DEFERRED_FILE="$work/deferred.txt" \
+  out="$(WM_REQUIREMENTS_DIR="$work/req" WM_TEST_DIRS="$work/tests" WM_DEFERRED_FILE="$work/deferred.txt" WM_SLICES_FILE="$work/slices.txt" \
     "$here/scenario-coverage.sh" "$@" 2>&1)"
   code=$?
   set -e
@@ -64,5 +64,31 @@ expect "deferred IDs are reported and do not fail --require" "$s"
 run spending
 grep -q "household" <<<"$out" && s=1 || s=0
 expect "the filter hides other features" "$s"
+
+# Slices span files: IDs from two features in one slice.
+printf '# comment\n01 V2_A_001 V2_B_001\n02 V2_A_0010 V2_A_002\n' > "$work/slices.txt"
+: > "$work/deferred.txt"
+: > "$work/tests/t.test.ts"
+echo '// V2_B_001' > "$work/tests/t.test.ts"
+run --slice 01
+grep -q "slice 01: 1/2 covered, 1 MISSING" <<<"$out" && grep -q "missing: V2_A_001$" <<<"$out" && s=0 || s=1
+expect "--slice counts IDs across feature files and lists the missing one" "$s"
+
+run --require --slice 01
+[ "$code" -eq 1 ] && s=0 || s=1
+expect "--require --slice fails while the slice has missing IDs" "$s"
+
+echo '// V2_A_001' >> "$work/tests/t.test.ts"
+run --require --slice 01
+[ "$code" -eq 0 ] && grep -q "slice 01: 2/2 covered" <<<"$out" && s=0 || s=1
+expect "--require --slice passes when every ID of the slice is covered" "$s"
+
+run --slice 02
+grep -q "slice 02: 0/2 covered, 2 MISSING" <<<"$out" && s=0 || s=1
+expect "another slice is judged only by its own IDs" "$s"
+
+run --slice 99
+[ "$code" -eq 2 ] && s=0 || s=1
+expect "an unknown slice is an error, not a pass" "$s"
 
 if [ "$failures" -eq 0 ]; then echo "all passed"; else echo "$failures failed"; exit 1; fi
