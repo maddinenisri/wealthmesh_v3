@@ -1,0 +1,84 @@
+# Install once with: npm run hooks:install   (needs pre-commit, gitleaks, shellcheck; see README)
+# Run everything by hand with: npm run check
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        stages: [pre-commit]
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+        stages: [pre-commit]
+        exclude: '\.(svg|png|jar)$'
+      - id: mixed-line-ending
+        stages: [pre-commit]
+        args: [--fix=lf]
+        exclude: '\.bat$'
+      - id: check-yaml
+        stages: [pre-commit]
+      - id: check-json
+        stages: [pre-commit]
+        exclude: 'tsconfig.*\.json$' # JSON with comments
+      - id: check-merge-conflict
+        stages: [pre-commit]
+      - id: detect-private-key
+        stages: [pre-commit]
+      - id: check-added-large-files
+        stages: [pre-commit]
+        args: [--maxkb=500]
+        exclude: 'gradle-wrapper\.jar$'
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert]
+
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks (secrets in staged changes)
+        entry: gitleaks git --pre-commit --staged --redact --no-banner
+        language: system
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier (format check)
+        entry: frontend/node_modules/.bin/prettier --check
+        language: system
+        files: '^(frontend|e2e)/.*\.(ts|tsx|js|css|json|html)$|^(ecosystem\.config\.cjs|package\.json|\.prettierrc\.json)$'
+        exclude: 'package-lock\.json$'
+
+      - id: oxlint
+        name: oxlint (frontend)
+        entry: npm --prefix frontend run lint -- --deny-warnings
+        language: system
+        files: '^frontend/(src|vite\.config\.ts|\.oxlintrc\.json)'
+        pass_filenames: false
+
+      - id: shellcheck
+        name: shellcheck
+        entry: shellcheck -x -P SCRIPTDIR
+        language: system
+        files: '\.sh$'
+
+      # Slower checks run on push, not on every commit.
+      - id: frontend-typecheck-and-test
+        name: frontend typecheck and tests
+        entry: bash -c 'npm --prefix frontend run typecheck && npm --prefix frontend test'
+        language: system
+        files: '^frontend/'
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: backend-checkstyle-and-test
+        name: backend checkstyle and tests
+        entry: scripts/gradle.sh checkstyleMain checkstyleTest test
+        language: system
+        files: '^backend/'
+        pass_filenames: false
+        stages: [pre-push]

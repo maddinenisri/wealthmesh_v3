@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.gradle/
+logs/
+test-results/
+playwright-report/
+package-lock.json
+*.md
