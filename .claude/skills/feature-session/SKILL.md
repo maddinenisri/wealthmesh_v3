@@ -21,7 +21,7 @@ Record the start time. If a limit is hit, apply the stop rule below instead of p
 | 3 Task list | | Group scenarios, give each group a test level (unit, API, UI, e2e), write it in the feature notes |
 | **Checkpoint 1** | | Show the task list and stop. Proceed only when the user approves it; record the answer in the notes |
 | 4 Build | 20-30 min per group | `feature-slice`, test first. Every test cites its scenario ID |
-| 5 Prove | | `npm run coverage -- --require --slice NN` (plus `--require <path>` for each feature file this slice completes), `npm test`, `npm run e2e`, `npm run check`; then run the `validator` agent |
+| 5 Prove | | `npm run coverage -- --require --slice NN` (plus `--require <path>` for each feature file this slice completes), `npm test`, `npm run e2e`, `npm run lint` (Checkstyle runs here, not in `check`), `npm run check`; then run the `validator` agent |
 | **Checkpoint 2** | | Start the app (`npm run dev`), tell the user what to click, wait for their view |
 | 6 Land | | Commit in logical pieces, push, update the `INDEX.md` row, fill the notes' handoff. Promote cross-cutting choices to `docs/decisions/decisions.md` and add open questions to `docs/decisions/questions.md` |
 | 7 Retro | | Append a row to `docs/process/retro.md`. If the same problem is already there, change the process now (promotion rule) and log it in `docs/process/improvements.md` |

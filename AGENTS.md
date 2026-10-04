@@ -30,6 +30,8 @@ Household finance app. Monorepo: `backend/` (Java 25, Spring Boot 4.1 WebFlux, R
 - Do not commit or push unless asked. Hooks only see staged files: `git add` before `npm run check`.
 - Ports: db 5434, backend 8081, frontend 5180. Open Vite at `http://localhost:5180`, not `127.0.0.1`.
 - Run Gradle through `scripts/gradle.sh` (it finds JDK 25). Never report a check as passing unless you ran it.
+- Scripted edits (sed, python, heredocs) must assert they matched, for example `assert s.count(old) == 1`, or use the Edit tool.
+  After a change to several files, grep to prove each change landed before running tests.
 - The pm2 daemon is shared with other projects: only touch `wm-*` apps, never `pm2 delete all`.
 - Prefer the standard library over a hand-built layer (see pitfall 32).
 

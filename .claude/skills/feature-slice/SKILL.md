@@ -24,5 +24,5 @@ One vertical slice, in this order. Patterns are in `docs/guides/patterns.md`; fi
 
 - Every test names the scenario ID it covers (`V2_..._001` in the title or a comment). Check with `npm run coverage -- --require --slice NN`.
 - Break one behavior on purpose, watch a test fail, restore it.
-- `npm run check` and `npm test` pass; report what you ran.
+- `npm run lint`, `npm run check` and `npm test` pass (`check` skips Checkstyle, pitfall 36); report what you ran.
 - Update `docs/guides/key-functions.md` if the slice adds a file others should know about.
