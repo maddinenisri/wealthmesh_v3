@@ -31,7 +31,7 @@ One row per session. Do not start a second row, even if time remains; finish the
 
 | # | Feature file | Scenarios | Size | Status | Date | Commit | Notes |
 | --- | --- | ---: | :-: | --- | --- | --- | --- |
-| 00 | foundations: `docs/guides/domain-foundations.md` | - | - | todo | | | Decide money, dated balance, clock, account model before any feature |
+| 00 | foundations: `docs/guides/domain-foundations.md` | - | - | done | 2026-10-04 | see git log | Money, dated balance, clock, account model decided. Notes: `00-foundations.md` |
 | | **Wave 1: walking skeleton (usable product after these)** | | | | | | |
 | 01 | `accounts/checking/setup.feature` | 7 | M | todo | | | No cross-type references. 006 (recovery of an older saved file) and the salary half of 002 depend on later features; defer with reasons. Needs the account model and owner join from foundations. |
 | 02 | `household/members/manage-members.feature` | 6 | M | todo | | | 6 cross-type references. Joint-account scenarios need an account to exist, so it follows checking/setup. |
