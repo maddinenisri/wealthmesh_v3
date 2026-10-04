@@ -19,7 +19,7 @@ Repository facts supersede this prompt. Stop at the task-list approval and again
 
 One row per session. Do not start a second row, even if time remains.
 
-**Merge rule:** a session may take consecutive slices until it covers at least 8 scenarios or 3 new capabilities (about 21 sessions instead of 25). Record the merge in the row and in `slices.txt`. Slice 01 may run as 01a first (6 scenarios, no income entry: CHECKING 011; EXPENSE 001, 010; MEMBERS 001; MONTHLY 004, 005), then the income part.
+**Merge rule:** a session may take consecutive slices until it covers at least 8 scenarios or 3 new capabilities (about 19 sessions instead of 25). Record the merge in the row and in `slices.txt`. Slice 01 runs as 01a first (5 scenarios, no income entry: CHECKING 011; EXPENSE 001, 010; MEMBERS 001; MONTHLY 005), then 01b (D-023).
 
 **Strict Givens (D-021):** revisit after slice 08 with evidence of how often a Given was the only blocker.
 
@@ -75,7 +75,7 @@ Status of each file follows from its sessions. A file is complete after its last
 | `spending/expenses/record-expenses.feature` | 11 | 01 (2), 02 (3), 06 (1), 07 (1), 09 (4) | 09 |
 | `spending/categories/manage-categories.feature` | 8 | 10 (8) | 10 |
 | `spending/categories/split-expenses.feature` | 5 | 11 (5) | 11 |
-| `accounts/checking/activity.feature` | 11 | 01 (1), 02 (1), 03 (4), 04 (1), 07 (2), 12 (2) | 12 |
+| `accounts/checking/activity.feature` | 11 | 01 (2), 02 (1), 03 (4), 04 (1), 07 (2), 12 (1) | 12 |
 | `spending/budgets/manage-budgets.feature` | 7 | 13 (7) | 13 |
 | `spending/recurring/manage-recurring.feature` | 10 | 14 (10) | 14 |
 | `accounts/lifecycle/dated-values.feature` | 4 | 15 (2), 16 (2) | 16 |

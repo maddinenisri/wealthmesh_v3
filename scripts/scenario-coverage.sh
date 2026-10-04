@@ -33,13 +33,17 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+if [ -n "$slice" ] && [ -n "$filter" ]; then
+  echo "--slice takes no path filter (a slice spans feature files)" >&2
+  exit 2
+fi
 
 is_covered() { grep -rqwF --exclude-dir=node_modules -- "$1" "${test_dirs[@]}" 2>/dev/null; }
 is_deferred() { [ -f "$deferred_file" ] && grep -qE "^$1([[:space:]]|$)" "$deferred_file"; }
 
 # One slice: report its IDs from slices.txt, whichever feature files they live in.
 if [ -n "$slice" ]; then
-  ids="$(awk -v n="$slice" '$1 == n || $1 ~ ("^" n "[a-z]$") { for (i = 2; i <= NF; i++) print $i }' "$slices_file" 2>/dev/null || true)"
+  ids="$(awk -v n="$slice" '$1 == n || (length($1) == length(n) + 1 && substr($1, 1, length(n)) == n && $1 ~ /[a-z]$/) { for (i = 2; i <= NF; i++) print $i }' "$slices_file" 2>/dev/null || true)"
   if [ -z "$ids" ]; then
     echo "No slice $slice in $slices_file" >&2
     exit 2

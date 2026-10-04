@@ -110,4 +110,36 @@ run --slice 03c
 [ "$code" -eq 2 ] && s=0 || s=1
 expect "an unknown part is an error, not a pass" "$s"
 
+# Slice mode honours deferred IDs, and the slice argument is a literal, not a pattern.
+printf '04 V2_A_001 V2_A_002 V2_B_001\n' > "$work/slices.txt"
+printf 'V2_A_002 waiting\n' > "$work/deferred.txt"
+echo '// V2_A_001' > "$work/tests/t.test.ts"
+run --slice 04
+grep -q "slice 04: 1/3 covered, 1 deferred, 1 MISSING" <<<"$out" && s=0 || s=1
+expect "--slice reports a deferred ID separately from a missing one" "$s"
+
+echo '// V2_B_001' >> "$work/tests/t.test.ts"
+run --require --slice 04
+[ "$code" -eq 0 ] && grep -q "slice 04: 2/3 covered, 1 deferred" <<<"$out" && s=0 || s=1
+expect "--require --slice passes when the rest is deferred" "$s"
+
+printf 'V2_A_002 waiting\nV2_B_001 also waiting\n' > "$work/deferred.txt"
+echo '// nothing' > "$work/tests/t.test.ts"
+echo '// V2_A_001' >> "$work/tests/t.test.ts"
+run --require --slice 04
+[ "$code" -eq 0 ] && s=0 || s=1
+expect "--require --slice counts every deferred ID, not only the first" "$s"
+: > "$work/deferred.txt"
+
+printf '03a V2_A_001\n03b V2_B_001\n' > "$work/slices.txt"
+for pat in '0.' '0[3]' '0*' '.'; do
+  run --slice "$pat"
+  [ "$code" -eq 2 ] && s=0 || s=1
+  expect "--slice '$pat' is not a pattern" "$s"
+done
+
+run --slice 03a 03b
+[ "$code" -eq 2 ] && s=0 || s=1
+expect "a second argument with --slice is an error, not ignored" "$s"
+
 if [ "$failures" -eq 0 ]; then echo "all passed"; else echo "$failures failed"; exit 1; fi

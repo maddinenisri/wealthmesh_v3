@@ -558,7 +558,7 @@ Where the scenarios of each current row land. A row that spreads over many slice
 | --- | --- | ---: | --- | ---: |
 | 01 | accounts/checking/setup.feature | 7 | done (5), 1 (1), 4 (1) | 4 |
 | 02 | household/members/manage-members.feature | 6 | 1 (1), 3 (1), 5 (2), 18 (1), 21 (1) | 21 |
-| 03 | accounts/checking/activity.feature | 11 | 1 (1), 2 (1), 3 (4), 4 (1), 7 (2), 12 (2) | 12 |
+| 03 | accounts/checking/activity.feature | 11 | 1 (2), 2 (1), 3 (4), 4 (1), 7 (2), 12 (1) | 12 |
 | 04 | spending/income/record-income.feature | 6 | 1 (2), 2 (2), 6 (2) | 6 |
 | 05 | spending/expenses/record-expenses.feature | 11 | 1 (2), 2 (3), 6 (1), 7 (1), 9 (4) | 9 |
 | 06 | household/overview/understand-wealth.feature | 11 | 4 (1), 12 (2), 18 (3), 19 (2), 21 (1), 22 (1), 23 (1) | 23 |
@@ -626,7 +626,7 @@ Review these first; a different reading changes the slice by one or two.
 
 - MEMBERS_002: "total assets" per person needs W3 and the individual-owner rule; read as needing 401k and IRA existing.
 - MEMBERS_004: "contribution history" read as an external funding entry (I4) plus a cash correction (L5).
-- CHECKING_015: "household wealth treats the overdraft as debt" read as W2 (not W1).
+- CHECKING_015: "household wealth treats the overdraft as debt" is read as W1 and moved to slice 01 (D-022).
 - WEALTH_007, WEALTH_009: read as needing the whole account set (types T1, T2, T6, T7), prices and the explanation view.
 - HOLDINGS_001: draft shown under "Finish setup" in the Investments view read as W3 plus T8.
 - PERFORMANCE_002: "defined-benefit value is not mixed in" read as requiring T6 to exist to be shown.

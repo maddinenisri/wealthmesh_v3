@@ -1,2 +1,2 @@
-V2_CHECKING_002 Salary step needs income entry and the month summary (slice 01); the zero-start half is built and tested without citing this ID
+V2_CHECKING_002 Salary step needs income entry and the month summary (slice 01b); the zero-start half is built and tested without citing this ID
 V2_CHECKING_006 Older saved file and legacy "Starting balance needed" need starting-balance recovery and statements (slice 04)
