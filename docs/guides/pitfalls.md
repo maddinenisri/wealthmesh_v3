@@ -52,6 +52,7 @@ you during setup; the first three explain most of the time spent on the database
 | 33 | `unzip -l jar \| grep -q entry` under `set -o pipefail` always says the entry is missing | `grep -q` exits on the first match, `unzip` is killed by SIGPIPE (pipe status `141 0`), and `pipefail` turns that into failure | Ask `unzip` for the entry directly: `unzip -l jar entry >/dev/null`. Test guards by running the script; `scripts/test-run-backend-jar.sh` does this and fails on the old pipe version |
 | 34 | Two `@SpringBootTest` classes with the same config share one context and one database; a test that needs an empty database fails depending on class order | Spring caches the context, and the Testcontainers bean lives in it | Put `@DirtiesContext(classMode = AFTER_CLASS)` on every API test class that creates the household |
 | 35 | Playwright specs share one database and run in file-name order; `household.spec.ts` needs it empty | A new spec named `accounts.spec.ts` would run first | Number the specs (`01-household`, `02-checking-setup`) and say in the file what earlier spec it needs |
+| 36 | `npm run check` passes but the push hook fails on Java line length | Checkstyle runs in `npm run lint` and at pre-push, not in the pre-commit hook set | Run `npm run lint` before reporting a backend change done; stage the fix (`git add`) so the index is what passed |
 
 ## Process
 

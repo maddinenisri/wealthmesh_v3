@@ -26,3 +26,5 @@
 | Q-022 | 2026-10-04 | Five investment types in one session (Q-G)? | resolved | Yes; split at a type boundary if time runs out (2026-10-04) | D-018 |
 | Q-023 | 2026-10-04 | Keep `V2_MONTHLY_005` in slice 01 (Q-H)? | resolved | Either; slice 01 may run as 01a first (2026-10-04) | |
 | Q-024 | 2026-10-04 | Fold the overdraft-as-debt rule into basic wealth (W1) so `V2_CHECKING_015` moves from slice 12 to slice 01? | resolved | Yes, as recommended (go ahead, 2026-10-04) | D-022 |
+| Q-025 | 2026-10-04 | Should the spending average and annual estimate (`V2_MONTHLY_005`) exclude the current, unfinished month? Today any month with an expense counts, so one expense in October changes "based on 1 month" to "2 months" and lowers the estimate. Recommended: keep as is, revisit with the budgets slice. | resolved | Keep as is (2026-10-04) | |
+| Q-026 | 2026-10-04 | An expense can take a checking Balance negative with no warning in 01a. Allowed until the overdraft warning in slice 01b (`V2_CHECKING_015`, D-022). | resolved | Allowed until 01b (2026-10-04) | D-022 |
