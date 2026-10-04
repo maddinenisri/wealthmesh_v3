@@ -57,7 +57,9 @@ public class HouseholdMemberService {
     }
 
     public Mono<Void> delete(UUID id) {
-        return load(id).flatMap(repository::delete);
+        return load(id).flatMap(repository::delete)
+                .onErrorMap(DataIntegrityViolationException.class, e -> new ResponseStatusException(
+                        HttpStatus.CONFLICT, "This member owns an account and cannot be deleted.", e));
     }
 
     static Mono<Void> validate(HouseholdMemberRequest request) {

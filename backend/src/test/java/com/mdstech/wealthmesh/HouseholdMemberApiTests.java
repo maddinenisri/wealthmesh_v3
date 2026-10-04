@@ -185,6 +185,31 @@ class HouseholdMemberApiTests {
                 .exchange()
                 .expectStatus().isNotFound();
     }
+    @Order(8)
+    @Test
+    void deleteRefusedWhenMemberOwnsAnAccount() {
+        String owner = createSam();
+        webTestClient.post()
+                .uri("/api/v1/accounts")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"type\": \"checking\", \"name\": \"Joint\", \"ownerMemberIds\": [\"%s\"]}"
+                        .formatted(owner))
+                .exchange()
+                .expectStatus().isCreated();
+
+        webTestClient.delete()
+                .uri("/api/v1/household-members/{id}", owner)
+                .exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody()
+                .jsonPath("$.message").isEqualTo("This member owns an account and cannot be deleted.");
+
+        webTestClient.get()
+                .uri("/api/v1/household-members/{id}", owner)
+                .exchange()
+                .expectStatus().isOk();
+    }
+
     private String createSam() {
         AtomicReference<String> id = new AtomicReference<>();
         webTestClient.post()
