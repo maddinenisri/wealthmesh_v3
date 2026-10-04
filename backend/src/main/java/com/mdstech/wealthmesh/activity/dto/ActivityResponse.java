@@ -15,5 +15,6 @@ public record ActivityResponse(
         UUID categoryId,
         String categoryName,
         UUID enteredByMemberId,
-        Instant createdAt) {
+        Instant createdAt,
+        String reason) {
 }

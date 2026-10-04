@@ -63,7 +63,7 @@ public class EntryService {
         Instant cutoff = now.minus(KEY_LIFETIME);
         Mono<Saved> insert = activities.save(new Activity(null, entry.accountId(), entry.kind(), entry.amount(),
                         entry.occurredOn(), entry.description(), entry.categoryId(), entry.memberId(), key, now,
-                        null, null, null))
+                        null, null, null, null))
                 .flatMap(saved -> store.byId(saved.id())).map(a -> new Saved(a, true));
         return store.expireKey(key, cutoff)
                 .then(activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)

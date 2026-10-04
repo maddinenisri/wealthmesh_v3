@@ -29,7 +29,7 @@ public class ActivityStore {
 
     private static final String ENTRY_COLUMNS = """
             SELECT a.id, a.account_id, ac.name AS account_name, a.kind, a.amount, a.occurred_on, a.description,
-                   a.category_id, c.name AS category_name, a.entered_by_member_id, a.created_at
+                   a.category_id, c.name AS category_name, a.entered_by_member_id, a.created_at, a.reason
             FROM activity a JOIN account ac ON ac.id = a.account_id
             LEFT JOIN category c ON c.id = a.category_id
             WHERE a.removed_at IS NULL""";
@@ -62,6 +62,24 @@ public class ActivityStore {
                     return delta == null ? Delta.NONE : new Delta(delta, row.get("latest", LocalDate.class));
                 })
                 .one().defaultIfEmpty(Delta.NONE);
+    }
+
+    /** Signed activity up to and including a date, leaving out one row (the correction being corrected). */
+    public Mono<BigDecimal> changeUpTo(UUID accountId, LocalDate asOn, UUID excluding) {
+        DatabaseClient.GenericExecuteSpec spec = client.sql("SELECT COALESCE(SUM(" + SIGNED + "), 0) AS delta "
+                        + "FROM activity WHERE removed_at IS NULL AND account_id = :account AND occurred_on <= :on"
+                        + (excluding == null ? "" : " AND id <> :excluding"))
+                .bind("account", accountId).bind("on", asOn);
+        if (excluding != null) {
+            spec = spec.bind("excluding", excluding);
+        }
+        return spec.map((row, meta) -> row.get("delta", BigDecimal.class)).one();
+    }
+
+    /** Locks the account row until the transaction ends, so corrections of one account run one at a time. */
+    public Mono<UUID> lockAccount(UUID accountId) {
+        return client.sql("SELECT id FROM account WHERE id = :id FOR UPDATE").bind("id", accountId)
+                .map((row, meta) -> row.get("id", UUID.class)).one();
     }
 
     /** Frees a stored key once it is past its lifetime, so a new save may use it again (D-024). */
@@ -173,7 +191,7 @@ public class ActivityStore {
                 FROM activity a LEFT JOIN category c ON c.id = a.category_id
                 LEFT JOIN household_member m ON m.id = a.entered_by_member_id
                 LEFT JOIN activity r ON r.replaces_id = a.id
-                WHERE a.account_id = :account AND a.kind IN ('expense', 'income')
+                WHERE a.account_id = :account AND a.kind IN ('expense', 'income', 'correction')
                 ORDER BY a.created_at DESC, a.occurred_on DESC""")
                 .bind("account", accountId)
                 .map((row, meta) -> new HistoryEntry(row.get("id", UUID.class), row.get("kind", String.class),
@@ -198,6 +216,6 @@ public class ActivityStore {
                 Money.format(row.get("amount", BigDecimal.class)), row.get("occurred_on", LocalDate.class),
                 row.get("description", String.class), row.get("category_id", UUID.class),
                 row.get("category_name", String.class), row.get("entered_by_member_id", UUID.class),
-                row.get("created_at", java.time.OffsetDateTime.class).toInstant());
+                row.get("created_at", java.time.OffsetDateTime.class).toInstant(), row.get("reason", String.class));
     }
 }

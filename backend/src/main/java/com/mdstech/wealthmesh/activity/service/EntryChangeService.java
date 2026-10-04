@@ -86,9 +86,10 @@ public class EntryChangeService {
         Instant cutoff = now.minus(KEY_LIFETIME);
         return Mono.fromCallable(() -> requireKey(key))
                 .then(Mono.defer(() -> store.expireKey(key, cutoff)))
-                .then(Mono.defer(() -> original(accountId, activityId)))
+                .then(Mono.defer(() -> original(accountId, activityId, true)))
                 .flatMap(original -> accounts.findById(accountId).flatMap(account -> validator
-                        .parse(account, original.kind(), request.asEntry())
+                        .parse(account, replacementKind(original), request.asEntry())
+                        .doOnNext(entry -> checkFeeMatchesCorrection(original, entry))
                         .flatMap(entry -> activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
                                 .flatMap(existing -> replay(existing, entry, activityId))
                                 .switchIfEmpty(Mono.defer(() -> original.removedAt() != null
@@ -108,7 +109,7 @@ public class EntryChangeService {
                 .then(Mono.defer(() -> store.recordEvent(original.id(), "replaced", entry.memberId(), now)))
                 .then(Mono.defer(() -> activities.save(new Activity(null, entry.accountId(), entry.kind(),
                         entry.amount(), entry.occurredOn(), entry.description(), entry.categoryId(), entry.memberId(),
-                        key, now, note, original.id(), null))))
+                        key, now, note, original.id(), null, null))))
                 .flatMap(saved -> store.byId(saved.id())).map(a -> new EntryService.Saved(a, true));
         return transactions.transactional(swapped);
     }
@@ -120,11 +121,34 @@ public class EntryChangeService {
         return store.byId(existing.id()).map(a -> new EntryService.Saved(a, false));
     }
 
+    /** A correction can only be replaced by the expense that explains it (slice 03, V2_CHECKING_014). */
+    private static String replacementKind(Activity original) {
+        return "correction".equals(original.kind()) ? "expense" : original.kind();
+    }
+
+    /** The fee must explain exactly the correction's decrease on the same date, so the Balance does not move. */
+    private static void checkFeeMatchesCorrection(Activity original, EntryValidator.Entry entry) {
+        if (!"correction".equals(original.kind())) {
+            return;
+        }
+        if (original.amount().signum() >= 0 || original.amount().negate().compareTo(entry.amount()) != 0) {
+            throw EntryValidator.bad("The fee must equal the correction's decrease so the Balance stays the same");
+        }
+        if (!original.occurredOn().equals(entry.occurredOn())) {
+            throw EntryValidator.bad("The fee must be dated the same day as the correction");
+        }
+    }
+
     private Mono<Activity> original(UUID accountId, UUID activityId) {
+        return original(accountId, activityId, false);
+    }
+
+    private Mono<Activity> original(UUID accountId, UUID activityId, boolean allowCorrection) {
         return accounts.findById(accountId).switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)))
                 .then(Mono.defer(() -> activities.findById(activityId)))
                 .filter(a -> accountId.equals(a.accountId()))
-                .filter(a -> "expense".equals(a.kind()) || "income".equals(a.kind()))
+                .filter(a -> "expense".equals(a.kind()) || "income".equals(a.kind())
+                        || allowCorrection && "correction".equals(a.kind()))
                 .switchIfEmpty(Mono.error(notFound("Entry not found: " + activityId)));
     }
 

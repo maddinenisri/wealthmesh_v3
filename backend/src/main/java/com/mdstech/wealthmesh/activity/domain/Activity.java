@@ -23,5 +23,6 @@ public record Activity(
         Instant createdAt,
         String reason,
         UUID replacesId,
-        Instant removedAt) {
+        Instant removedAt,
+        BigDecimal requestedBalance) {
 }
