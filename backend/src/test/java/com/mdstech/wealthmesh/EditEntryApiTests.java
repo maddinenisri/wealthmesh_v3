@@ -85,6 +85,8 @@ class EditEntryApiTests extends LedgerApiTestBase {
                 .jsonPath("$.accountId").isEqualTo(accountId)
                 .jsonPath("$.categoryName").isEqualTo("Groceries");
         assertBalance(accountId, "3375.00");
+        webTestClient.get().uri("/api/v1/wealth").exchange().expectStatus().isOk()
+                .expectBody().jsonPath("$.financialAssets").isEqualTo("3375.00");
         webTestClient.get().uri("/api/v1/spending?month=2026-09").exchange().expectStatus().isOk()
                 .expectBody().jsonPath("$.total").isEqualTo("1625.00")
                 .jsonPath("$.categories[?(@.name=='Groceries')].total").isEqualTo("125.00")

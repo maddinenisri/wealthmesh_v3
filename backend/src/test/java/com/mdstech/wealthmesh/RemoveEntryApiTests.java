@@ -45,6 +45,9 @@ class RemoveEntryApiTests extends LedgerApiTestBase {
         assertBalance(accountId, "11000.00");
         assertSpending("0.00");
         assertActivityCount(accountId, 1);
+        assertWealth("11000.00");
+        webTestClient.get().uri("/api/v1/review?month=2026-09").exchange().expectBody()
+                .jsonPath("$.spending").isEqualTo("0.00");
         history().expectBody().jsonPath("$[?(@.id=='" + groceriesId + "')].status").isEqualTo("removed")
                 .jsonPath("$[?(@.id=='" + groceriesId + "')].amount").isEqualTo("125.00");
 
@@ -55,6 +58,9 @@ class RemoveEntryApiTests extends LedgerApiTestBase {
                 .jsonPath("$.events[1].byName").isEqualTo("Sam");
         assertBalance(accountId, "10875.00");
         assertSpending("125.00");
+        assertWealth("10875.00");
+        webTestClient.get().uri("/api/v1/spending?month=2026-09").exchange().expectBody()
+                .jsonPath("$.categories[?(@.name=='Groceries')].total").isEqualTo("125.00");
         assertActivityCount(accountId, 2);
         webTestClient.get().uri("/api/v1/accounts/{id}/activity", accountId).exchange()
                 .expectBody().jsonPath("$[?(@.id=='" + groceriesId + "')].occurredOn").isEqualTo("2026-09-10");
@@ -136,6 +142,11 @@ class RemoveEntryApiTests extends LedgerApiTestBase {
     private WebTestClient.ResponseSpec history() {
         return webTestClient.get().uri("/api/v1/accounts/{id}/activity/history", accountId).exchange()
                 .expectStatus().isOk();
+    }
+
+    private void assertWealth(String assets) {
+        webTestClient.get().uri("/api/v1/wealth").exchange().expectStatus().isOk()
+                .expectBody().jsonPath("$.financialAssets").isEqualTo(assets);
     }
 
     private void assertSpending(String total) {

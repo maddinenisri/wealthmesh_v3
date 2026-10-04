@@ -77,7 +77,7 @@ test.describe.serial('edit, remove and undo journey', () => {
     await page.getByRole('button', { name: 'Show history' }).click()
     const history = page.getByRole('table', { name: 'History' })
     await expect(history).toContainText('$1,600.00')
-    await expect(history).toContainText('Replaced')
+    await expect(history).toContainText(/Replaced by Alex Doe \d{4}-\d{2}-\d{2} \d{2}:\d{2}/)
     await expect(history).toContainText('$1,500.00')
     await expect(history).toContainText('Alex Doe')
     await expect(history).toContainText('Correct the rent amount')
@@ -164,8 +164,9 @@ test.describe.serial('edit, remove and undo journey', () => {
 
     await page.getByRole('button', { name: 'Remove Salary' }).click()
     const review = page.getByRole('region', { name: 'Review removal' })
-    await expect(review).toContainText('September Income')
     await expect(review).toContainText('$5,000.00')
+    // The month figure is household-wide here; the exact $0.00 is asserted in the API and UI tests.
+    await expect(review).toContainText('September Income after removal')
     await expect(review).toContainText('does not reverse a bank deposit')
     await page.getByRole('button', { name: 'Confirm removal' }).click()
     await expect(details).toContainText('$5,000.00')

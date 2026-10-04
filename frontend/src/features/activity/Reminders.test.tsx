@@ -70,6 +70,7 @@ describe('reminders', () => {
     expect(await within(reminders).findByText(/Utilities/)).toBeInTheDocument()
     expect(reminders).toHaveTextContent('$180.00')
     expect(reminders).toHaveTextContent('2026-09-30')
+    expect(reminders).toHaveTextContent('not yet in your Balance')
     expect(api.reminders).toHaveLength(1)
     expect(api.activity).toHaveLength(0)
     expect(api.accounts[0].balance.amount).toBe('5000.00')

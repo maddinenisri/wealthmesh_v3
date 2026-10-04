@@ -79,7 +79,7 @@ describe('editing an entry', () => {
     const history = await screen.findByRole('table', { name: 'History' })
     expect(history).toHaveTextContent('$1,600.00')
     expect(history).toHaveTextContent('$1,500.00')
-    expect(history).toHaveTextContent('Replaced by Maya')
+    expect(history).toHaveTextContent(/Replaced by Maya \d{4}-\d{2}-\d{2} \d{2}:\d{2}/)
     expect(within(history).getByText('Correct the rent amount')).toBeInTheDocument()
     expect(within(history).getAllByText('Maya')).not.toHaveLength(0)
   })

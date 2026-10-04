@@ -18,7 +18,7 @@ export function AppLayout() {
         Skip to content
       </a>
       <header className="border-b border-line bg-surface">
-        <Container className="flex items-center gap-8 py-3">
+        <Container className="flex flex-wrap items-center gap-x-8 gap-y-2 py-3">
           <span className="font-display text-xl font-medium">{appName}</span>
           <nav aria-label="Main" className="flex gap-1">
             {navigation.map(({ to, label, end }) => (

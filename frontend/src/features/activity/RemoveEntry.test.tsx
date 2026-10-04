@@ -73,6 +73,7 @@ describe('removing an entry', () => {
     await user.click(within(review).getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('region', { name: 'Review removal' })).not.toBeInTheDocument()
     expect(api.accounts[0].balance.amount).toBe('4875.00')
+    expect(api.requests.filter((r) => r.endsWith('/removal'))).toHaveLength(0)
     expect(screen.getByRole('button', { name: 'Remove Groceries' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Remove Groceries' }))
@@ -82,7 +83,7 @@ describe('removing an entry', () => {
 
     await user.click(screen.getByRole('button', { name: 'Show history' }))
     const history = await screen.findByRole('table', { name: 'History' })
-    expect(history).toHaveTextContent('Removed by Sam')
+    expect(history).toHaveTextContent(/Removed by Sam \d{4}-\d{2}-\d{2} \d{2}:\d{2}/)
     await user.click(within(history).getByRole('button', { name: 'Undo Groceries' }))
     await user.click(await screen.findByRole('button', { name: 'Confirm Undo' }))
 
