@@ -16,3 +16,5 @@
 | D-012 | 2026-10-04 | Evidence | Tests cite scenario IDs; `npm run coverage -- --require <path>` must pass; no check is reported as passing unless run | Makes "validated" automatic | active |
 | D-013 | 2026-10-04 | Prompts | Keep each feature's kickoff prompt and the owner's checkpoint answers in its notes; no transcripts | Replay and audit without storing private reasoning | active |
 | D-014 | 2026-10-04 | Process records | Four homes: guides, process, decisions, features. No coordinator role or cross-linked registers | v2's registers cost more than they saved | active |
+| D-015 | 2026-10-04 | Savings setup order | `accounts/savings/setup` stays in wave 2 | Product owner answer (Q-006) | active |
+| D-016 | 2026-10-04 | Partly buildable scenarios | Defer the whole scenario ID with a reason in `deferred.txt`; no test cites it until it fully passes | Product owner answer (Q-007); coverage never overstates | active |
