@@ -2,6 +2,8 @@
 # Run everything by hand with: npm run check
 default_install_hook_types: [pre-commit, commit-msg, pre-push]
 default_stages: [pre-commit]
+# The requirements snapshot is a verbatim copy of another project's files; never reformat it.
+exclude: '^docs/requirements/'
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -67,8 +69,8 @@ repos:
         files: '\.sh$'
 
       - id: script-tests
-        name: script tests (run-backend-jar guard)
-        entry: scripts/test-run-backend-jar.sh
+        name: script tests (jar guard, scenario coverage)
+        entry: bash -c 'scripts/test-run-backend-jar.sh && scripts/test-scenario-coverage.sh'
         language: system
         files: '^scripts/'
         pass_filenames: false

@@ -9,6 +9,7 @@ one-jar release in about 1h20m of wall-clock time) and are meant to be reused fo
 | [01-setup-playbook.md](01-setup-playbook.md)       | Bootstrap a project in order, with a verification gate after each phase  |
 | [02-patterns.md](02-patterns.md)                   | Copy the architecture and code patterns that worked                      |
 | [03-key-functions.md](03-key-functions.md)         | Find the important files and functions and why each one exists           |
+| [features/INDEX.md](features/INDEX.md)           | Run the product build one requirements file per session, with a status board |
 | [04-pitfalls.md](04-pitfalls.md)                   | Skip the problems that cost time: symptom, cause, fix                    |
 
 ## Stack at a glance
