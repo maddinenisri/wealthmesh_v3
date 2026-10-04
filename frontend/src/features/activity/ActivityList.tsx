@@ -3,7 +3,7 @@ import { Amount, Table, Td, Th } from '../../design-system'
 import { useAccountActivity } from '../../hooks/useActivity'
 import { ownerNames } from '../accounts/ownerNames'
 
-/** Saved activity of one account, newest first. Expenses show as money out. */
+/** Saved activity of one account, newest first. Income shows as money in, expenses as money out. */
 export function ActivityList({
   accountId,
   members,
@@ -39,7 +39,9 @@ export function ActivityList({
             <Td>{entry.categoryName ?? ''}</Td>
             <Td>{entry.enteredByMemberId ? ownerNames([entry.enteredByMemberId], members) : ''}</Td>
             <Td className="text-right">
-              <Amount value={-Number(entry.amount)} />
+              <Amount
+                value={entry.kind === 'income' ? Number(entry.amount) : -Number(entry.amount)}
+              />
             </Td>
           </tr>
         ))}

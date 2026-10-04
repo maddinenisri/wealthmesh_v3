@@ -12,9 +12,11 @@ import {
   SelectField,
   TextField,
 } from '../../design-system'
-import { useRecordExpense, useSpendingCategories } from '../../hooks/useActivity'
+import type { EntryKind } from '../../api/activity'
+import { useCategories, useRecordEntry } from '../../hooks/useActivity'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
-import { parseAmount } from '../../lib/money'
+import { formatMoney, parseAmount } from '../../lib/money'
+import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { memberLabel } from '../accounts/ownerNames'
 
 type Values = { description: string; amount: string; occurredOn: string; categoryId: string }
@@ -32,23 +34,32 @@ const amountRules = {
   },
 }
 
+/** Wording that differs between money out (expense) and money in (income). */
+const WORDS = {
+  expense: { add: 'Add money out', review: 'Review money out', place: 'Paid from' },
+  income: { add: 'Add money in', review: 'Review money in', place: 'Received into' },
+} as const
+
 /**
- * Money out: fill in, review, then confirm. Nothing is saved until Confirm. The amount message appears
- * under the Amount field and every entered value stays where it was.
+ * Money in or out: fill in, review, then confirm. Nothing is saved until Confirm. The amount message
+ * appears under the Amount field and every entered value stays where it was.
  */
-export function AddExpense({
+export function AddEntry({
+  kind,
   account,
   members,
   today,
   onDone,
 }: {
+  kind: EntryKind
   account: Account
   members: Member[]
   today: string
   onDone: () => void
 }) {
-  const categories = useSpendingCategories()
-  const record = useRecordExpense(account.id)
+  const words = WORDS[kind]
+  const categories = useCategories(kind)
+  const record = useRecordEntry(account.id, kind)
   const { member, setMemberId } = useEnteringAs(members)
   const [reviewing, setReviewing] = useState<Values | null>(null)
   const [changingMember, setChangingMember] = useState(false)
@@ -64,7 +75,7 @@ export function AddExpense({
     record.mutate(
       {
         key,
-        expense: {
+        entry: {
           description: reviewing.description.trim(),
           amount: parseAmount(reviewing.amount)!,
           occurredOn: reviewing.occurredOn,
@@ -78,14 +89,24 @@ export function AddExpense({
 
   if (reviewing) {
     const choosing = changingMember || !member
+    // Advisory only: money that really left the account is still recorded (the bill was paid).
+    const shortBy =
+      kind === 'expense'
+        ? Number(parseAmount(reviewing.amount)) - Number(account.balance.amount)
+        : 0
     return (
       <Card aria-labelledby="review-heading">
         <CardTitle id="review-heading" className="text-lg">
-          Review money out
+          {words.review}
         </CardTitle>
         <FormAlert message={record.error?.message} />
+        {shortBy > 0 && (
+          <p role="alert" className="mt-3 max-w-md rounded-control border border-line p-3 text-sm">
+            This will leave {account.name} overdrawn by {formatMoney(shortBy)}. {OVERDRAFT_NOTICE}
+          </p>
+        )}
         <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
-          <Item label="Paid from">{account.name}</Item>
+          <Item label={words.place}>{account.name}</Item>
           <Item label="Date">{reviewing.occurredOn}</Item>
           <Item label="Amount">
             <Amount value={Number(parseAmount(reviewing.amount))} />
@@ -139,9 +160,9 @@ export function AddExpense({
   }
 
   return (
-    <Card aria-labelledby="expense-heading">
-      <CardTitle id="expense-heading" className="text-lg">
-        Add money out
+    <Card aria-labelledby="entry-heading">
+      <CardTitle id="entry-heading" className="text-lg">
+        {words.add}
       </CardTitle>
       <form
         noValidate
@@ -149,7 +170,7 @@ export function AddExpense({
         onSubmit={handleSubmit((values) => setReviewing(values))}
       >
         <p className="text-sm text-ink-muted">
-          Paid from <strong>{account.name}</strong>
+          {words.place} <strong>{account.name}</strong>
         </p>
         <TextField control={control} name="description" label="Description" />
         <TextField

@@ -81,4 +81,15 @@ test.describe.serial('household journey', () => {
     await expect(page.getByRole('main').getByText('Alex Doe')).toBeVisible()
     await expect(page.getByRole('main').getByText('Samira Rivera')).toBeVisible()
   })
+
+  test('V2_HOUSEHOLD_SETUP_003 shows an empty household with no accounts and no money', async ({
+    page,
+  }) => {
+    await page.goto('/')
+    const wealth = page.getByRole('region', { name: 'Accounts and wealth' })
+    await expect(wealth.getByText('No accounts have been added')).toBeVisible()
+    await expect(wealth.getByText(/Financial assets/)).toContainText('$0.00')
+    await expect(wealth.getByText(/Debts/)).toContainText('$0.00')
+    await expect(wealth.getByRole('link', { name: 'Add account' })).toBeVisible()
+  })
 })

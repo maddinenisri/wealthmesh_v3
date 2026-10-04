@@ -18,13 +18,17 @@ import org.springframework.web.server.ResponseStatusException;
 import com.mdstech.wealthmesh.activity.dto.ActivityResponse;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.money.Money;
+import com.mdstech.wealthmesh.spending.dto.MonthReview;
 import com.mdstech.wealthmesh.spending.dto.SpendingHistory;
 import com.mdstech.wealthmesh.spending.dto.SpendingSummary;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-/** Spending is the sum of expenses in a month; transfers, payments and corrections are not spending. */
+/**
+ * Spending is the sum of expenses in a month and income the sum of income; transfers, payments and corrections are
+ * neither. The month review sets them side by side.
+ */
 @Service
 public class SpendingService {
 
@@ -39,17 +43,43 @@ public class SpendingService {
     }
 
     public Mono<SpendingSummary> summary(String month) {
+        return summary("expense", month);
+    }
+
+    public Mono<SpendingSummary> incomeSummary(String month) {
+        return summary("income", month);
+    }
+
+    public Flux<ActivityResponse> entries(String month, UUID categoryId) {
+        return entries("expense", month, categoryId);
+    }
+
+    public Flux<ActivityResponse> incomeEntries(String month, UUID categoryId) {
+        return entries("income", month, categoryId);
+    }
+
+    /** Income, spending and the difference for one month. */
+    public Mono<MonthReview> review(String month) {
+        return Mono.zip(incomeSummary(month), summary(month)).map(totals -> {
+            BigDecimal income = Money.parse(totals.getT1().total()).orElseThrow();
+            BigDecimal spending = Money.parse(totals.getT2().total()).orElseThrow();
+            return new MonthReview(totals.getT1().month(), Money.format(income), Money.format(spending),
+                    Money.format(income.subtract(spending)));
+        });
+    }
+
+    private Mono<SpendingSummary> summary(String kind, String month) {
         return Mono.fromCallable(() -> parse(month)).flatMap(ym -> store
-                .spendingByCategory(ym.atDay(1), ym.plusMonths(1).atDay(1)).collectList()
+                .totalsByCategory(kind, ym.atDay(1), ym.plusMonths(1).atDay(1)).collectList()
                 .map(rows -> new SpendingSummary(ym.toString(),
                         Money.format(rows.stream().map(r -> r.total()).reduce(BigDecimal.ZERO, BigDecimal::add)),
                         rows.stream().map(r -> new SpendingSummary.CategorySpending(r.categoryId(), r.name(),
                                 Money.format(r.total()), r.count())).toList())));
     }
 
-    public Flux<ActivityResponse> entries(String month, UUID categoryId) {
+    private Flux<ActivityResponse> entries(String kind, String month, UUID categoryId) {
         return Mono.fromCallable(() -> parse(month)).flatMapMany(
-                ym -> store.spendingEntries(ym.atDay(1), ym.plusMonths(1).atDay(1), categoryId));
+                ym -> store.monthEntries(kind, ym.atDay(1), ym.plusMonths(1).atDay(1), categoryId));
     }
 
     public Mono<SpendingHistory> history() {

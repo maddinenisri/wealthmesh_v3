@@ -1,6 +1,22 @@
 import { useState } from 'react'
 import type { Household, Member } from '../../api/household'
-import { Avatar, Badge, Button, Card, CardTitle, EmptyState, PageHeader } from '../../design-system'
+import { Link } from 'react-router'
+import {
+  Amount,
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  CardTitle,
+  EmptyState,
+  PageHeader,
+  buttonStyles,
+} from '../../design-system'
+import { useAccounts } from '../../hooks/useAccounts'
+import { useWealth } from '../../hooks/useWealth'
+import { OverdrawnLabel } from '../accounts/Overdrawn'
+import { ownerNames } from '../accounts/ownerNames'
+import { useAccountContext } from '../accounts/useAccountContext'
 import { CreateHouseholdForm, MemberForm, RenameHouseholdForm } from './HouseholdForms'
 import { useHousehold } from '../../hooks/useHousehold'
 import { useMembers } from '../../hooks/useMembers'
@@ -35,6 +51,7 @@ export function HouseholdPage() {
       {household.data && (
         <>
           <HouseholdDetails household={household.data} />
+          <AccountsAndWealth />
           {members.isError ? (
             <EmptyState
               title="Could not load members"
@@ -116,6 +133,65 @@ function Members({ householdId, members }: { householdId: string; members: Membe
 
       <h3 className="mb-3 font-medium">Add member</h3>
       <MemberForm householdId={householdId} />
+    </Card>
+  )
+}
+
+/** Household-level money: financial assets and debts, with the accounts behind them. */
+function AccountsAndWealth() {
+  const accounts = useAccounts()
+  const wealth = useWealth()
+  const { members } = useAccountContext()
+
+  return (
+    <Card aria-labelledby="wealth-heading">
+      <div className="flex items-center justify-between gap-4">
+        <CardTitle id="wealth-heading">Accounts and wealth</CardTitle>
+        <Link to="/accounts/new" className={buttonStyles({ variant: 'secondary', size: 'sm' })}>
+          Add account
+        </Link>
+      </div>
+      {wealth.isError && (
+        <p role="alert" className="mt-3">
+          {wealth.error.message}
+        </p>
+      )}
+      {wealth.data && (
+        <div className="mt-3 flex flex-col gap-1">
+          <p>
+            Financial assets <Amount value={Number(wealth.data.financialAssets)} size="lg" />
+          </p>
+          <p>
+            Debts <Amount value={Number(wealth.data.debts)} size="lg" />
+          </p>
+        </div>
+      )}
+      {accounts.data?.length === 0 && (
+        <p className="mt-3 text-ink-muted">No accounts have been added</p>
+      )}
+      {accounts.data && accounts.data.length > 0 && (
+        <ul className="mt-4 divide-y divide-line border-y border-line">
+          {accounts.data.map((account) => (
+            <li key={account.id} className="flex items-baseline justify-between gap-4 py-3">
+              <span>
+                <Link
+                  to={`/accounts/${account.id}`}
+                  className="font-medium underline-offset-2 hover:underline"
+                >
+                  {account.name}
+                </Link>{' '}
+                <span className="text-sm text-ink-muted">
+                  {ownerNames(account.ownerMemberIds, members)}
+                </span>
+              </span>
+              <span className="text-right">
+                <Amount value={Number(account.balance.amount)} />
+                <OverdrawnLabel balance={account.balance.amount} />
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   )
 }

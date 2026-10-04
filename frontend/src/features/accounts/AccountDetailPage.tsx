@@ -13,8 +13,10 @@ import {
   buttonStyles,
 } from '../../design-system'
 import { useAccount, useToday } from '../../hooks/useAccounts'
-import { AddExpense } from '../activity/AddExpense'
+import type { EntryKind } from '../../api/activity'
+import { AddEntry } from '../activity/AddEntry'
 import { ActivityList } from '../activity/ActivityList'
+import { OVERDRAFT_NOTICE, OverdrawnLabel } from './Overdrawn'
 import { ownerNames } from './ownerNames'
 import { useAccountContext } from './useAccountContext'
 
@@ -81,7 +83,13 @@ function Details({ account, owners }: { account: Account; owners: string }) {
           <dt className="text-caption text-ink-muted">Balance</dt>
           <dd>
             <Amount value={Number(account.balance.amount)} size="lg" />
+            <OverdrawnLabel balance={account.balance.amount} />
             <span className="block text-caption text-ink-muted">as of {account.balance.asOf}</span>
+            {Number(account.balance.amount) < 0 && (
+              <span className="mt-1 block max-w-prose text-sm text-ink-muted">
+                {OVERDRAFT_NOTICE}
+              </span>
+            )}
           </dd>
         </div>
         <div>
@@ -137,20 +145,22 @@ function UpdateBalance() {
   )
 }
 
-/** Money out is live; money in and transfers stay visible but inactive until they are built. */
+/** Money in and out are live; transfers stay visible but inactive until they are built. */
 function Activity({ account, members }: { account: Account; members: Member[] | undefined }) {
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState<EntryKind | null>(null)
   const today = useToday()
+  const ready = !adding && !!today.data && !!members
 
   return (
     <>
       {adding && today.data && members && (
-        <AddExpense
-          key="add-expense"
+        <AddEntry
+          key={adding}
+          kind={adding}
           account={account}
           members={members}
           today={today.data}
-          onDone={() => setAdding(false)}
+          onDone={() => setAdding(null)}
         />
       )}
       <Card aria-labelledby="activity-heading">
@@ -159,14 +169,19 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
         </CardTitle>
         <ActivityList accountId={account.id} members={members} />
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" disabled>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setAdding('income')}
+            disabled={!ready}
+          >
             Add money in
           </Button>
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => setAdding(true)}
-            disabled={adding || !today.data || !members}
+            onClick={() => setAdding('expense')}
+            disabled={!ready}
           >
             Add money out
           </Button>
@@ -175,7 +190,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
           </Button>
         </div>
         <p className="mt-3 text-caption text-ink-muted">
-          Money in and transfers become available with later features.
+          Transfers become available with a later feature.
         </p>
       </Card>
     </>

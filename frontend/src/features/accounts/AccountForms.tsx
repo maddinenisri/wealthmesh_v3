@@ -8,7 +8,7 @@ import { parseAmount } from '../../lib/money'
 import { memberLabel } from './ownerNames'
 
 type DetailsValues = { name: string; institution: string; ownerMemberId: string }
-type SetupValues = DetailsValues & { openedOn: string; balance: string }
+type SetupValues = DetailsValues & { type: string; openedOn: string; balance: string }
 
 const nameRules = {
   validate: (value: string) => value.trim() !== '' || 'Enter an account name',
@@ -30,17 +30,35 @@ function OwnerOptions({ members }: { members: Member[] }) {
   )
 }
 
+/** Account types in their final order. Only checking can be chosen until its feature is built. */
+const TYPES = [
+  { value: 'checking', label: 'Checking', ready: true },
+  { value: 'savings', label: 'Savings', ready: false },
+  { value: 'credit_card', label: 'Credit card', ready: false },
+  { value: 'brokerage', label: 'Brokerage', ready: false },
+  { value: 'loan', label: 'Loan', ready: false },
+  { value: 'mortgage', label: 'Mortgage', ready: false },
+] as const
+
 /** Sets up a checking account. Balance is optional; blank starts at $0.00 on the opening date. */
 export function AccountSetupForm({ members, today }: { members: Member[]; today: string }) {
   const navigate = useNavigate()
   const create = useCreateAccount()
   const { control, handleSubmit } = useForm<SetupValues>({
-    defaultValues: { name: '', institution: '', ownerMemberId: '', openedOn: today, balance: '' },
+    defaultValues: {
+      type: 'checking',
+      name: '',
+      institution: '',
+      ownerMemberId: '',
+      openedOn: today,
+      balance: '',
+    },
   })
 
   const onSubmit = handleSubmit((values) =>
     create
       .mutateAsync({
+        type: values.type as 'checking',
         name: values.name.trim(),
         institution: values.institution.trim(),
         ownerMemberId: values.ownerMemberId,
@@ -56,6 +74,13 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
   return (
     <form onSubmit={onSubmit} noValidate className="flex max-w-md flex-col gap-4">
       <FormAlert message={create.error?.message} />
+      <SelectField control={control} name="type" label="Account type">
+        {TYPES.map((type) => (
+          <option key={type.value} value={type.value} disabled={!type.ready}>
+            {type.ready ? type.label : `${type.label} (coming soon)`}
+          </option>
+        ))}
+      </SelectField>
       <TextField control={control} name="name" label="Account name" rules={nameRules} />
       <TextField control={control} name="institution" label="Bank" rules={bankRules} />
       <SelectField control={control} name="ownerMemberId" label="Owner" rules={ownerRules}>

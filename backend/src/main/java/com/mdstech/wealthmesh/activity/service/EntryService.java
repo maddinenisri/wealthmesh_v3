@@ -27,14 +27,14 @@ import com.mdstech.wealthmesh.money.Money;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-/** Records expenses on a checking account. A replayed save key returns the stored expense (D-024). */
+/** Records expenses and income on a checking account. A replayed save key returns the stored entry (D-024). */
 @Service
-public class ExpenseService {
+public class EntryService {
 
     /** How long a save key is remembered. */
     static final Duration KEY_LIFETIME = Duration.ofHours(24);
 
-    /** The saved expense and whether this call created it (false for a replay). */
+    /** The saved entry and whether this call created it (false for a replay). */
     public record Saved(ActivityResponse activity, boolean created) {
     }
 
@@ -45,7 +45,7 @@ public class ExpenseService {
     private final ActivityStore store;
     private final Clock clock;
 
-    public ExpenseService(AccountRepository accounts, CategoryRepository categories,
+    public EntryService(AccountRepository accounts, CategoryRepository categories,
             HouseholdMemberRepository members, ActivityRepository activities, ActivityStore store, Clock clock) {
         this.accounts = accounts;
         this.categories = categories;
@@ -59,21 +59,22 @@ public class ExpenseService {
         return load(accountId).thenMany(Flux.defer(() -> store.forAccount(accountId)));
     }
 
-    public Mono<Saved> record(UUID accountId, String key, ExpenseRequest request) {
+    /** `kind` is "expense" (money out) or "income" (money in): it fixes the category kind and Balance direction. */
+    public Mono<Saved> record(UUID accountId, String key, String kind, ExpenseRequest request) {
         return Mono.fromCallable(() -> requireKey(key))
                 .then(Mono.defer(() -> load(accountId)))
-                .flatMap(account -> parse(account, request).flatMap(entry -> save(entry, key)));
+                .flatMap(account -> parse(account, kind, request).flatMap(entry -> save(entry, key)));
     }
 
     /** The validated parts of an expense request. */
-    record Entry(UUID accountId, BigDecimal amount, LocalDate occurredOn, String description, UUID categoryId,
-            UUID memberId) {
+    record Entry(UUID accountId, String kind, BigDecimal amount, LocalDate occurredOn, String description,
+            UUID categoryId, UUID memberId) {
     }
 
     private Mono<Saved> save(Entry entry, String key) {
         Instant now = clock.instant();
         Instant cutoff = now.minus(KEY_LIFETIME);
-        Mono<Saved> insert = activities.save(new Activity(null, entry.accountId(), "expense", entry.amount(),
+        Mono<Saved> insert = activities.save(new Activity(null, entry.accountId(), entry.kind(), entry.amount(),
                         entry.occurredOn(), entry.description(), entry.categoryId(), entry.memberId(), key, now))
                 .flatMap(saved -> store.byId(saved.id())).map(a -> new Saved(a, true));
         return store.expireKey(key, cutoff)
@@ -88,6 +89,7 @@ public class ExpenseService {
 
     private Mono<Saved> replay(Activity existing, Entry entry) {
         boolean same = existing.accountId().equals(entry.accountId())
+                && existing.kind().equals(entry.kind())
                 && existing.amount().compareTo(entry.amount()) == 0
                 && existing.occurredOn().equals(entry.occurredOn())
                 && java.util.Objects.equals(existing.description(), entry.description())
@@ -100,7 +102,7 @@ public class ExpenseService {
         return store.byId(existing.id()).map(a -> new Saved(a, false));
     }
 
-    private Mono<Entry> parse(Account account, ExpenseRequest request) {
+    private Mono<Entry> parse(Account account, String kind, ExpenseRequest request) {
         return Mono.fromCallable(() -> {
             BigDecimal amount = amount(request.amount());
             LocalDate today = LocalDate.now(clock);
@@ -119,18 +121,20 @@ public class ExpenseService {
                 throw bad("Description must be 200 characters or fewer");
             }
             return new Object[] { amount, description };
-        }).flatMap(parts -> category(request)
+        }).flatMap(parts -> category(kind, request)
                 .flatMap(category -> member(account, request.enteredByMemberId())
-                        .map(memberId -> new Entry(account.id(), (BigDecimal) parts[0], request.occurredOn(),
+                        .map(memberId -> new Entry(account.id(), kind, (BigDecimal) parts[0], request.occurredOn(),
                                 (String) parts[1], category.id(), memberId))));
     }
 
-    private Mono<Category> category(ExpenseRequest request) {
+    private Mono<Category> category(String kind, ExpenseRequest request) {
+        String categoryKind = "income".equals(kind) ? "income" : "spending";
         Mono<Category> found = request.categoryId() != null ? categories.findById(request.categoryId())
                 : request.category() != null && !request.category().isBlank()
                         ? categories.findByName(request.category().strip()) : Mono.empty();
-        return found.filter(c -> "spending".equals(c.kind()))
-                .switchIfEmpty(Mono.error(bad("Choose a spending category")));
+        return found.filter(c -> categoryKind.equals(c.kind()))
+                .switchIfEmpty(Mono.error(bad("Choose " + ("income".equals(categoryKind) ? "an income" : "a spending")
+                        + " category")));
     }
 
     private Mono<UUID> member(Account account, UUID memberId) {
@@ -163,7 +167,7 @@ public class ExpenseService {
         return accounts.findById(id).switchIfEmpty(Mono.error(
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
                 .flatMap(account -> "checking".equals(account.type()) ? Mono.just(account)
-                        : Mono.error(bad("Expenses can only be recorded on a checking account for now")));
+                        : Mono.error(bad("Money in and out can only be recorded on a checking account for now")));
     }
 
     private static ResponseStatusException bad(String message) {

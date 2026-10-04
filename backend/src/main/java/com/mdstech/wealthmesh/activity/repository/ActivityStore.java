@@ -78,12 +78,12 @@ public class ActivityStore {
         return client.sql(ENTRY_COLUMNS + " AND a.id = :id").bind("id", id).map(ActivityStore::entry).one();
     }
 
-    /** Spending entries of a month (expense, fee less refund is added with refunds), optionally one category. */
-    public Flux<ActivityResponse> spendingEntries(LocalDate from, LocalDate to, UUID categoryId) {
-        String sql = ENTRY_COLUMNS + " AND a.kind = 'expense' AND a.occurred_on >= :from AND a.occurred_on < :to"
+    /** Entries of one kind (expense or income) in a month, optionally one category. */
+    public Flux<ActivityResponse> monthEntries(String kind, LocalDate from, LocalDate to, UUID categoryId) {
+        String sql = ENTRY_COLUMNS + " AND a.kind = :kind AND a.occurred_on >= :from AND a.occurred_on < :to"
                 + (categoryId == null ? "" : " AND a.category_id = :category")
                 + " ORDER BY a.occurred_on, a.created_at";
-        DatabaseClient.GenericExecuteSpec spec = client.sql(sql).bind("from", from).bind("to", to);
+        DatabaseClient.GenericExecuteSpec spec = client.sql(sql).bind("kind", kind).bind("from", from).bind("to", to);
         if (categoryId != null) {
             spec = spec.bind("category", categoryId);
         }
@@ -93,13 +93,14 @@ public class ActivityStore {
     public record CategoryTotal(UUID categoryId, String name, BigDecimal total, long count) {
     }
 
-    public Flux<CategoryTotal> spendingByCategory(LocalDate from, LocalDate to) {
+    /** Totals of one kind (expense or income) in a month, one row per category. */
+    public Flux<CategoryTotal> totalsByCategory(String kind, LocalDate from, LocalDate to) {
         return client.sql("""
                 SELECT a.category_id, COALESCE(c.name, 'Uncategorized') AS name, SUM(a.amount) AS total, COUNT(*) AS n
                 FROM activity a LEFT JOIN category c ON c.id = a.category_id
-                WHERE a.removed_at IS NULL AND a.kind = 'expense' AND a.occurred_on >= :from AND a.occurred_on < :to
+                WHERE a.removed_at IS NULL AND a.kind = :kind AND a.occurred_on >= :from AND a.occurred_on < :to
                 GROUP BY a.category_id, c.name ORDER BY SUM(a.amount) DESC, name""")
-                .bind("from", from).bind("to", to)
+                .bind("kind", kind).bind("from", from).bind("to", to)
                 .map((row, meta) -> new CategoryTotal(row.get("category_id", UUID.class), row.get("name", String.class),
                         row.get("total", BigDecimal.class), row.get("n", Long.class)))
                 .all();

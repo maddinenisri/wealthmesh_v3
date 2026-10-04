@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.mdstech.wealthmesh.activity.dto.ActivityResponse;
 import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
-import com.mdstech.wealthmesh.activity.service.ExpenseService;
+import com.mdstech.wealthmesh.activity.service.EntryService;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -23,9 +23,9 @@ import reactor.core.publisher.Mono;
 @RequestMapping("/api/v1/accounts/{accountId}")
 public class ActivityController {
 
-    private final ExpenseService service;
+    private final EntryService service;
 
-    public ActivityController(ExpenseService service) {
+    public ActivityController(EntryService service) {
         this.service = service;
     }
 
@@ -39,7 +39,19 @@ public class ActivityController {
     public Mono<ResponseEntity<ActivityResponse>> record(@PathVariable UUID accountId,
             @RequestHeader(name = "Idempotency-Key", required = false) String key,
             @RequestBody ExpenseRequest request) {
-        return service.record(accountId, key, request).map(saved -> ResponseEntity
+        return save(accountId, key, "expense", request);
+    }
+
+    @PostMapping("/income")
+    public Mono<ResponseEntity<ActivityResponse>> recordIncome(@PathVariable UUID accountId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String key,
+            @RequestBody ExpenseRequest request) {
+        return save(accountId, key, "income", request);
+    }
+
+    private Mono<ResponseEntity<ActivityResponse>> save(UUID accountId, String key, String kind,
+            ExpenseRequest request) {
+        return service.record(accountId, key, kind, request).map(saved -> ResponseEntity
                 .status(saved.created() ? HttpStatus.CREATED : HttpStatus.OK).body(saved.activity()));
     }
 }

@@ -103,6 +103,25 @@ export function mockApi(
   const log = (request: Request) =>
     state.requests.push(`${request.method} ${new URL(request.url).pathname}`)
 
+  const monthTotals = (month: string, kind: string) => {
+    const rows = state.activity.filter((a) => a.kind === kind && a.occurredOn.startsWith(month))
+    const byCategory = new Map<string, { total: number; count: number }>()
+    rows.forEach((a) => {
+      const row = byCategory.get(a.categoryId) ?? { total: 0, count: 0 }
+      byCategory.set(a.categoryId, { total: row.total + Number(a.amount), count: row.count + 1 })
+    })
+    return {
+      month,
+      total: rows.reduce((sum, a) => sum + Number(a.amount), 0).toFixed(2),
+      categories: [...byCategory].map(([categoryId, row]) => ({
+        categoryId,
+        name: CATEGORIES.find((c) => c.id === categoryId)?.name,
+        total: row.total.toFixed(2),
+        count: row.count,
+      })),
+    }
+  }
+
   server.use(
     http.get('*/api/v1/household', ({ request }) => {
       log(request)
@@ -181,81 +200,108 @@ export function mockApi(
           .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn)),
       )
     }),
-    http.post('*/api/v1/accounts/:id/expenses', async ({ request, params }) => {
-      log(request)
-      const key = request.headers.get('Idempotency-Key') ?? ''
-      state.keys.push(key)
-      const body = (await request.json()) as ExpenseBody
-      const account = state.accounts.find((a) => a.id === params.id)
-      if (!account) return problem(404, 'Account not found')
-      const amount = Number(body.amount)
-      if (!(amount > 0)) return problem(400, 'Enter an amount greater than zero')
-      if (body.occurredOn > today)
-        return problem(400, 'Future activity is not saved as completed history yet')
-      const existing = state.activity.find((a) => a.key === key)
-      if (existing) return HttpResponse.json(decorate(existing, state.accounts), { status: 200 })
-      const entry: MockActivity = {
-        id: newId(),
-        accountId: account.id,
-        key,
-        kind: 'expense',
-        amount: amount.toFixed(2),
-        occurredOn: body.occurredOn,
-        description: body.description.trim() || null,
-        categoryId: body.categoryId,
-        enteredByMemberId: body.enteredByMemberId,
-      }
-      state.activity.push(entry)
-      account.balance = {
-        amount: (Number(account.balance.amount) - amount).toFixed(2),
-        asOf: entry.occurredOn > account.balance.asOf ? entry.occurredOn : account.balance.asOf,
-      }
-      if (state.loseNextExpenseResponse) {
-        state.loseNextExpenseResponse = false
-        return problem(503, 'The server took too long to answer')
-      }
-      return HttpResponse.json(decorate(entry, state.accounts), { status: 201 })
-    }),
-    http.get('*/api/v1/spending', ({ request }) => {
+    ...(['expenses', 'income'] as const).map((path) =>
+      http.post(`*/api/v1/accounts/:id/${path}`, async ({ request, params }) => {
+        const kind = path === 'income' ? 'income' : 'expense'
+        log(request)
+        const key = request.headers.get('Idempotency-Key') ?? ''
+        state.keys.push(key)
+        const body = (await request.json()) as ExpenseBody
+        const account = state.accounts.find((a) => a.id === params.id)
+        if (!account) return problem(404, 'Account not found')
+        const amount = Number(body.amount)
+        if (!(amount > 0)) return problem(400, 'Enter an amount greater than zero')
+        if (body.occurredOn > today)
+          return problem(400, 'Future activity is not saved as completed history yet')
+        const existing = state.activity.find((a) => a.key === key)
+        if (existing) return HttpResponse.json(decorate(existing, state.accounts), { status: 200 })
+        const entry: MockActivity = {
+          id: newId(),
+          accountId: account.id,
+          key,
+          kind,
+          amount: amount.toFixed(2),
+          occurredOn: body.occurredOn,
+          description: body.description.trim() || null,
+          categoryId: body.categoryId,
+          enteredByMemberId: body.enteredByMemberId,
+        }
+        state.activity.push(entry)
+        account.balance = {
+          amount: (Number(account.balance.amount) + (kind === 'income' ? amount : -amount)).toFixed(
+            2,
+          ),
+          asOf: entry.occurredOn > account.balance.asOf ? entry.occurredOn : account.balance.asOf,
+        }
+        if (state.loseNextExpenseResponse) {
+          state.loseNextExpenseResponse = false
+          return problem(503, 'The server took too long to answer')
+        }
+        return HttpResponse.json(decorate(entry, state.accounts), { status: 201 })
+      }),
+    ),
+    ...(
+      [
+        ['spending', 'expense'],
+        ['income', 'income'],
+      ] as const
+    ).flatMap(([path, kind]) => [
+      http.get(`*/api/v1/${path}`, ({ request }) => {
+        log(request)
+        return HttpResponse.json(
+          monthTotals(new URL(request.url).searchParams.get('month') ?? '', kind),
+        )
+      }),
+      http.get(`*/api/v1/${path}/entries`, ({ request }) => {
+        log(request)
+        const query = new URL(request.url).searchParams
+        return HttpResponse.json(
+          state.activity
+            .filter(
+              (a) =>
+                a.kind === kind &&
+                a.occurredOn.startsWith(query.get('month') ?? '') &&
+                a.categoryId === query.get('categoryId'),
+            )
+            .map((a) => decorate(a, state.accounts)),
+        )
+      }),
+    ]),
+    http.get('*/api/v1/review', ({ request }) => {
       log(request)
       const month = new URL(request.url).searchParams.get('month') ?? ''
-      const rows = state.activity.filter((a) => a.occurredOn.startsWith(month))
-      const byCategory = new Map<string, { total: number; count: number }>()
-      rows.forEach((a) => {
-        const row = byCategory.get(a.categoryId) ?? { total: 0, count: 0 }
-        byCategory.set(a.categoryId, { total: row.total + Number(a.amount), count: row.count + 1 })
-      })
+      const income = Number(monthTotals(month, 'income').total)
+      const spending = Number(monthTotals(month, 'expense').total)
       return HttpResponse.json({
         month,
-        total: rows.reduce((sum, a) => sum + Number(a.amount), 0).toFixed(2),
-        categories: [...byCategory].map(([categoryId, row]) => ({
-          categoryId,
-          name: CATEGORIES.find((c) => c.id === categoryId)?.name,
-          total: row.total.toFixed(2),
-          count: row.count,
-        })),
+        income: income.toFixed(2),
+        spending: spending.toFixed(2),
+        incomeMinusSpending: (income - spending).toFixed(2),
       })
     }),
-    http.get('*/api/v1/spending/entries', ({ request }) => {
+    http.get('*/api/v1/wealth', ({ request }) => {
       log(request)
-      const query = new URL(request.url).searchParams
-      return HttpResponse.json(
-        state.activity
-          .filter(
-            (a) =>
-              a.occurredOn.startsWith(query.get('month') ?? '') &&
-              a.categoryId === query.get('categoryId'),
-          )
-          .map((a) => decorate(a, state.accounts)),
-      )
+      const balances = state.accounts.map((a) => Number(a.balance.amount))
+      return HttpResponse.json({
+        financialAssets: balances
+          .filter((b) => b > 0)
+          .reduce((x, y) => x + y, 0)
+          .toFixed(2),
+        debts: balances
+          .filter((b) => b < 0)
+          .reduce((x, y) => x - y, 0)
+          .toFixed(2),
+      })
     }),
     http.get('*/api/v1/spending/history', ({ request }) => {
       log(request)
       const totals = new Map<string, number>()
-      state.activity.forEach((a) => {
-        const month = a.occurredOn.slice(0, 7)
-        totals.set(month, (totals.get(month) ?? 0) + Number(a.amount))
-      })
+      state.activity
+        .filter((a) => a.kind === 'expense')
+        .forEach((a) => {
+          const month = a.occurredOn.slice(0, 7)
+          totals.set(month, (totals.get(month) ?? 0) + Number(a.amount))
+        })
       const recorded = [...totals.keys()].sort()
       const sum = [...totals.values()].reduce((a, b) => a + b, 0)
       const months = recorded.length ? monthsThrough(recorded[0], today.slice(0, 7)) : []

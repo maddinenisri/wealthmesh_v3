@@ -1,3 +1,8 @@
+const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+
+/** "$30.00" for display. */
+export const formatMoney = (value: number): string => USD.format(value)
+
 const AMOUNT = /^-?(\d{1,3}(,\d{3})+|\d+)(\.\d{1,2})?$/
 
 /**

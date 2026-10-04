@@ -13,6 +13,8 @@ export type Account = {
 }
 
 export type NewAccount = {
+  /** Only 'checking' can be created for now. */
+  type: 'checking'
   name: string
   institution: string
   ownerMemberId: string
@@ -66,7 +68,7 @@ export const createAccount = (account: NewAccount) =>
   request('/accounts', {
     method: 'POST',
     body: {
-      type: 'checking',
+      type: account.type,
       name: account.name,
       institution: account.institution,
       ownerMemberIds: [account.ownerMemberId],

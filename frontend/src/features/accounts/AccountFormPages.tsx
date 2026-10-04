@@ -19,7 +19,7 @@ export function NewAccountPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Add checking account"
+        title="Add account"
         description="Balance is optional. Leave it blank to start at $0.00 on the opening date."
       />
       {(context.isPending || today.isPending) && !context.error && !today.error && (

@@ -15,7 +15,8 @@ export type Activity = {
   enteredByMemberId: string | null
 }
 
-export type NewExpense = {
+/** One money-in or money-out entry as the form sends it. */
+export type NewEntry = {
   description: string
   amount: string
   occurredOn: string
@@ -30,6 +31,13 @@ export type CategorySpending = {
   count: number
 }
 export type SpendingSummary = { month: string; total: string; categories: CategorySpending[] }
+/** Income uses the same shape as spending: a total and one row per category. */
+export type MonthReview = {
+  month: string
+  income: string
+  spending: string
+  incomeMinusSpending: string
+}
 export type SpendingMonth = { month: string; total: string; recorded: boolean }
 export type SpendingHistory = {
   months: SpendingMonth[]
@@ -119,17 +127,40 @@ export const listCategories = (kind: 'spending' | 'income') =>
 export const listActivity = (accountId: string) =>
   request(`/accounts/${accountId}/activity`, { parse: (value) => list(value, parseActivity) })
 
-/** `key` identifies one form instance: a repeat of the same save returns the stored expense (D-024). */
-export const recordExpense = (accountId: string, key: string, expense: NewExpense) =>
-  request(`/accounts/${accountId}/expenses`, {
+export type EntryKind = 'expense' | 'income'
+
+/** `key` identifies one form instance: a repeat of the same save returns the stored entry (D-024). */
+export const recordEntry = (accountId: string, kind: EntryKind, key: string, entry: NewEntry) =>
+  request(`/accounts/${accountId}/${kind === 'income' ? 'income' : 'expenses'}`, {
     method: 'POST',
     headers: { 'Idempotency-Key': key },
-    body: expense,
+    body: entry,
     parse: parseActivity,
   })
 
 export const getSpending = (month: string) =>
   request(`/spending?month=${month}`, { parse: parseSummary })
+
+export const getIncome = (month: string) =>
+  request(`/income?month=${month}`, { parse: parseSummary })
+
+export const listIncomeEntries = (month: string, categoryId: string) =>
+  request(`/income/entries?month=${month}&categoryId=${categoryId}`, {
+    parse: (value) => list(value, parseActivity),
+  })
+
+export const getMonthReview = (month: string) =>
+  request(`/review?month=${month}`, {
+    parse: (value): MonthReview => {
+      const data = record(value)
+      return {
+        month: str(data.month),
+        income: str(data.income),
+        spending: str(data.spending),
+        incomeMinusSpending: str(data.incomeMinusSpending),
+      }
+    },
+  })
 
 export const listSpendingEntries = (month: string, categoryId: string) =>
   request(`/spending/entries?month=${month}&categoryId=${categoryId}`, {

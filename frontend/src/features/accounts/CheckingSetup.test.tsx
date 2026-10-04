@@ -237,7 +237,7 @@ describe('the account list', () => {
     renderRoute('/accounts')
 
     expect(await screen.findByText('No accounts yet')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Add checking account' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Add account' })).toHaveAttribute(
       'href',
       '/accounts/new',
     )

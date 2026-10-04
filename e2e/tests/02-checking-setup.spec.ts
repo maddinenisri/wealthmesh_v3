@@ -20,7 +20,7 @@ test.describe.serial('checking account setup journey', () => {
     await page.goto('/accounts')
     await expect(page.getByText('No accounts yet')).toBeVisible()
 
-    await page.getByRole('link', { name: 'Add checking account' }).click()
+    await page.getByRole('link', { name: 'Add account' }).click()
     await expect(page.getByLabel('Opened on')).toHaveValue('2026-10-03')
     await fill(page, { name: 'Everyday Checking', balance: '$5,000.00' })
     await page.getByRole('button', { name: 'Save account' }).click()

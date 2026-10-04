@@ -18,7 +18,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, Component: HouseholdPage, handle: handle('Household') },
       { path: 'accounts', Component: AccountsPage, handle: handle('Accounts') },
-      { path: 'accounts/new', Component: NewAccountPage, handle: handle('Add checking account') },
+      { path: 'accounts/new', Component: NewAccountPage, handle: handle('Add account') },
       { path: 'accounts/:id', Component: AccountDetailPage, handle: handle('Account') },
       { path: 'accounts/:id/edit', Component: EditAccountPage, handle: handle('Edit account') },
       { path: 'spending', Component: SpendingPage, handle: handle('Spending') },

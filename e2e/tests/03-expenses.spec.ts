@@ -115,7 +115,7 @@ test.describe.serial('money out and monthly spending journey', () => {
     await expect(page.getByRole('main')).toContainText('$4,720.00')
 
     await page.getByRole('link', { name: 'Spending' }).click()
-    await page.getByLabel('Month').fill('2026-09')
+    await page.getByLabel('Month', { exact: true }).fill('2026-09')
     await page
       .getByRole('list', { name: 'Spending by category' })
       .getByRole('button', { name: 'Utilities' })

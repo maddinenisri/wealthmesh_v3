@@ -11,7 +11,16 @@ import {
   Th,
 } from '../../design-system'
 import { useToday } from '../../hooks/useAccounts'
-import { useSpending, useSpendingEntries, useSpendingHistory } from '../../hooks/useActivity'
+import {
+  useIncome,
+  useIncomeEntries,
+  useMonthReview,
+  useSpending,
+  useSpendingEntries,
+  useSpendingHistory,
+} from '../../hooks/useActivity'
+import { ownerNames } from '../accounts/ownerNames'
+import { useAccountContext } from '../accounts/useAccountContext'
 import type { Activity } from '../../api/activity'
 
 /** "October" or "September 2026" from "2026-10". */
@@ -23,7 +32,8 @@ function monthName(month: string, withYear = false): string {
   })
 }
 
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
+const plural = (count: number, word: string, many = `${word}s`) =>
+  `${count} ${count === 1 ? word : many}`
 
 export function SpendingPage() {
   const today = useToday()
@@ -32,12 +42,27 @@ export function SpendingPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Spending" description="What the household spent, month by month." />
+      <PageHeader
+        title="Spending"
+        description="What came in and what the household spent, month by month."
+      />
       {month === '' ? (
         <p className="text-ink-muted">Loading</p>
       ) : (
         <>
-          <MonthSpending key={month} month={month} onMonth={setChosen} />
+          <div className="max-w-xs">
+            <Field
+              label="Month"
+              type="month"
+              value={month}
+              onChange={(event) => {
+                if (event.target.value) setChosen(event.target.value)
+              }}
+            />
+          </div>
+          <Review month={month} />
+          <MonthSection key={`income-${month}`} kind="income" month={month} />
+          <MonthSection key={`expense-${month}`} kind="expense" month={month} />
           <History onMonth={setChosen} />
         </>
       )}
@@ -45,42 +70,97 @@ export function SpendingPage() {
   )
 }
 
-function MonthSpending({ month, onMonth }: { month: string; onMonth: (month: string) => void }) {
-  const spending = useSpending(month)
-  const [categoryId, setCategoryId] = useState<string | null>(null)
-  const entries = useSpendingEntries(month, categoryId)
+/** Income, spending and the difference for the chosen month. */
+function Review({ month }: { month: string }) {
+  const review = useMonthReview(month)
 
   return (
-    <Card aria-labelledby="month-heading">
-      <CardTitle id="month-heading" className="text-lg">
-        {monthName(month, true)}
+    <Card aria-labelledby="review-heading">
+      <CardTitle id="review-heading" className="text-lg">
+        Month review
       </CardTitle>
-      <div className="mt-3 max-w-xs">
-        <Field
-          label="Month"
-          type="month"
-          value={month}
-          onChange={(event) => {
-            if (event.target.value) onMonth(event.target.value)
-          }}
-        />
-      </div>
-      {spending.isPending && <p className="mt-4 text-sm text-ink-muted">Loading spending</p>}
-      {spending.isError && (
-        <p role="alert" className="mt-4">
-          {spending.error.message}
+      {review.isPending && <p className="mt-3 text-sm text-ink-muted">Loading the month</p>}
+      {review.isError && (
+        <p role="alert" className="mt-3">
+          {review.error.message}
         </p>
       )}
-      {spending.data && spending.data.categories.length === 0 && (
-        <p className="mt-4">No expenses recorded for {monthName(month)}</p>
+      {review.data && (
+        <div className="mt-3 flex flex-col gap-1">
+          <p>
+            Income <Amount value={Number(review.data.income)} />
+          </p>
+          <p>
+            Spending <Amount value={Number(review.data.spending)} />
+          </p>
+          <p>
+            Income minus spending{' '}
+            <Amount value={Number(review.data.incomeMinusSpending)} size="lg" />
+          </p>
+        </div>
       )}
-      {spending.data && spending.data.categories.length > 0 && (
+    </Card>
+  )
+}
+
+const KIND = {
+  expense: {
+    summary: useSpending,
+    entries: useSpendingEntries,
+    list: 'Spending by category',
+    table: 'Expenses in this category',
+    details: 'Expense details',
+    noun: 'expense',
+    nouns: 'expenses',
+    column: 'Expense',
+    place: 'Paid from',
+  },
+  income: {
+    summary: useIncome,
+    entries: useIncomeEntries,
+    list: 'Income by category',
+    table: 'Income entries',
+    details: 'Income details',
+    noun: 'income entry',
+    nouns: 'income entries',
+    column: 'Income',
+    place: 'Received into',
+  },
+} as const
+
+/** One kind of money for the month: the total, one row per category and the entries behind a category. */
+function MonthSection({ kind, month }: { kind: 'expense' | 'income'; month: string }) {
+  const words = KIND[kind]
+  const totals = words.summary(month)
+  const [categoryId, setCategoryId] = useState<string | null>(null)
+  const entries = words.entries(month, categoryId)
+  // Income is its own region named "Income"; spending keeps the month name as its heading.
+  const heading = kind === 'income' ? 'Income' : monthName(month, true)
+
+  return (
+    <Card aria-labelledby={`${kind}-heading`}>
+      <CardTitle id={`${kind}-heading`} className="text-lg">
+        {heading}
+      </CardTitle>
+      {totals.isPending && <p className="mt-4 text-sm text-ink-muted">Loading</p>}
+      {totals.isError && (
+        <p role="alert" className="mt-4">
+          {totals.error.message}
+        </p>
+      )}
+      {totals.data && totals.data.categories.length === 0 && (
+        <p className="mt-4">
+          No {kind === 'income' ? 'income' : 'expenses'} recorded for {monthName(month)}
+        </p>
+      )}
+      {totals.data && totals.data.categories.length > 0 && (
         <>
           <p className="mt-4">
-            Spending <Amount value={Number(spending.data.total)} size="lg" />
+            {kind === 'income' ? 'Income' : 'Spending'}{' '}
+            <Amount value={Number(totals.data.total)} size="lg" />
           </p>
-          <ul aria-label="Spending by category" className="mt-3 flex flex-col gap-1">
-            {spending.data.categories.map((category) => (
+          <ul aria-label={words.list} className="mt-3 flex flex-col gap-1">
+            {totals.data.categories.map((category) => (
               <li key={category.categoryId ?? category.name}>
                 <Button
                   variant={category.categoryId === categoryId ? 'primary' : 'secondary'}
@@ -91,29 +171,39 @@ function MonthSpending({ month, onMonth }: { month: string; onMonth: (month: str
                 >
                   {category.name}
                 </Button>{' '}
-                <Amount value={Number(category.total)} /> ({plural(category.count, 'expense')})
+                <Amount value={Number(category.total)} /> (
+                {plural(category.count, words.noun, words.nouns)})
               </li>
             ))}
           </ul>
         </>
       )}
-      {categoryId && entries.data && entries.data.length > 0 && <Entries entries={entries.data} />}
+      {categoryId && entries.data && entries.data.length > 0 && (
+        <Entries entries={entries.data} words={words} />
+      )}
     </Card>
   )
 }
 
-function Entries({ entries }: { entries: Activity[] }) {
+function Entries({
+  entries,
+  words,
+}: {
+  entries: Activity[]
+  words: (typeof KIND)[keyof typeof KIND]
+}) {
   const [openId, setOpenId] = useState<string | null>(null)
   const open = entries.find((entry) => entry.id === openId)
+  const { members } = useAccountContext()
 
   return (
     <div className="mt-4">
-      <Table aria-label="Expenses in this category">
+      <Table aria-label={words.table}>
         <thead>
           <tr>
-            <Th>Expense</Th>
+            <Th>{words.column}</Th>
             <Th>Date</Th>
-            <Th>Paid from</Th>
+            <Th>{words.place}</Th>
             <Th className="text-right">Amount</Th>
           </tr>
         </thead>
@@ -122,7 +212,7 @@ function Entries({ entries }: { entries: Activity[] }) {
             <tr key={entry.id}>
               <Td>
                 <Button variant="ghost" size="sm" onClick={() => setOpenId(entry.id)}>
-                  {entry.description ?? entry.categoryName ?? 'Expense'}
+                  {entry.description ?? entry.categoryName ?? words.column}
                 </Button>
               </Td>
               <Td>{entry.occurredOn}</Td>
@@ -135,13 +225,16 @@ function Entries({ entries }: { entries: Activity[] }) {
         </tbody>
       </Table>
       {open && (
-        <dl aria-label="Expense details" className="mt-3 grid max-w-md gap-4 sm:grid-cols-2">
+        <dl aria-label={words.details} className="mt-3 grid max-w-md gap-4 sm:grid-cols-2">
           <Detail label="Account">{open.accountName}</Detail>
           <Detail label="Date">{open.occurredOn}</Detail>
           <Detail label="Amount">
             <Amount value={Number(open.amount)} />
           </Detail>
           <Detail label="Category">{open.categoryName ?? 'Uncategorized'}</Detail>
+          <Detail label="Entered by">
+            {open.enteredByMemberId ? ownerNames([open.enteredByMemberId], members) : ''}
+          </Detail>
         </dl>
       )}
     </div>

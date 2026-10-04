@@ -10,6 +10,7 @@ import {
   buttonStyles,
 } from '../../design-system'
 import { useAccounts } from '../../hooks/useAccounts'
+import { OverdrawnLabel } from './Overdrawn'
 import { ownerNames } from './ownerNames'
 import { useAccountContext } from './useAccountContext'
 
@@ -24,7 +25,7 @@ export function AccountsPage() {
         description="Every account in the household, with its Balance and the date that Balance is as of."
         actions={
           <Link to="/accounts/new" className={buttonStyles({})}>
-            Add checking account
+            Add account
           </Link>
         }
       />
@@ -35,7 +36,7 @@ export function AccountsPage() {
       {accounts.data?.length === 0 && (
         <EmptyState
           title="No accounts yet"
-          description="Add a checking account to start. Its opening Balance is optional."
+          description="Add an account to start. Its opening Balance is optional."
         />
       )}
       {accounts.data && accounts.data.length > 0 && (
@@ -64,6 +65,7 @@ export function AccountsPage() {
                   <Td>{account.institution}</Td>
                   <Td className="text-right">
                     <Amount value={Number(account.balance.amount)} />
+                    <OverdrawnLabel balance={account.balance.amount} />
                     <span className="block text-caption text-ink-muted">
                       as of {account.balance.asOf}
                     </span>

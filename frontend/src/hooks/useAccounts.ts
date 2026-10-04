@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { wealthKey } from './useWealth'
 import {
   createAccount,
   getAccount,
@@ -28,7 +29,11 @@ export function useCreateAccount() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (account: NewAccount) => createAccount(account),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: accountsKey }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: accountsKey }),
+        queryClient.invalidateQueries({ queryKey: wealthKey }),
+      ]),
   })
 }
 
