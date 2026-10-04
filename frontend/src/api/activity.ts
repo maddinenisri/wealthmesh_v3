@@ -13,6 +13,7 @@ export type Activity = {
   categoryId: string | null
   categoryName: string | null
   enteredByMemberId: string | null
+  reason: string | null
 }
 
 /** One ledger row as history shows it: effective, replaced by a later edit, or removed. */
@@ -105,6 +106,7 @@ function parseActivity(value: unknown): Activity {
     categoryId: strOrNull(data.categoryId),
     categoryName: strOrNull(data.categoryName),
     enteredByMemberId: strOrNull(data.enteredByMemberId),
+    reason: strOrNull(data.reason),
   }
 }
 
@@ -258,6 +260,71 @@ export const listReminders = () =>
 export const listHistory = (accountId: string) =>
   request(`/accounts/${accountId}/activity/history`, {
     parse: (value) => list(value, parseHistoryEntry),
+  })
+
+/** Balance as of a date; `amount` is null when the date is before tracking began. */
+export type BalanceView = { amount: string | null; asOn: string }
+
+/** What a correction would change, worked out by the server before anything is saved. */
+export type CorrectionPreview = {
+  asOn: string
+  balanceOnDate: string
+  requested: string
+  difference: string
+  currentBalance: string
+  currentBalanceAfter: string
+  overdraft: boolean
+}
+
+/** Make the Balance on `asOn` equal `requestedBalance`. `replacesId` corrects an earlier correction. */
+export type NewCorrection = {
+  requestedBalance: string
+  asOn: string
+  reason: string
+  enteredByMemberId: string
+  replacesId?: string
+}
+
+export const getBalanceAsOf = (accountId: string, asOf: string) =>
+  request(`/accounts/${accountId}/balance?asOf=${asOf}`, {
+    parse: (value): BalanceView => {
+      const data = record(value)
+      return { amount: strOrNull(data.amount), asOn: str(data.asOn) }
+    },
+  })
+
+export const previewCorrection = (
+  accountId: string,
+  requested: string,
+  asOn: string,
+  replaces?: string,
+) =>
+  request(
+    `/accounts/${accountId}/balance-corrections/preview?requested=${encodeURIComponent(requested)}&asOn=${asOn}${replaces ? `&replaces=${replaces}` : ''}`,
+    {
+      parse: (value): CorrectionPreview => {
+        const data = record(value)
+        if (typeof data.overdraft !== 'boolean') throw bad()
+        return {
+          asOn: str(data.asOn),
+          balanceOnDate: str(data.balanceOnDate),
+          requested: str(data.requested),
+          difference: str(data.difference),
+          currentBalance: str(data.currentBalance),
+          currentBalanceAfter: str(data.currentBalanceAfter),
+          overdraft: data.overdraft,
+        }
+      },
+    },
+  )
+
+/** `key` identifies one form instance: a repeated save returns the stored correction (D-024). */
+export const saveCorrection = (accountId: string, key: string, correction: NewCorrection) =>
+  request(`/accounts/${accountId}/balance-corrections`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+    body: correction,
+    parse: parseActivity,
   })
 
 export const getSpending = (month: string) =>

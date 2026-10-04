@@ -60,6 +60,7 @@ export const CATEGORIES = [
   { id: 'c0000000-0000-4000-8000-000000000003', name: 'Groceries', kind: 'spending' },
   { id: 'c0000000-0000-4000-8000-000000000004', name: 'Salary', kind: 'income' },
   { id: 'c0000000-0000-4000-8000-000000000005', name: 'Dining', kind: 'spending' },
+  { id: 'c0000000-0000-4000-8000-000000000006', name: 'Bank fees', kind: 'spending' },
 ]
 
 function decorate(a: MockActivity, accounts: MockAccount[]) {
@@ -126,6 +127,14 @@ export function mockApi(
   const nameOf = (id: string | null | undefined) =>
     state.members.find((m) => m.id === id)?.name ?? ''
   const live = () => state.activity.filter((a) => !a.removedAt)
+  const signed = (a: MockActivity) => (a.kind === 'expense' ? -Number(a.amount) : Number(a.amount))
+  /** Opening amount plus live activity up to a date, leaving out one row. */
+  const balanceOn = (account: MockAccount, date: string, excluding?: string) =>
+    Number(account.openingAmount) +
+    live()
+      .filter((a) => a.accountId === account.id && a.occurredOn <= date && a.id !== excluding)
+      .reduce((sum, a) => sum + signed(a), 0)
+  const currentBalance = (account: MockAccount) => balanceOn(account, '9999-12-31')
   const monthTotals = (month: string, kind: string) => {
     const rows = live().filter((a) => a.kind === kind && a.occurredOn.startsWith(month))
     const byCategory = new Map<string, { total: number; count: number }>()
@@ -250,6 +259,84 @@ export function mockApi(
           .reverse(),
       )
     }),
+    http.get('*/api/v1/accounts/:id/balance', ({ request, params }) => {
+      log(request)
+      const account = state.accounts.find((a) => a.id === params.id)
+      const asOf = new URL(request.url).searchParams.get('asOf') ?? ''
+      if (!account) return problem(404, 'Account not found')
+      return HttpResponse.json({
+        amount: asOf < account.openedOn ? null : balanceOn(account, asOf).toFixed(2),
+        asOn: asOf,
+      })
+    }),
+    http.get('*/api/v1/accounts/:id/balance-corrections/preview', ({ request, params }) => {
+      log(request)
+      const account = state.accounts.find((a) => a.id === params.id)
+      const query = new URL(request.url).searchParams
+      const requested = Number(query.get('requested'))
+      const asOn = query.get('asOn') ?? ''
+      if (!account) return problem(404, 'Account not found')
+      const replaces = query.get('replaces') ?? undefined
+      const onDate = balanceOn(account, asOn, replaces)
+      const replaced = state.activity.find((a) => a.id === replaces)
+      const current = currentBalance(account)
+      const after = current - (replaced ? Number(replaced.amount) : 0) + (requested - onDate)
+      return HttpResponse.json({
+        asOn,
+        balanceOnDate: onDate.toFixed(2),
+        requested: requested.toFixed(2),
+        difference: (requested - onDate).toFixed(2),
+        currentBalance: current.toFixed(2),
+        currentBalanceAfter: after.toFixed(2),
+        overdraft: after < 0,
+      })
+    }),
+    http.post('*/api/v1/accounts/:id/balance-corrections', async ({ request, params }) => {
+      log(request)
+      const key = request.headers.get('Idempotency-Key') ?? ''
+      const body = (await request.json()) as {
+        requestedBalance: string
+        asOn: string
+        reason: string
+        enteredByMemberId: string
+        replacesId?: string
+      }
+      const account = state.accounts.find((a) => a.id === params.id)
+      if (!account) return problem(404, 'Account not found')
+      if (!body.reason?.trim()) return problem(400, 'Enter a reason')
+      const existing = state.activity.find((a) => a.key === key)
+      if (existing) return HttpResponse.json(decorate(existing, state.accounts), { status: 200 })
+      const replaced = state.activity.find((a) => a.id === body.replacesId)
+      const difference = Number(body.requestedBalance) - balanceOn(account, body.asOn, replaced?.id)
+      if (replaced) {
+        replaced.removedAt = '2026-10-03T09:00:00Z'
+        replaced.events = [
+          ...(replaced.events ?? []),
+          {
+            action: 'replaced',
+            byName: nameOf(body.enteredByMemberId),
+            at: '2026-10-03T09:05:00Z',
+          },
+        ]
+      }
+      const entry: MockActivity = {
+        id: newId(),
+        accountId: account.id,
+        key,
+        kind: 'correction',
+        amount: difference.toFixed(2),
+        occurredOn: body.asOn,
+        description: null,
+        categoryId: '',
+        enteredByMemberId: body.enteredByMemberId,
+        createdAt: '2026-10-03T09:05:00Z',
+        reason: body.reason.trim(),
+        replacesId: replaced?.id ?? null,
+      }
+      state.activity.push(entry)
+      account.balance = { amount: currentBalance(account).toFixed(2), asOf: account.balance.asOf }
+      return HttpResponse.json(decorate(entry, state.accounts), { status: 201 })
+    }),
     http.get('*/api/v1/reminders', ({ request }) => {
       log(request)
       return HttpResponse.json(
@@ -357,6 +444,16 @@ export function mockApi(
         if (existing) return HttpResponse.json(decorate(existing, state.accounts), { status: 200 })
         if (original.removedAt) return problem(409, 'This entry was already changed or removed.')
         const sign = (kind: string) => (kind === 'income' ? 1 : -1)
+        if (original.kind === 'correction') {
+          if (Number(original.amount) >= 0 || -Number(original.amount) !== amount)
+            return problem(
+              400,
+              "The fee must equal the correction's decrease so the Balance stays the same",
+            )
+          if (original.occurredOn !== body.occurredOn)
+            return problem(400, 'The fee must be dated the same day as the correction')
+        }
+        const newKind = original.kind === 'correction' ? 'expense' : original.kind
         original.removedAt = '2026-10-03T09:00:00Z'
         original.events = [
           ...(original.events ?? []),
@@ -370,7 +467,7 @@ export function mockApi(
           id: newId(),
           accountId: account.id,
           key,
-          kind: original.kind,
+          kind: newKind,
           amount: amount.toFixed(2),
           occurredOn: body.occurredOn,
           description: body.description.trim() || null,
@@ -383,11 +480,14 @@ export function mockApi(
         state.activity.push(entry)
         account.balance = {
           ...account.balance,
-          amount: (
-            Number(account.balance.amount) -
-            sign(original.kind) * Number(original.amount) +
-            sign(original.kind) * amount
-          ).toFixed(2),
+          amount:
+            original.kind === 'correction'
+              ? currentBalance(account).toFixed(2)
+              : (
+                  Number(account.balance.amount) -
+                  sign(original.kind) * Number(original.amount) +
+                  sign(original.kind) * amount
+                ).toFixed(2),
         }
         return HttpResponse.json(decorate(entry, state.accounts), { status: 201 })
       },

@@ -185,9 +185,10 @@ describe('editing a checking account', () => {
     expect(api.accounts[0]).toMatchObject({ openingAmount: '5000.00', openedOn: '2026-09-01' })
 
     await user.click(screen.getByRole('button', { name: 'Update balance' }))
-    expect(screen.getByLabelText('Amount')).toBeInTheDocument()
+    // Update balance is its own form with a review step (slice 03), not part of Edit account.
+    expect(screen.getByLabelText('Balance')).toBeInTheDocument()
     expect(screen.getByLabelText('Date')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save balance' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled()
 
     await user.click(screen.getByRole('link', { name: 'Accounts' }))
     const row = await listRow('Household Checking')

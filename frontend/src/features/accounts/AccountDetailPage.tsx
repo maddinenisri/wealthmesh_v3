@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useBalanceAsOf } from '../../hooks/useActivity'
+import { formatMoney } from '../../lib/money'
 import { Link, useParams } from 'react-router'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
@@ -8,7 +10,6 @@ import {
   Card,
   CardTitle,
   EmptyState,
-  Field,
   PageHeader,
   buttonStyles,
 } from '../../design-system'
@@ -16,6 +17,7 @@ import { useAccount, useToday } from '../../hooks/useAccounts'
 import type { EntryKind } from '../../api/activity'
 import type { Activity as ActivityEntry } from '../../api/activity'
 import { AddEntry } from '../activity/AddEntry'
+import { BalanceCorrection } from '../activity/BalanceCorrection'
 import { ActivityList } from '../activity/ActivityList'
 import { Panel } from '../activity/Panel'
 import { RemindersCard } from '../activity/RemindersCard'
@@ -63,7 +65,6 @@ export function AccountDetailPage() {
             account={account.data}
             owners={ownerNames(account.data.ownerMemberIds, members)}
           />
-          <UpdateBalance />
           <Activity account={account.data} members={members} />
         </>
       )}
@@ -86,7 +87,10 @@ function Details({ account, owners }: { account: Account; owners: string }) {
         <div>
           <dt className="text-caption text-ink-muted">Balance</dt>
           <dd>
-            <Amount value={Number(account.balance.amount)} size="lg" />
+            <Amount
+              value={Number(account.balance.amount)}
+              className="font-sans text-2xl normal-nums"
+            />
             <OverdrawnLabel balance={account.balance.amount} />
             <span className="block text-caption text-ink-muted">as of {account.balance.asOf}</span>
             {Number(account.balance.amount) < 0 && (
@@ -99,8 +103,11 @@ function Details({ account, owners }: { account: Account; owners: string }) {
         <div>
           <dt className="text-caption text-ink-muted">Initial Balance</dt>
           <dd>
-            <Amount value={Number(account.openingAmount)} />
-            {` on ${account.openedOn}`}
+            <Amount
+              value={Number(account.openingAmount)}
+              className="font-sans text-2xl normal-nums"
+            />
+            <span className="block text-caption text-ink-muted">{` on ${account.openedOn}`}</span>
           </dd>
         </div>
       </dl>
@@ -108,42 +115,39 @@ function Details({ account, owners }: { account: Account; owners: string }) {
   )
 }
 
-/** Update balance is its own action, separate from Edit account. Saving arrives with account activity. */
-function UpdateBalance() {
-  const [open, setOpen] = useState(false)
-  const today = useToday()
+/** Reads the Balance on an earlier date without changing the current one (V2_CHECKING_018). */
+function BalanceOnDate({ account, today }: { account: Account; today: string }) {
+  const [date, setDate] = useState('')
+  const view = useBalanceAsOf(account.id, date > today ? '' : date)
 
   return (
-    <Card aria-labelledby="balance-heading">
-      <div className="flex items-center justify-between gap-4">
-        <CardTitle id="balance-heading" className="text-lg">
-          Update balance
-        </CardTitle>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setOpen((value) => !value)}
-          aria-expanded={open}
-        >
-          {open ? 'Hide' : 'Update balance'}
-        </Button>
+    <Card aria-labelledby="as-of-heading">
+      <CardTitle id="as-of-heading" className="text-lg">
+        Balance on a date
+      </CardTitle>
+      <div className="mt-3 flex max-w-md flex-wrap items-end gap-4">
+        <label className="flex flex-col gap-1 text-sm">
+          View Balance on
+          <input
+            type="date"
+            value={date}
+            max={today}
+            onChange={(event) => setDate(event.target.value)}
+            className="rounded-control border border-line bg-surface px-3 py-2"
+          />
+        </label>
       </div>
-      {open && (
-        <form
-          className="mt-4 flex max-w-md flex-col gap-4"
-          onSubmit={(event) => event.preventDefault()}
-        >
-          <Field label="Amount" inputMode="decimal" placeholder="0.00" />
-          <Field label="Date" type="date" defaultValue={today.data} />
-          <p className="text-sm text-ink-muted">
-            Saving a balance update comes with account activity. Nothing is changed yet.
-          </p>
-          <div>
-            <Button type="submit" disabled>
-              Save balance
-            </Button>
-          </div>
-        </form>
+      {view.data && (
+        <p className="mt-3 text-sm" role="status">
+          {view.data.amount === null ? (
+            <>Balance on {view.data.asOn}: not available (before tracking began)</>
+          ) : (
+            <>
+              Balance on {view.data.asOn}: <strong>{formatMoney(Number(view.data.amount))}</strong>.
+              The current Balance ({formatMoney(Number(account.balance.amount))}) is unchanged.
+            </>
+          )}
+        </p>
       )}
     </Card>
   )
@@ -153,11 +157,12 @@ function UpdateBalance() {
 function Activity({ account, members }: { account: Account; members: Member[] | undefined }) {
   const [adding, setAdding] = useState<EntryKind | null>(null)
   const [editing, setEditing] = useState<ActivityEntry | null>(null)
+  const [correcting, setCorrecting] = useState<{ editing?: ActivityEntry } | null>(null)
   const [changing, setChanging] = useState<{ mode: 'remove' | 'undo'; entry: ChangeTarget } | null>(
     null,
   )
   const today = useToday()
-  const ready = !adding && !editing && !changing && !!today.data && !!members
+  const ready = !adding && !editing && !correcting && !changing && !!today.data && !!members
 
   return (
     <>
@@ -184,6 +189,17 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
           />
         </Panel>
       )}
+      {correcting && today.data && members && (
+        <Panel key={`correct-${correcting.editing?.id ?? 'new'}`}>
+          <BalanceCorrection
+            account={account}
+            members={members}
+            today={today.data}
+            editing={correcting.editing}
+            onDone={() => setCorrecting(null)}
+          />
+        </Panel>
+      )}
       {changing && members && (
         <Panel key={`${changing.mode}-${changing.entry.id}`}>
           <ChangeEntry
@@ -201,8 +217,10 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
         </CardTitle>
         <ActivityList
           accountId={account.id}
+          opening={{ amount: account.openingAmount, on: account.openedOn }}
           members={members}
           onEdit={ready ? setEditing : undefined}
+          onEditCorrection={ready ? (entry) => setCorrecting({ editing: entry }) : undefined}
           onRemove={ready ? (entry) => setChanging({ mode: 'remove', entry }) : undefined}
           onUndo={ready ? (entry) => setChanging({ mode: 'undo', entry }) : undefined}
         />
@@ -223,6 +241,9 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
           >
             Add money out
           </Button>
+          <Button variant="secondary" size="sm" onClick={() => setCorrecting({})} disabled={!ready}>
+            Update balance
+          </Button>
           <Button variant="secondary" size="sm" disabled>
             Add transfer
           </Button>
@@ -231,6 +252,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
           Transfers become available with a later feature.
         </p>
       </Card>
+      {today.data && <BalanceOnDate account={account} today={today.data} />}
       <RemindersCard accountId={account.id} />
     </>
   )

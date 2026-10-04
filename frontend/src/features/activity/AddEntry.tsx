@@ -13,10 +13,12 @@ import {
 } from '../../design-system'
 import type { Activity, EntryKind } from '../../api/activity'
 import {
+  useAccountActivity,
   useCategories,
   useRecordEntry,
   useReplaceEntry,
   useSaveReminder,
+  useSpending,
 } from '../../hooks/useActivity'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney, parseAmount } from '../../lib/money'
@@ -30,6 +32,21 @@ type Values = {
   categoryId: string
   reason: string
 }
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
 
 /** One id per form instance: a repeat of the same save carries the same id (D-024). */
 function newKey(): string {
@@ -73,7 +90,7 @@ export function AddEntry({
   const words = WORDS[kind]
   const categories = useCategories(kind)
   const record = useRecordEntry(account.id, kind)
-  const replace = useReplaceEntry(account.id, editing?.id ?? '')
+  const activity = useAccountActivity(account.id)
   const remind = useSaveReminder(account.id)
   const { member, setMemberId } = useEnteringAs(members)
   const [reviewing, setReviewing] = useState<Values | null>(null)
@@ -91,7 +108,25 @@ export function AddEntry({
   // A date after today is a plan, saved as a reminder: it never changes the Balance or a month's totals.
   const isReminder = (date: string) => !editing && date > today
   const futureDate = useWatch({ control, name: 'occurredOn' })
-  const save = editing ? replace : reviewing && isReminder(reviewing.occurredOn) ? remind : record
+  // An expense that explains a Balance correction (same day, same amount) can replace it, so the money is
+  // counted once as spending and the Balance does not move (V2_CHECKING_014).
+  const reviewAmount = reviewing ? parseAmount(reviewing.amount) : null
+  const match =
+    kind === 'expense' && !editing && reviewing && reviewAmount && !isReminder(reviewing.occurredOn)
+      ? activity.data?.find(
+          (row) =>
+            row.kind === 'correction' &&
+            row.occurredOn === reviewing.occurredOn &&
+            Number(row.amount) === -Number(reviewAmount),
+        )
+      : undefined
+  const [separate, setSeparate] = useState(false)
+  const replacing = editing ?? (separate ? undefined : match)
+  const replace = useReplaceEntry(account.id, replacing?.id ?? '')
+  const monthSpending = useSpending(
+    match && !separate && reviewing ? reviewing.occurredOn.slice(0, 7) : '',
+  )
+  const save = replacing ? replace : reviewing && isReminder(reviewing.occurredOn) ? remind : record
 
   const categoryName = (id: string) => categories.data?.find((c) => c.id === id)?.name ?? ''
 
@@ -107,11 +142,9 @@ export function AddEntry({
     if (isReminder(reviewing.occurredOn)) {
       const { occurredOn: dueOn, ...rest } = entry
       remind.mutate({ key, reminder: { ...rest, kind, dueOn } }, { onSuccess: onDone })
-    } else if (editing) {
-      replace.mutate(
-        { key, entry: { ...entry, reason: reviewing.reason.trim() } },
-        { onSuccess: onDone },
-      )
+    } else if (replacing) {
+      const reason = editing ? reviewing.reason.trim() : 'Replaced by the actual expense'
+      replace.mutate({ key, entry: { ...entry, reason } }, { onSuccess: onDone })
     } else {
       record.mutate({ key, entry }, { onSuccess: onDone })
     }
@@ -121,7 +154,7 @@ export function AddEntry({
     const reminder = isReminder(reviewing.occurredOn)
     // Advisory only: money that really left the account is still recorded (the bill was paid).
     const shortBy =
-      kind === 'expense' && !reminder
+      kind === 'expense' && !reminder && !(match && !separate)
         ? Number(parseAmount(reviewing.amount)) - Number(account.balance.amount)
         : 0
     return (
@@ -151,10 +184,34 @@ export function AddEntry({
           {reviewing.description.trim() && <Item label="Description">{reviewing.description}</Item>}
           {reviewing.reason.trim() && <Item label="Reason">{reviewing.reason.trim()}</Item>}
         </dl>
+        {match && !separate && (
+          <div className="mt-3 max-w-md rounded-control border border-line p-3 text-sm">
+            <p>
+              This matches the Balance correction of {formatMoney(Number(match.amount))} dated{' '}
+              {match.occurredOn}
+              {match.reason ? ` (${match.reason})` : ''}. You can replace that correction with this
+              expense.
+            </p>
+            <p className="mt-2">
+              {account.name} Balance will remain {formatMoney(Number(account.balance.amount))}.
+              {monthSpending.data &&
+                ` ${MONTH_NAMES[Number(reviewing.occurredOn.slice(5, 7)) - 1]} spending will become ${formatMoney(Number(monthSpending.data.total) + Number(reviewAmount))}.`}
+            </p>
+            <Button variant="ghost" size="sm" onClick={() => setSeparate(true)}>
+              Save as a separate expense instead
+            </Button>
+          </div>
+        )}
         <EnteredBy members={members} member={member} setMemberId={setMemberId} />
         <div className="mt-4 flex gap-2">
           <Button onClick={confirm} disabled={save.isPending || !member}>
-            {save.isPending ? 'Saving' : reminder ? 'Confirm reminder' : 'Confirm saving'}
+            {save.isPending
+              ? 'Saving'
+              : reminder
+                ? 'Confirm reminder'
+                : match && !separate
+                  ? 'Confirm replacement'
+                  : 'Confirm saving'}
           </Button>
           <Button variant="secondary" onClick={() => setReviewing(null)} disabled={save.isPending}>
             Back

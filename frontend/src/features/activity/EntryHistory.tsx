@@ -1,6 +1,7 @@
 import type { HistoryEntry } from '../../api/activity'
 import { Amount, Button, Table, Td, Th } from '../../design-system'
 import { useAccountHistory } from '../../hooks/useActivity'
+import { signedAmount } from './signedAmount'
 
 const STATUS = { effective: 'Effective', replaced: 'Replaced', removed: 'Removed' } as const
 const ACTION = { replaced: 'Replaced', removed: 'Removed', restored: 'Restored' } as const
@@ -15,9 +16,12 @@ function stamp(iso: string): string {
 /** Every saved entry of an account, including ones that were replaced or removed, newest first. */
 export function EntryHistory({
   accountId,
+  opening,
   onUndo,
 }: {
   accountId: string
+  /** The initial Balance lives on the account, not in the activity, so history shows it as its own row. */
+  opening?: { amount: string; on: string }
   /** Starts bringing a removed entry back; left out while another form is open. */
   onUndo?: (entry: HistoryEntry) => void
 }) {
@@ -25,9 +29,11 @@ export function EntryHistory({
 
   if (history.isPending) return <p className="text-sm text-ink-muted">Loading history</p>
   if (history.isError) return <p role="alert">{history.error.message}</p>
-  if (history.data.length === 0) {
+  if (history.data.length === 0 && !opening) {
     return <p className="mt-2 text-sm text-ink-muted">Nothing has been saved yet.</p>
   }
+  const replacement = (entry: HistoryEntry) =>
+    history.data.find((row) => row.id === entry.replacedById)
   return (
     <div className="mt-2 overflow-x-auto">
       <Table aria-label="History">
@@ -49,15 +55,22 @@ export function EntryHistory({
           {history.data.map((entry) => (
             <tr key={entry.id}>
               <Td className="whitespace-nowrap">{entry.occurredOn}</Td>
-              <Td>{entry.description ?? ''}</Td>
+              <Td>
+                {entry.kind === 'correction' ? 'Balance correction' : (entry.description ?? '')}
+              </Td>
               <Td>{entry.categoryName ?? ''}</Td>
               <Td className="text-right whitespace-nowrap">
-                <Amount
-                  value={entry.kind === 'income' ? Number(entry.amount) : -Number(entry.amount)}
-                />
+                <Amount value={signedAmount(entry)} />
               </Td>
               <Td>
                 {STATUS[entry.status]}
+                {entry.status === 'replaced' &&
+                  replacement(entry)?.kind === 'expense' &&
+                  entry.kind === 'correction' && (
+                    <span className="block text-caption text-ink-muted">
+                      Replaced by the {replacement(entry)?.categoryName ?? 'actual'} expense
+                    </span>
+                  )}
                 <ul className="text-caption text-ink-muted">
                   {entry.events.map((event) => (
                     <li key={`${event.action}-${event.at}`}>
@@ -86,8 +99,26 @@ export function EntryHistory({
               </Td>
             </tr>
           ))}
+          {opening && (
+            <tr>
+              <Td className="whitespace-nowrap">{opening.on}</Td>
+              <Td>Initial Balance</Td>
+              <Td />
+              <Td className="text-right whitespace-nowrap">
+                <Amount value={Number(opening.amount)} />
+              </Td>
+              <Td>Effective</Td>
+              <Td />
+              <Td />
+              <Td />
+            </tr>
+          )}
         </tbody>
       </Table>
+      <p className="mt-2 max-w-prose text-caption text-ink-muted">
+        &ldquo;Saved by&rdquo; is the household member chosen as entering the record. It is a note,
+        not proof that this person signed in.
+      </p>
     </div>
   )
 }

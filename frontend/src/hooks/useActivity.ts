@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   changeEntry,
+  getBalanceAsOf,
   getIncome,
   getMonthReview,
   getSpending,
@@ -11,11 +12,14 @@ import {
   listCategories,
   listIncomeEntries,
   listSpendingEntries,
+  previewCorrection,
   recordEntry,
   replaceEntry,
+  saveCorrection,
   saveReminder,
   type EditedEntry,
   type EntryKind,
+  type NewCorrection,
   type NewReminder,
   type NewEntry,
 } from '../api/activity'
@@ -75,6 +79,44 @@ export function useReplaceEntry(accountId: string, activityId: string) {
     mutationFn: ({ key, entry }: { key: string; entry: EditedEntry }) =>
       replaceEntry(accountId, activityId, key, entry),
     onSuccess: refresh,
+  })
+}
+
+/** Balance on a date, read-only; the current Balance is not touched. Pass '' for no date. */
+export function useBalanceAsOf(accountId: string, date: string) {
+  return useQuery({
+    queryKey: ['balance', accountId, date],
+    queryFn: () => getBalanceAsOf(accountId, date),
+    enabled: date !== '',
+  })
+}
+
+/** The review of a correction: figures from the server, nothing saved. */
+export function useCorrectionPreview(
+  accountId: string,
+  requested: string,
+  asOn: string,
+  replaces?: string,
+) {
+  return useQuery({
+    queryKey: ['correction-preview', accountId, requested, asOn, replaces ?? null],
+    queryFn: () => previewCorrection(accountId, requested, asOn, replaces),
+    enabled: requested !== '' && asOn !== '',
+    gcTime: 0,
+  })
+}
+
+/** Saves a correction. Repeating a call with the same `key` never saves a second one. */
+export function useSaveCorrection(accountId: string) {
+  const queryClient = useQueryClient()
+  const refresh = useRefreshMoney(accountId)
+  return useMutation({
+    mutationFn: ({ key, correction }: { key: string; correction: NewCorrection }) =>
+      saveCorrection(accountId, key, correction),
+    onSuccess: async () => {
+      await refresh()
+      await queryClient.invalidateQueries({ queryKey: ['balance', accountId] })
+    },
   })
 }
 
