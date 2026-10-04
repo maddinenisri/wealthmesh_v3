@@ -13,6 +13,10 @@ The files that carry the design, and what breaks or gets harder without each. Pa
 | `household/domain/*`                           | Table-mapped records with `@Id UUID`                                          | DB-generated ids; null id means insert                      |
 | `account/service/AccountService`               | `create`, `update`, `findAll`, `findById`; `parse` validates (name, amount, type, date); owners must belong to the household | One place for account rules; edit never touches money (D-017) |
 | `account/repository/AccountOwnerStore`         | Owner links (composite key) with plain SQL: `replace`, `ownersByAccount`, `ownersOf` | Joint accounts later need no schema change                  |
+| `activity/service/EntryService`                | `record(accountId, key, kind, request)`: validates and saves an expense or income; replay by key (D-024) | One place for money in and out; `kind` picks the category kind and the Balance direction |
+| `activity/repository/ActivityStore`            | SQL: Balance deltas, account activity, month totals and entries by kind       | Removed rows never count; transfers and corrections stay out of income and spending |
+| `spending/service/SpendingService`             | Month income, spending, `review` (Income minus spending), history              | The month review reads only `income` and `expense` rows    |
+| `wealth/service/WealthService`                 | `summary`: positive bank Balances are assets, negative are debts (D-022)       | The one place household totals are computed                |
 | `account/mapper/AccountMapper`                 | Abstract mapper; `balance(account)` is the one place Balance is computed      | Row 03 adds activity to this method                         |
 | `money/Money`                                  | `parse` (string, two decimals) and `format`                                   | JSON money is a string (foundations 1)                      |
 | `clock/ClockConfiguration`, `TodayController`  | The one `Clock` bean (zone, `wealthmesh.clock.fixed-today`) and `GET /api/v1/today` | Never call `now()` without it; the UI reads today from here |
