@@ -1,0 +1,4 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/schibsted-grotesk';
+@import '@fontsource-variable/newsreader';
+@import './design-system/tokens.css';

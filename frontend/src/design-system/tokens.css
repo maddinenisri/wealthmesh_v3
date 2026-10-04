@@ -1,0 +1,101 @@
+/*
+ * WealthMesh design tokens.
+ * Semantic values live in CSS variables (light on :root, dark under .dark);
+ * @theme inline maps them to Tailwind utilities (bg-surface, text-ink-muted, ...).
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --canvas: #f3f6f4;
+  --surface: #ffffff;
+  --sunken: #e8eeeb;
+  --line: #d3dcd8;
+  --ink: #172625;
+  --ink-muted: #55655f;
+
+  --primary: #1b6b5f;
+  --primary-hover: #14544a;
+  --primary-soft: #d9ece8;
+  --on-primary: #ffffff;
+
+  --brass: #8a6414;
+  --brass-soft: #f3e7c9;
+  --positive: #1f7a46;
+  --positive-soft: #dcefe3;
+  --negative: #b03a35;
+  --negative-soft: #f6dedc;
+}
+
+.dark {
+  --canvas: #0e1716;
+  --surface: #152221;
+  --sunken: #0a1211;
+  --line: #263836;
+  --ink: #e6efec;
+  --ink-muted: #98aba5;
+
+  --primary: #4fb8a5;
+  --primary-hover: #6bcbb9;
+  --primary-soft: #14332f;
+  --on-primary: #07201c;
+
+  --brass: #e0b456;
+  --brass-soft: #3a2f14;
+  --positive: #5cc48a;
+  --positive-soft: #123023;
+  --negative: #f07c76;
+  --negative-soft: #3a1b1a;
+}
+
+@theme {
+  --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Newsreader Variable', Georgia, serif;
+
+  --radius-control: 0.375rem;
+  --radius-surface: 0.75rem;
+
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.25rem;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-on-primary: var(--on-primary);
+  --color-brass: var(--brass);
+  --color-brass-soft: var(--brass-soft);
+  --color-positive: var(--positive);
+  --color-positive-soft: var(--positive-soft);
+  --color-negative: var(--negative);
+  --color-negative-soft: var(--negative-soft);
+}
+
+@layer base {
+  html {
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}
