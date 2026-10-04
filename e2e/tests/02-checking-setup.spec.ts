@@ -133,9 +133,11 @@ test.describe.serial('checking account setup journey', () => {
     await expect(main).toContainText('Initial Balance$5,000.00 on 2026-09-01')
 
     await page.getByRole('button', { name: 'Update balance' }).click()
-    await expect(page.getByLabel('Amount')).toBeVisible()
+    // Update balance is its own form with a review step (slice 03); nothing is saved from this screen.
+    await expect(page.getByLabel('Balance', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Date', { exact: true })).toHaveValue('2026-10-03')
-    await expect(page.getByRole('button', { name: 'Save balance' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Review' })).toBeEnabled()
+    await page.getByRole('button', { name: 'Cancel' }).click()
 
     await page.getByRole('link', { name: 'Accounts' }).click()
     await expect(row(page, 'Household Checking')).toContainText('Samira Rivera')
