@@ -35,10 +35,10 @@ Household finance app. Monorepo: `backend/` (Java 25, Spring Boot 4.1 WebFlux, R
 
 ## Feature sessions
 
-The product is built one requirements file per session, from `docs/requirements/v2` (39 files, 262 scenarios with
+The product is built one slice per session (scenario IDs in `docs/features/slices.txt`, order in `docs/features/dependency-map.md`), from `docs/requirements/v2` (39 files, 262 scenarios with
 stable `@V2_...` IDs; a read-only snapshot). Status board: `docs/features/INDEX.md`. Run the `feature-session` skill.
 
-- Every test cites the scenario ID(s) it covers. `npm run coverage -- --require <path>` checks it.
+- Every test cites the scenario ID(s) it covers. `npm run coverage -- --require --slice NN` checks it.
 - v1 is running at `http://localhost:3000` as a read-only UX reference. Never change its data or its repository.
 - Never edit a `.feature` file. Record deviations as decisions in the feature's notes.
 - Each session ends green: `npm run e2e` passes on `main`. Add a retro row in `docs/process/retro.md`.

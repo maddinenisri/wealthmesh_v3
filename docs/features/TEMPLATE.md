@@ -12,7 +12,7 @@ the session working it. Keep it short; it exists so the next session needs no me
 Paste, verbatim, the kickoff prompt that started this session (see `docs/process/prompts.md`, note its version), then
 add each instruction or answer the product owner gave at a checkpoint, with the date. No transcripts, no secrets.
 
-- Kickoff prompt (v1):
+- Kickoff prompt (v2):
 - <date> Checkpoint 1 answer:
 - <date> Checkpoint 2 answer:
 
@@ -37,7 +37,7 @@ it by name, for example in the test title or a comment.
 
 ## Coverage
 
-Filled from `npm run coverage -- <path>`: ID, test file, level. Deferred or blocked IDs also go in
+Filled from `npm run coverage -- --slice NN`: ID, test file, level. Deferred or blocked IDs also go in
 `deferred.txt` with a reason.
 
 ## Open questions

@@ -16,7 +16,7 @@ Record the start time. If a limit is hit, apply the stop rule below instead of p
 
 | Step | Limit | Do |
 | --- | --- | --- |
-| 1 Orient | 10 min | `preflight`. Read `INDEX.md`, the slice's IDs in `slices.txt`, the feature files that contain them and `dependency-map.md`, `docs/guides/domain-foundations.md`, `docs/decisions/decisions.md`, the open rows in `docs/decisions/questions.md`, the last `docs/process/retro.md` rows and the previous feature's handoff. Copy `TEMPLATE.md` to `docs/features/slice-NN-<name>.md` and paste the kickoff prompt into its "Prompts and directions" |
+| 1 Orient | 10 min | `preflight`. Read `INDEX.md`, the slice's IDs in `slices.txt`, the feature files that contain them and `dependency-map.md`, `docs/guides/domain-foundations.md`, `docs/decisions/decisions.md`, the open rows in `docs/decisions/questions.md`, the last `docs/process/retro.md` rows and the previous slice's handoff. Copy `TEMPLATE.md` to `docs/features/slice-NN-<name>.md` and paste the kickoff prompt into its "Prompts and directions" |
 | 2 Gap analysis | 10 min | Compare each scenario ID with the code that exists, and confirm each ID of the slice is citeable now (the map says it should be). If one is blocked, say so at checkpoint 1 and defer it whole (D-016); if fewer than half are citeable the map is wrong, so lead with that. Open v1 at `http://localhost:3000` only to settle an unclear scenario (read only) |
 | 3 Task list | | Group scenarios, give each group a test level (unit, API, UI, e2e), write it in the feature notes |
 | **Checkpoint 1** | | Show the task list and stop. Proceed only when the user approves it; record the answer in the notes |

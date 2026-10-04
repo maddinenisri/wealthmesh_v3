@@ -9,7 +9,7 @@
 | D-005 | 2026-10-04 | Frontend libraries | TanStack Query, react-hook-form, react-router data mode, Tailwind 4 | Prefer standard libraries over hand-built layers (v2 lesson) | active |
 | D-006 | 2026-10-04 | Delivery | One fat jar serves UI and API; pm2 runs two processes in dev and one in prod | Simple to hand to a customer | active |
 | D-007 | 2026-10-04 | Ports | db 5434, backend 8081, frontend 5180 | Avoid wealthmesh_v2's ports on the same machine | active |
-| D-008 | 2026-10-04 | Build order | One requirements feature file per session, in dependency order; foundations (row 00) first | Time-boxed, restartable, usable product after wave 1 | active |
+| D-008 | 2026-10-04 | Build order | One requirements feature file per session, in dependency order; foundations (row 00) first | Time-boxed, restartable, usable product after wave 1 | superseded by D-018 |
 | D-009 | 2026-10-04 | Approval | Product owner approves the task list per feature and looks at the running app at the end; no per-sub-task approval | v2's per-step approval was too slow | active |
 | D-010 | 2026-10-04 | Requirements | Snapshot lives in `docs/requirements`; read-only; `.feature` files are never edited; deviations are recorded as decisions | Keeps the source of truth stable and traceable | active |
 | D-011 | 2026-10-04 | v1 application | Running at http://localhost:3000; read-only UX reference; its data and repository are never changed | Product owner answer (Q-001) | active |

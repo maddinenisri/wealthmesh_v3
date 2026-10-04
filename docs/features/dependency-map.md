@@ -603,7 +603,7 @@ Adopted as `docs/features/INDEX.md`. Rows became sessions (slices), each with th
 Changes made on adoption (2026-10-04):
 
 1. `scripts/scenario-coverage.sh` takes `--slice NN`, reading IDs from `slices.txt`, with a self-test. `--require <path>` still works once a file's last slice has landed. Existing tests are unaffected.
-2. `feature-session` skill and `docs/process/prompts.md`: "one row" means one slice; the kickoff names the slice number; notes file is `docs/features/slice-NN-<name>.md` (the template is unchanged).
+2. `feature-session` skill and `docs/process/prompts.md`: "one row" means one slice; the kickoff names the slice number; notes file is `docs/features/slice-NN-<name>.md` (the template wording changes from feature file to slice).
 3. `decisions.md`: D-018 (slice is the unit, refines D-008), D-019 (savings to slice 06, supersedes D-015), D-020, D-021.
 4. `deferred.txt`: reasons now point to slices 01 and 04; the IDs leave when those slices land.
 
