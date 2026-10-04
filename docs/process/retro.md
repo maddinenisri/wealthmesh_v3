@@ -10,3 +10,4 @@ a note.
 | Date | Session | What slowed it | Change to try | Promoted (commit) |
 | --- | --- | --- | --- | --- |
 | 2026-10-04 | setup (project bootstrap) | Integration bugs found late; port and JDK surprises | Added `preflight`, pitfalls list and playbook gates | `docs: add project playbook` |
+| 2026-10-04 | planning (status board order) | The board was ordered by README folder names; the first file, `household/setup`, needs six later account types | Order by reading scenarios and grepping cross-type references; the count is now in each wave-1 Notes cell | first occurrence, none |

@@ -4,6 +4,10 @@ One feature file per session, in this order. Order follows dependencies, not the
 starts with the whole-journey file, but that is the acceptance thread, so it is built last and its e2e spec grows a
 step in each session. After wave 1 there is a usable product; later waves add breadth.
 
+**Order check:** files are ordered by reading their scenarios, not their folder names. The Notes column gives the
+number of references to other account types (a grep for savings, credit card, brokerage, 401k, IRA, defined benefit,
+HSA and holdings). A file with many is acceptance-shaped and goes late in its wave.
+
 **Updating:** the session that works a row edits it (status, date, commit) and links the feature notes file in the Notes column. Statuses: `todo`, `in-progress`,
 `partial` (some scenarios deferred or blocked, see `deferred.txt`), `done`. Done means the coverage script reports no
 missing scenarios for the file, the validator report is clean, `npm run e2e` passes and the work is pushed.
@@ -29,13 +33,13 @@ One row per session. Do not start a second row, even if time remains; finish the
 | --- | --- | ---: | :-: | --- | --- | --- | --- |
 | 00 | foundations: `docs/guides/domain-foundations.md` | - | - | todo | | | Decide money, dated balance, clock, account model before any feature |
 | | **Wave 1: walking skeleton (usable product after these)** | | | | | | |
-| 01 | `household/setup/set-up-household.feature` | 5 | S | todo | | | |
-| 02 | `household/members/manage-members.feature` | 6 | M | todo | | | |
-| 03 | `accounts/checking/setup.feature` | 7 | M | todo | | | |
-| 04 | `accounts/checking/activity.feature` | 11 | L | todo | | | |
-| 05 | `spending/income/record-income.feature` | 6 | M | todo | | | |
-| 06 | `spending/expenses/record-expenses.feature` | 11 | L | todo | | | |
-| 07 | `household/overview/understand-wealth.feature` | 11 | L | todo | | | |
+| 01 | `accounts/checking/setup.feature` | 7 | M | todo | | | No cross-type references. 006 (recovery of an older saved file) and the salary half of 002 depend on later features; defer with reasons. Needs the account model and owner join from foundations. |
+| 02 | `household/members/manage-members.feature` | 6 | M | todo | | | 6 cross-type references. Joint-account scenarios need an account to exist, so it follows checking/setup. |
+| 03 | `accounts/checking/activity.feature` | 11 | L | todo | | | 9 cross-type references: read before planning. |
+| 04 | `spending/income/record-income.feature` | 6 | M | todo | | | 8 cross-type references: read before planning. |
+| 05 | `spending/expenses/record-expenses.feature` | 11 | L | todo | | | 11 cross-type references: read before planning. |
+| 06 | `household/overview/understand-wealth.feature` | 11 | L | todo | | | 35 cross-type references: acceptance-shaped. Expect heavy deferral until more account types exist. |
+| 07 | `household/setup/set-up-household.feature` | 5 | S | todo | | | Acceptance-shaped (10 references). 002 and 005 need credit card, brokerage, 401k, IRA and defined benefit (wave 3); 001, 003 and 004 need checking and savings. |
 | | **Wave 2: everyday money** | | | | | | |
 | 08 | `accounts/checking/transfers.feature` | 3 | S | todo | | | |
 | 09 | `accounts/savings/setup.feature` | 6 | M | todo | | | |
