@@ -34,7 +34,7 @@ One row per session. Do not start a second row, even if time remains; finish the
 | 00 | foundations: `docs/guides/domain-foundations.md` | - | - | done | 2026-10-04 | see git log | Money, dated balance, clock, account model decided. Notes: `00-foundations.md` |
 | | **Wave 1: walking skeleton (usable product after these)** | | | | | | |
 | 01 | `accounts/checking/setup.feature` | 7 | M | partial | 2026-10-04 | see git log | 5 covered; 002 (salary needs income, row 04) and 006 (legacy file) deferred whole. Account, owner, clock, `/today` and money helpers exist. Notes: `accounts-checking-setup.md` |
-| 02 | `household/members/manage-members.feature` | 6 | M | todo | | | 6 cross-type references. Joint-account scenarios need an account to exist, so it follows checking/setup. |
+| 02 | `household/members/manage-members.feature` | 6 | M | todo | | | Parked 2026-10-04: 4 of 6 need rows 03 and 05, 2 of 6 need wave 3; revisit after row 05. Gap analysis in `household-members-manage-members.md`. The member delete 500 was fixed separately (409). |
 | 03 | `accounts/checking/activity.feature` | 11 | L | todo | | | 9 cross-type references: read before planning. |
 | 04 | `spending/income/record-income.feature` | 6 | M | todo | | | 8 cross-type references: read before planning. |
 | 05 | `spending/expenses/record-expenses.feature` | 11 | L | todo | | | 11 cross-type references: read before planning. |
