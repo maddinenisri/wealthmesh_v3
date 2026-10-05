@@ -4,6 +4,7 @@ import { Button, Card, CardTitle, FormAlert } from '../../design-system'
 import { useChangeEntry, useIncome, useSpending } from '../../hooks/useActivity'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney } from '../../lib/money'
+import { balanceText } from '../accounts/cardBalance'
 import { EnteredBy } from './EnteredBy'
 
 /** The part of an entry the review shows; both the activity list and history rows fit it. */
@@ -81,7 +82,7 @@ export function ChangeEntry({
         <Item label="Date">{entry.occurredOn}</Item>
         <Item label="Amount">{formatMoney(Number(entry.amount))}</Item>
         <Item label={`${account.name} Balance after ${mode === 'remove' ? 'removal' : 'Undo'}`}>
-          {formatMoney(balanceAfter)}
+          {balanceText(account.type, String(balanceAfter))}
         </Item>
         <Item label={label}>{monthAfter === null ? '' : formatMoney(monthAfter)}</Item>
       </dl>

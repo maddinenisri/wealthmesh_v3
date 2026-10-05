@@ -259,7 +259,12 @@ export function AddEntry({
             </Button>
           </div>
         )}
-        {editing && effect.data && <MoveFigures preview={effect.data} />}
+        {editing && effect.data && (
+          <MoveFigures
+            preview={effect.data}
+            typeOf={(id) => accounts.data?.find((candidate) => candidate.id === id)?.type}
+          />
+        )}
         {editing && effect.isError && <FormAlert message={effect.error.message} />}
         <EnteredBy members={members} member={member} setMemberId={setMemberId} />
         <div className="mt-4 flex gap-2">
@@ -331,7 +336,7 @@ export function AddEntry({
             required: 'Enter a date',
             validate: (value) =>
               value <= today
-                ? !editing ||
+                ? (!editing && !onCard) ||
                   value >= targetOf(chosenId).openedOn ||
                   "This date is before the account's opening date"
                 : !editing || 'Future activity cannot replace a saved entry',

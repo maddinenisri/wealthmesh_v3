@@ -12,7 +12,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
  * Card purchases, refunds, interest and fees (slice 08 group B). Spending is expenses minus refunds, defined once in
  * the store, so every figure below must agree.
  */
-class CardActivityApiTests extends LedgerApiTestBase {
+class CardActivityApiTests extends CardPaymentTestBase {
 
     private static String blankCard;
     private static String zeroCard;
@@ -157,6 +157,26 @@ class CardActivityApiTests extends LedgerApiTestBase {
         assertBalance(checking, "450.00");
         webTestClient.get().uri("/api/v1/spending?month=2026-09&accountId=" + checking).exchange().expectBody()
                 .jsonPath("$.total").isEqualTo("50.00");
+    }
+
+    @Order(7)
+    @Test
+    @DisplayName("V2_CARD_008 a refund sent twice at once with one key saves once: 201 and 200; a late retry replays")
+    void refundSameKeyAtOnce() throws Exception {
+        String owed = card("Twice Card", "100.00", "owed", "2026-09-01");
+        String k = "refund-twice";
+        java.util.List<Integer> statuses = both(owed,
+                () -> refund(owed, k, "20.00", "2026-09-12", "Groceries"),
+                () -> refund(owed, k, "20.00", "2026-09-12", "Groceries"));
+        org.assertj.core.api.Assertions.assertThat(statuses).containsExactlyInAnyOrder(200, 201);
+        assertBalance(owed, "-80.00");
+        assertActivityCount(owed, 1);
+        // The ledger moves on, then the client retries: the same answer, nothing new; other details are a conflict.
+        saveExpense(owed, "twice-later", "5.00", "2026-09-13", "Groceries");
+        refund(owed, k, "20.00", "2026-09-12", "Groceries").expectStatus().isOk();
+        refund(owed, k, "21.00", "2026-09-12", "Groceries").expectStatus().isEqualTo(409);
+        assertBalance(owed, "-85.00");
+        assertActivityCount(owed, 2);
     }
 
     private WebTestClient.ResponseSpec refund(String accountId, String key, String amount, String date,

@@ -115,4 +115,46 @@ describe('card purchases and refunds', () => {
     expect(table).toHaveTextContent('Everyday Credit Card')
     expect(table).toHaveTextContent('-$20.00')
   })
+  it('V2_CARD_009 explains a purchase dated before the card opened at the Date field, with nothing saved', async () => {
+    const api = mockApi({ household, members: [maya, sam], accounts: [card('1000.00')] })
+    const { user } = renderRoute(`/accounts/${card('1000.00').id}`)
+    await user.click(await screen.findByRole('button', { name: 'Record purchase' }))
+
+    await fill(user, { amount: '$100.00', date: '2026-08-15', category: 'Groceries' })
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+
+    expect(await screen.findByText("This date is before the account's opening date")).toBeVisible()
+    expect(screen.getByLabelText('Date')).toHaveFocus()
+    expect(screen.getByLabelText('Amount')).toHaveValue('$100.00')
+    expect(api.activity).toHaveLength(0)
+  })
+
+  it('V2_CARD_006 reviews the removal of a card purchase in owed terms, then restores the debt', async () => {
+    const owed = card('1100.00')
+    const api = mockApi({
+      household,
+      members: [maya, sam],
+      accounts: [{ ...owed, balance: { amount: '-1100.00', asOf: '2026-09-10' } }],
+      activity: [
+        {
+          id: 'p1',
+          accountId: owed.id,
+          kind: 'expense',
+          amount: '100.00',
+          occurredOn: '2026-09-10',
+          description: 'Groceries run',
+          categoryId: 'c0000000-0000-4000-8000-000000000003',
+          enteredByMemberId: maya.id,
+        },
+      ],
+    })
+    const { user } = renderRoute(`/accounts/${owed.id}`)
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    await user.click(await screen.findByRole('button', { name: 'Remove Groceries run' }))
+
+    const review = await screen.findByRole('region', { name: 'Review removal' })
+    expect(review).toHaveTextContent('Everyday Credit Card Balance after removal$1,000.00 owed')
+    await user.click(screen.getByRole('button', { name: 'Confirm removal' }))
+    await waitFor(() => expect(api.accounts[0].balance.amount).toBe('-1000.00'))
+  })
 })
