@@ -126,6 +126,10 @@ describe('paying a card', () => {
     // Correct it to $400.00 on September 21: the card and checking move together.
     await user.click(screen.getByRole('button', { name: 'Edit payment from Everyday Checking' }))
     const amount = await screen.findByLabelText('Amount')
+    // The correction starts from the saved payment.
+    expect(amount).toHaveValue('500.00')
+    expect(screen.getByLabelText('Date')).toHaveValue('2026-09-20')
+    expect(screen.getByLabelText('Paid from')).toHaveDisplayValue('Everyday Checking (Checking)')
     await user.clear(amount)
     await user.type(amount, '400.00')
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-21' } })

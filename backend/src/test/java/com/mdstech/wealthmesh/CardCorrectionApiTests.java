@@ -169,6 +169,36 @@ class CardCorrectionApiTests extends CardPaymentTestBase {
                 .jsonPath("$.length()").isEqualTo(2);
     }
 
+    @Order(8)
+    @Test
+    @DisplayName("V2_CARD_010 a correction sent twice at once with one key saves once; a late retry replays")
+    void correctionSameKeyAtOnce() throws Exception {
+        String owed = card("Key Correction Card", "1000.00", "owed", "2026-09-01");
+        String k = "d-twice";
+        java.util.List<Integer> statuses = both(owed,
+                () -> correct(owed, k, "600.00", "owed", "2026-09-30", "Statement"),
+                () -> correct(owed, k, "600.00", "owed", "2026-09-30", "Statement"));
+        org.assertj.core.api.Assertions.assertThat(statuses).containsExactlyInAnyOrder(200, 201);
+        assertBalance(owed, "-600.00");
+        saveExpense(owed, "d-twice-later", "5.00", "2026-09-30", "Groceries");
+        correct(owed, k, "600.00", "owed", "2026-09-30", "Statement").expectStatus().isOk();
+        correct(owed, k, "650.00", "owed", "2026-09-30", "Statement").expectStatus().isEqualTo(409);
+        assertBalance(owed, "-605.00");
+    }
+
+    @Order(9)
+    @Test
+    @DisplayName("V2_SUPPORTING_RECORD_001 a card statement sent twice at once with one key saves once")
+    void statementSameKeyAtOnce() throws Exception {
+        String owed = card("Key Statement Card", "1000.00", "owed", "2026-09-01");
+        java.util.List<Integer> statuses = both(owed,
+                () -> post(owed, "statements", "s-twice", statement("2026-09-30", "1000.00", "owed", "September")),
+                () -> post(owed, "statements", "s-twice", statement("2026-09-30", "1000.00", "owed", "September")));
+        org.assertj.core.api.Assertions.assertThat(statuses).containsExactlyInAnyOrder(200, 201);
+        webTestClient.get().uri("/api/v1/accounts/{id}/statements", owed).exchange().expectBody()
+                .jsonPath("$.length()").isEqualTo(1);
+    }
+
     private String statement(String date, String balance, String side, String note) {
         return """
                 {"statementOn": "%s", "balance": "%s"%s, "note": "%s", "enteredByMemberId": "%s"}"""

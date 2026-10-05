@@ -78,18 +78,28 @@ public class BalanceCorrectionService {
                 .flatMap(account -> validator.member(account, request.enteredByMemberId())
                         .flatMap(memberId -> activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
                                 .flatMap(existing -> replay(account, existing, request, memberId))
-                                .switchIfEmpty(Mono.defer(() -> create(account, key, request, memberId, now)))))
+                                .switchIfEmpty(Mono.defer(() -> create(account, key, request, memberId, now, cutoff)))))
                 .onErrorMap(DuplicateKeyException.class,
                         e -> conflict("This save was already used. Start a new entry."));
     }
 
     private Mono<EntryService.Saved> create(Account account, String key, CorrectionRequest request, UUID memberId,
-            Instant now) {
+            Instant now, Instant cutoff) {
         String reason = reason(request.reason());
         // The account row is locked first, so the Balance on the date is read and the row written with no other
         // correction (or replacement) of this account in between.
         // The account is read again under the lock: a starting-balance correction may have changed its opening.
-        Mono<EntryService.Saved> locked = store.lockAccount(account.id()).then(Mono.defer(() -> load(account.id())))
+        // A request with this key that finished while this one waited for the lock is replayed, not repeated.
+        Mono<EntryService.Saved> locked = store.lockAccount(account.id())
+                .then(Mono.defer(() -> activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
+                        .flatMap(existing -> replay(account, existing, request, memberId))
+                        .switchIfEmpty(Mono.defer(() -> writeLocked(account, key, request, memberId, now, reason)))));
+        return transactions.transactional(locked);
+    }
+
+    private Mono<EntryService.Saved> writeLocked(Account account, String key, CorrectionRequest request,
+            UUID memberId, Instant now, String reason) {
+        return load(account.id())
                 .flatMap(fresh -> figures(fresh, request.requestedBalance(), request.balanceSide(), request.asOn(),
                         request.replacesId()))
                 .flatMap(f -> {
@@ -106,7 +116,6 @@ public class BalanceCorrectionService {
                                             memberId, now)))
                                     .then(Mono.defer(() -> insert(row)));
                 });
-        return transactions.transactional(locked);
     }
 
     private Mono<EntryService.Saved> insert(Activity row) {

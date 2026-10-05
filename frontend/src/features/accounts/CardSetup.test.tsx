@@ -167,6 +167,10 @@ describe('editing a credit card', () => {
     const { user } = renderRoute(`/accounts/${everyday.id}/edit`)
 
     const name = await screen.findByLabelText('Account name')
+    // The form starts from what is saved, not from blanks.
+    expect(name).toHaveValue('Everyday Credit Card')
+    expect(screen.getByLabelText('Issuer')).toHaveValue('Harbor Cards')
+    expect(screen.getByRole('checkbox', { name: 'Maya' })).toBeChecked()
     await user.clear(name)
     await user.type(name, 'Household Card')
     const issuer = screen.getByLabelText('Issuer')

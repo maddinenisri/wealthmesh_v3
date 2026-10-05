@@ -154,6 +154,20 @@ class CardSetupApiTests extends LedgerApiTestBase {
                          "enteredByMemberId": "%s"}""".formatted(mayaId))
                 .exchange().expectStatus().isBadRequest().expectBody()
                 .jsonPath("$.message").isEqualTo("Use Update balance");
+        webTestClient.post().uri("/api/v1/accounts/{id}/historical-entries", owedCard)
+                .contentType(MediaType.APPLICATION_JSON).header("Idempotency-Key", "card-historical")
+                .bodyValue("""
+                        {"kind": "expense",
+                         "entry": {"description": "Old", "amount": "5.00", "occurredOn": "2026-08-01",
+                                   "category": "Groceries", "enteredByMemberId": "%s"},
+                         "startRevision": {"openingAmount": "900.00", "openedOn": "2026-08-01", "reason": "Fix",
+                                           "enteredByMemberId": "%s"}}""".formatted(mayaId, mayaId))
+                .exchange().expectStatus().isBadRequest().expectBody()
+                .jsonPath("$.message").isEqualTo("Use Update balance");
+        webTestClient.get().uri(("/api/v1/transfers/preview?fromAccountId=%s&toAccountId=%s&amount=5.00"
+                + "&occurredOn=2026-09-02").formatted(checking, owedCard)).exchange().expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.message").isEqualTo("Use Record payment to pay a card");
         // Reading the corrections of a card works (history loads them); only changing the start is refused.
         webTestClient.get().uri("/api/v1/accounts/{id}/starting-balance-corrections", owedCard).exchange()
                 .expectStatus().isOk().expectBody().jsonPath("$.length()").isEqualTo(0);

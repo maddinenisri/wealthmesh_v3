@@ -204,7 +204,7 @@ class CardPaymentRaceApiTests extends CardPaymentTestBase {
 
     @Order(8)
     @Test
-    @DisplayName("V2_CARD_007 a card or bank account changed to the wrong type while a payment waits is refused")
+    @DisplayName("V2_CARD_007 a payment to a checking account, and one to a removed payment, are refused by the server")
     void typeRuleHeldByTheServer() {
         String a = account("Type A", "100.00");
         String b = account("Type B", "100.00");
@@ -219,6 +219,29 @@ class CardPaymentRaceApiTests extends CardPaymentTestBase {
                 .formatted(a, owed, DATE, movement)).expectStatus().isEqualTo(409);
         replacePayment(movement, key(), a, owed, "5.00", DATE, "Late").expectStatus().isEqualTo(409);
         assertActivityCount(a, 0);
+    }
+
+    @Order(9)
+    @Test
+    @DisplayName("V2_CARD_013 a change sent twice at once with one key saves once: 201 and 200; a late retry replays")
+    void sameKeyForAChange() throws Exception {
+        String bank = account("Change Key Bank", "500.00");
+        String owed = card("Change Key Card", "100.00", "owed", "2026-09-01");
+        String movement = payment(bank, owed, "10.00", DATE);
+        String k = key();
+        List<Integer> statuses = both(bank, () -> replacePayment(movement, k, bank, owed, "20.00", DATE, "More"),
+                () -> replacePayment(movement, k, bank, owed, "20.00", DATE, "More"));
+        assertThat(statuses).containsExactlyInAnyOrder(200, 201);
+        assertBalance(bank, "480.00");
+        assertBalance(owed, "-80.00");
+        saveExpense(owed, "change-later", "5.00", "2026-09-12", "Groceries");
+        webTestClient.post().uri("/api/v1/household-members/{id}/deactivate", mayaId).exchange().expectStatus().isOk();
+        try {
+            replacePayment(movement, k, bank, owed, "20.00", DATE, "More").expectStatus().isOk();
+        } finally {
+            webTestClient.post().uri("/api/v1/household-members/{id}/restore", mayaId).exchange().expectStatus().isOk();
+        }
+        assertBalance(owed, "-85.00");
     }
 
     private String currentMovement(String account) {

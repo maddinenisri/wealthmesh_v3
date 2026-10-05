@@ -314,7 +314,7 @@ test.describe.serial('credit cards', () => {
       await page.getByRole('button', { name: 'Confirm payment' }).click()
       await expect(page.getByRole('main')).toContainText('$49.88 Card credit')
       await expect(page.getByRole('heading', { name: 'Activity' })).toBeInViewport()
-      await expect(page.getByText(`Payment from ${bank}`)).toBeVisible()
+      await expect(page.getByText(`Payment from ${bank}`)).toBeInViewport()
 
       // V2_CARD_013: correct, remove and restore; the card and the bank always move together.
       await page.getByRole('button', { name: `Edit payment from ${bank}` }).click()
