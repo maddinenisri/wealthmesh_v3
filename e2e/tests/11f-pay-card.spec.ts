@@ -104,12 +104,11 @@ test.describe.serial('pay a card from a bank account', () => {
     }
   }
 
-  test('Q-034 with no credit card the button is disabled and says why', async ({
+  test('Q-034 with a credit card in the household the button is enabled and the empty-state note is absent', async ({
     page,
     request,
   }) => {
-    // Every earlier spec leaves cards behind, so this account is checked through the empty-state wording only
-    // when no card exists; here the button must at least be present and enabled once a card exists.
+    // The disabled state (no card) is covered in PayCard.test.tsx: earlier specs leave cards behind.
     const bank = await open(request, {
       type: 'checking',
       name: 'Has Cards Checking',
