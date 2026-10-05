@@ -27,7 +27,10 @@ The files that carry the design, and what breaks or gets harder without each. Pa
 | `frontend/src/features/activity/BalanceCorrection.tsx` | Update balance form, review, reason, edit of a correction          | Edit starts from the Balance the correction made |
 | `frontend/src/features/activity/signedAmount.ts` | Effect of a row on the Balance (expense and transfer out negative, others as stored)           | Shared by the list and history |
 | `activity/service/MovementService`, `repository/MovementStore`, `TransferPreviewService`, `TransferController` | Create, replace, remove, Undo and convert-from-expense for a transfer pair; `MovementKind` is the seam for card payments; `lockAccounts` locks lowest id first; `preview` shows each account's Balance after | One movement writer, one lock order; the UI never sends one side (slice 07, D-036) |
+| `activity/service/MovementConfiguration`, `CardPaymentController` | One `MovementService` bean per `MovementKind` (`transfers`, `cardPayments`); `/api/v1/card-payments` for create, preview, replacement, removal, Undo | A card payment is the transfer mechanism with `card_payment` / `card_payment_in` rows; the kind carries its pair rule (D-040) |
+| `account/service/AccountService.signed` | A card's typed amount plus `balanceSide` to the stored asset-signed amount | One rule for setup, Update balance and statements (D-038) |
 | `activity/repository/ActivityStore`            | SQL: Balance deltas, account activity, month totals and entries by kind       | Removed rows never count; transfers and corrections stay out of income and spending |
+| `activity/repository/ActivityStore.Counted` | `Counted.of(kind, prefix)`: the filter and per-row value of a month figure (spending = expenses minus refunds, income = income) | The one definition every month reader builds from; change spending in one place (D-039) |
 | `spending/service/SpendingService`             | Month income, spending, `review` (Income minus spending), history              | The month review reads only `income` and `expense` rows    |
 | `wealth/service/WealthService`                 | `summary`: positive bank Balances are assets, negative are debts (D-022)       | The one place household totals are computed                |
 | `account/mapper/AccountMapper`                 | Abstract mapper; `balance(account)` is the one place Balance is computed      | Row 03 adds activity to this method                         |
@@ -71,6 +74,7 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | `features/activity/AddEntry.tsx`              | Money in or out, and edit (`editing` prop); a date after today becomes "Save reminder" | One form for add, correct and reminder; review before save |
 | `features/activity/ChangeEntry.tsx`           | Review for remove and Undo with the Balance and month figure after             | Nothing changes until Confirm; Cancel leaves it as it was    |
 | `features/transfers/TransferForm.tsx`, `TransferChange.tsx`, `ChangeToTransfer.tsx`, `TransferFigures.tsx` | Add or correct a transfer, review a removal or Undo, change an expense to a transfer; Balances after come from `GET /transfers/preview` | Both sides change together, so the UI only ever sends the pair (slice 07) |
+| `features/accounts/cardBalance.ts`, `BalanceFigure.tsx` | `isCard`, `cardSide`, `balanceText` and the figure component: a card reads "$1,000.00 owed" or "$50.00 Card credit" from the signed Balance | Every place a Balance is shown goes through these, so a card never shows a minus sign or "Overdrawn" |
 | `features/activity/EntryHistory.tsx`, `RemindersCard.tsx` | History table (replaced and removed rows, Undo) and the account's reminders | Where the originals and plans are visible                    |
 | `features/statements/*`                       | `StatementsCard` list and `StatementForm` (attach; revise with review and Cancel) | Supporting statements beside Reminders; no money effect     |
 | `features/activity/UpdateBalance.tsx`, `StartingBalanceCorrection.tsx`, `HistoricalSetup.tsx` | Update balance choice, starting-balance review, reviewed move of the start for a pre-start entry | Where L8 and L9 live in the UI |
@@ -101,6 +105,7 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | `e2e/tests/01-household.spec.ts`       | The ordered journey from an empty database; specs run by file name, so the number is the order |
 | `e2e/tests/02-checking-setup.spec.ts`  | Checking setup journey; needs the household and members left by 01                  |
 | `e2e/tests/11a-savings.spec.ts`        | Savings setup, edit, interest, and moving an entry to another account at 710px and 1280px; runs before 12 because 12 renames Alex Doe |
+| `e2e/tests/11c-cards.spec.ts`              | Card setup, purchases, refund, payment, Update balance and statement at 710px and 1280px; Spending for a card; runs before 12 (renames Alex Doe) |
 | `e2e/tests/12-members.spec.ts`         | Joint owners, rename, remove at 710px and 1280px; renames Alex Doe to Alex Patel, so it runs last |
 | `e2e/tests/shell.spec.ts`              | Shell, navigation without reload, not-found view, API and health endpoints           |
 | `.pre-commit-config.yaml`              | All hooks, grouped by stage                                                          |

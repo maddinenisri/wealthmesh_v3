@@ -94,9 +94,9 @@ Every shared row or state this slice changes, with each reader and writer (grep 
 | Row or state | Readers | Writers | Race test |
 | --- | --- | --- | --- |
 | `account` row lock (card and its paying bank account) | all writers below | `ActivityStore.lockAccount` callers: `EntryService.record`, `EntryChangeService` (undo, swap), `HistoricalEntryService`, `BalanceCorrectionService`, `OpeningRevisionService`, `StatementService`, `AccountService` (edit), `MovementService` | card payment waits behind each writer on the card and on the bank account and each waits behind it, both directions, holding one row only (`holdUncommitted`); fails when the lock is removed |
-| `account.opening_amount` sign for a card (new meaning of an existing column) | `AccountMapper.balance`, `WealthService.summary`, `OpeningRevisionService` (starting-balance correction, tracking start), `BalanceCorrectionService.balanceAsOf`, account list and detail, Household card | `AccountService.create` only (edit never touches it, D-017) | `OpeningRevisionService` on a card: correction keeps the sign and side (raw API); concurrent card edit vs opening revision |
+| `account.opening_amount` sign for a card (new meaning of an existing column) | `AccountMapper.balance`, `WealthService.summary`, `BalanceCorrectionService.balanceAsOf`, `StatementService` (a card statement keeps the same sign), account list and detail, Household card | `AccountService.create` only (edit never touches it, D-017); `OpeningRevisionService` refuses a card (`loadEditable`), so nothing else writes a card's opening | raw API: starting-balance change and preview refused on a card, reading the list allowed (`CardSetupApiTests`); no second writer to race |
 | `activity.kind` values `refund`, `card_payment`, `card_payment_in` (new use) | `SIGNED` (`deltasByAccount`, `deltaOf`, `changeUpTo`), `earliestOf`, `forAccount`, `history`, `monthTotal`, `totalsByCategory`, `monthEntries`, `spendingByMonth`, `TransferPreviewService.monthSpending`, `ReplacementPreviewService` (month figure, `signed`), `OpeningRevisionService` (counted entries), `EntryChangeService.original` (kind filter), `MovementService.legs`/`actor`/`toTransfer` and `MovementStore.legs` (order by kind: no positional reads), `signedAmount.ts`, `transferRows.ts`, `ActivityList`, `EntryHistory`, `transferRows.ts` | `EntryService` (refund), `MovementService` (card payment) | income and spending asserted for create, edit, remove, Undo; with and without an account filter; a start move against a card payment (refused after) |
-| Spending and month figures (spending = expense minus refund) | `SpendingService` (`summary`, `entries`, `review`, `history`), `SpendingController`, `IncomeController`, month review, `SpendingPage`, `TransferPreviewService`, `ReplacementPreviewService`, annual estimate | none (read by kind) | negative category total; refund in an earlier month; account filter with refund |
+| Spending and month figures (spending = expenses minus refunds; the one definition is `ActivityStore.Counted.of(kind, prefix)`) | `SpendingService` (`summary`, `entries`, `review`, `history`), `SpendingController`, `IncomeController`, month review, `SpendingPage`, `TransferPreviewService`, `ReplacementPreviewService`, annual estimate | none (read by kind) | negative category total; refund in an earlier month; account filter with refund |
 | Replace, remove and Undo state of a row (`removed_at`, `replaces_id`) | `history`, `clearRemoved`, previews | `markRemoved`, `clearRemoved` via `EntryChangeService` and `MovementService` | card payment remove vs edit: one wins; two Undo at once; Undo of a replaced pair refused; refund edit vs remove |
 | Per-row entry endpoints | `EntryChangeService.original` | n/a | raw API: payment legs 404 on the per-row endpoints; a refund row is accepted there |
 | Per-type rules (income, transfer, move target on a card) | `EntryService`, `HistoricalEntryService`, `BalanceCorrectionService`, `MoveTarget`, `MovementService`, `TransferPreviewService`, `AccountService.parse` | `AccountType` (one place) | raw API: income into a card, plain transfer to or from a card, move of income to a card, card payment between two banks or from a card: each refused |
@@ -121,7 +121,13 @@ Covers slices 00b to 08 (the owner asked for how often a Given was the only bloc
 | `V2_WEALTH_005` | same | yes | deferred whole (Q-027, Q-030) |
 | `V2_SAVINGS_005` | same | yes | deferred whole (Q-030) |
 | `V2_MEMBERS_001` | "who entered a record" chooser (a UI element) | yes | deferred in slice 00b (Q-012), built in 01a |
-| slice 08 | filled at Prove | | |
+| `V2_MONTHLY_002` | "checking paid that card $500.00" needs a card payment | yes, until group C | met by ordering: moved from group B to C inside the slice |
+| `V2_CARD_006` | payment from checking | yes, until group C | met by ordering (group C) |
+| `V2_CARD_010` | "Maya's September 30 statement shows $600.00 owed" needs a card statement and a payment | yes, until groups C and D | met by ordering (group D) |
+| `V2_SUPPORTING_RECORD_001` | "her card has one Balance of $1,000.00 owed" and an attached statement | yes, until the card existed (A) and its statement (D) | met by ordering (group D) |
+| `V2_CARD_002`, `003`, `008`, `011`, `012`, `013` | none beyond the card itself | no | built after group A |
+
+**Report (D-021):** across slices 00b to 08, 4 scenarios were blocked only by a Given that no feature could create: `V2_CHECKING_006`, `V2_WEALTH_005`, `V2_SAVINGS_005` (an account with no opening amount, Q-030; still deferred) and, for one session, `V2_MEMBERS_001` (a UI element; built in 01a). In slice 08 four Givens (MONTHLY_002, CARD_006, CARD_010, SUPPORTING_RECORD_001) were the only blocker for part of the session, and ordering the groups met all of them with no deferral and no direct database seeding. Strict Givens cost 3 deferred IDs out of 262 and no extra build time in this slice; loosening them would only help the 3 legacy-file scenarios, which Q-027 already judged not worth a throwaway seed. Recommendation: keep D-021 as it is.
 
 Levels: unit, API (Testcontainers), UI (Vitest + MSW), e2e (Playwright). Every test cites its scenario ID.
 
@@ -135,8 +141,27 @@ Levels: unit, API (Testcontainers), UI (Vitest + MSW), e2e (Playwright). Every t
 
 ## Coverage
 
-Filled from `npm run coverage -- --slice NN`: ID, test file, level. Deferred or blocked IDs also go in
-`deferred.txt` with a reason.
+`npm run coverage -- --require --slice 08`: 16/16 covered, 0 deferred. `--require accounts/credit-cards/setup.feature`: 6/6; `--require accounts/credit-cards/activity.feature`: 8/8.
+
+| ID | API | UI (MSW) | e2e (`11c-cards.spec.ts`, 710px and 1280px) |
+| --- | --- | --- | --- |
+| `V2_CARD_001` | `CardSetupApiTests` | `CardSetup.test.tsx` | adds a card owed |
+| `V2_CARD_002` | `CardActivityApiTests` | | purchases and fee on a card |
+| `V2_CARD_003` | `CardSetupApiTests` (wealth) | `CardSetup.test.tsx` (list, Household card) | Card credit in list and Household card |
+| `V2_CARD_004` | `CardSetupApiTests` | `CardSetup.test.tsx` | edit keeps the Balance |
+| `V2_CARD_005`, `V2_CARD_014` | `CardSetupApiTests` | `CardSetup.test.tsx` | name and amount errors in view and focused |
+| `V2_CARD_006` | `CardPaymentApiTests`, `CardPaymentRaceApiTests` | `CardActivity.test.tsx` (removal), `CardPayment.test.tsx` | pays a card |
+| `V2_CARD_007` | `CardPaymentApiTests` | `CardPayment.test.tsx` | review and Cancel |
+| `V2_CARD_008` | `CardActivityApiTests` | `CardActivity.test.tsx` | refund, every screen agrees |
+| `V2_CARD_009` | `CardActivityApiTests` | `CardActivity.test.tsx` | negative purchase |
+| `V2_CARD_010` | `CardCorrectionApiTests` | `CardCorrection.test.tsx` | Update balance review |
+| `V2_CARD_011` | `CardActivityApiTests` | | interest and fee |
+| `V2_CARD_012` | `CardPaymentApiTests` | `CardPayment.test.tsx` | overpayment as Card credit |
+| `V2_CARD_013` | `CardPaymentApiTests`, `CardPaymentRaceApiTests` | `CardPayment.test.tsx` | correct, remove, restore |
+| `V2_MONTHLY_002` | `CardPaymentApiTests` | `CardActivity.test.tsx` (Spending) | card in Spending |
+| `V2_SUPPORTING_RECORD_001` | `CardCorrectionApiTests` | `CardCorrection.test.tsx` | corrected statement |
+
+Race and keyed-save tests: `CardPaymentRaceApiTests` (9: lock waits on bank and card, member row, same key at once and retry, one winner, start move, no deadlock with transfers, type rule), `CardActivityApiTests.refundSameKeyAtOnce`, `CardCorrectionApiTests` (same key replay, concurrent statement revisions). Mutation runs: removing the refund sign in `ActivityStore.Counted` fails 4 refund tests; removing the card-income rule in `EntryValidator` fails 2; emptying `MovementStore.lockAccounts` fails 3 of 9 payment race tests (the rest still wait on the foreign-key share lock and the member lock, as in slice 07); reverting `ChangeEntry`'s card wording fails the removal review test.
 
 ## Open questions
 
