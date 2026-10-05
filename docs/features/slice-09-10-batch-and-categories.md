@@ -106,7 +106,7 @@ This slice mutates (tests): Groceries (rename, default class), Dining (default c
 - Group 1 done (commit `cdc3485`). Group 2 done and committed locally (2026-10-05): V15, lifecycle API (`CategoryLifecycleService`), merge as a pointer resolved in `ActivityStore` (effective category), category rows read `FOR SHARE` by entry saves and `FOR UPDATE` by category writes, Categories page with reviewed Rename, Change default, Archive, Restore, Merge and Undo, per-category History. Backend, frontend (162), e2e (100, run twice), lint and `npm run check` green. Race tests fail when the share lock or the `FOR UPDATE` is removed (mutation runs). Fix found by the e2e: a review that replaces a form inside one panel now scrolls and focuses its heading; `useReturnFocus` no longer scrolls (a card-payment e2e that checks the new row's position flaked once rows got taller).
 - Group 3 done and committed locally (2026-10-05): `POST /accounts/{id}/expense-batches` (`BatchEntryService`, one batch key stored as `<key>:i` per row, read under the account lock, member read FOR SHARE), the Add several form with review and Cancel, and Save and add another on the single form. Deviation from decision 9: no server preview endpoint; the review is computed in the browser from the entered rows and the account Balance, and the server validates every row on save (a bad row answers 400 `Row N: ...`). Race mutations (no account lock, no member share lock) fail the batch tests. Backend, frontend (166) and e2e (108, `11e-batch.spec.ts`) green.
 - Group 4 done and committed locally (2026-10-05): "Pay a card" on checking and savings (`TransferForm` `fromBank`: the bank is fixed, a card is chosen; disabled with a note when no card exists), same `/api/v1/card-payments` path, no server change. UI tests (`PayCard.test.tsx`) and e2e `11f-pay-card.spec.ts` at 710px and 1280px.
-- Next: Prove (coverage, validator, checklist), Checkpoint 2, Land.
+- Prove, Checkpoint 2 and Land are done (see the validator report, Cowork findings and Handoff below).
 
 ### Validator report (2026-10-05, HEAD b99d3e9) and what was done
 
@@ -122,6 +122,26 @@ Commands all passed (coverage 4/4 and 8/8, backend 304, frontend 170, e2e 113, l
 | 6 | Missing tests: replacement, batch and reminder with an archived category; rename race; a long list and a long name at 710px | added (`CategoryGuardsApiTests`, e2e long-name test); a new category is scrolled into view and focused after save |
 
 Known untested guard: the `checkCategoryLocked` re-check inside the replacement swap (the validator's plant stayed green). The first read already waits on an uncommitted archive; the re-check covers an archive that commits between that read and the swap. Left as defence in depth; a deterministic test would need a hook between the two. A historical entry (start move) with an archived category has no test of its own (same validator path as a plain save).
+
+
+### Build checklist after the fixes (builder's evidence; the validator was not re-run, the mutation runs below are the proof)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| Inventory | pass | inventory above, extended by the validator's grep (by-name read, `ReminderStore`) |
+| Raw-API test for every rule | pass | `CategoryApiTests`, `CategoryLifecycleApiTests` (`mergeGuards`, `renameGuards`), `CategoryGuardsApiTests.archivedCategoryRefused` (replacement, batch, reminder, by id and by name), `BatchEntryApiTests` (size, key, invalid row) |
+| State rule enforced where written, re-read under the lock | pass, one exception | by id and by name `FOR SHARE` (`byNameWaitsForArchive`); reminder save in a transaction. Exception: the `checkCategoryLocked` re-check in the replacement swap has no test of its own; a historical entry with an archived category has none either |
+| Every writer locks, `holdUncommitted` race test fails without it | pass | mutation runs: no `FOR SHARE` by id or by name, no `FOR UPDATE` on category rows, no batch account lock, no batch member share lock, no reminder account lock each turned a test red; `renameWaitsForRow`, `oppositeMerges` |
+| Keyed save: same-key at once and retry after the ledger changed | pass | `BatchEntryApiTests.sameKeyAtOnce`, `fourWeeklyPurchases`; reminder same-key test |
+| Every keyed save reads its key under the lock | pass | `BatchEntryService`, `ReminderService.saveLocked` (the unlocked member read in slice 01 `EntryService.record` is Q-035) |
+| A row-lock race test holds only that row | pass | category, member and account rows are each held alone |
+| Every test cites its scenario ID | pass | grep of titles; the Cowork e2e title now carries its IDs |
+| Panel, `useReturnFocus`, a swapped review scrolls and focuses | pass | `Panel` on every new panel; `useRevealReview`; e2e `confirm` helper checks focus inside the panel |
+| Playwright 710px and 1280px: top in view, focus inside, no sideways scroll; new row in view on a long list | pass | `11d`, `11e`, `11f` loops over both widths; the long-name test brings a new row into view at the end of a long list |
+| First error in view and focused; save finishes before leaving | pass | `11d` (blank and duplicate name), `11e` (invalid amount at its row) |
+| New type changes how a Balance or amount reads | n/a | no new account type; a class is a label |
+| Edit forms start from current values; long names wrap at 710px | pass | `EditCategory` starts from the current name and default; the long-name e2e |
+| New distinguishers show in the lists | pass | class, Archived category, Uncategorized and "(archived)" in Spending, asserted in e2e |
 
 
 ## Coverage

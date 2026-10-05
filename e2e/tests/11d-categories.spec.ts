@@ -101,7 +101,7 @@ test.describe.serial('categories and classes', () => {
       .filter({ has: page.locator('span.font-medium', { hasText: new RegExp(`^${name}$`) }) })
 
   for (const width of [710, 1280]) {
-    test(`Cowork findings 1 to 8 at ${width}px: history dates, focus after a change, the duplicate message at the field, review wording, an emptied merge target, archived in Spending, entries with no description`, async ({
+    test(`V2_CATEGORIES_003 V2_CATEGORIES_004 V2_CATEGORIES_005 V2_CATEGORIES_008 Cowork findings 1 to 8 at ${width}px: history dates, focus after a change, the duplicate message at the field, review wording, an emptied merge target, archived in Spending, entries with no description`, async ({
       page,
       request,
     }) => {
