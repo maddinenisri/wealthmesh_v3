@@ -125,3 +125,37 @@ Filled at checkpoint 1 if the owner raises any. Candidates: should an entry that
 - What slowed this session: the validator again found gaps after the build (a guard only in the UI: a correction could be moved; an enterer checked before the lock; a keyed retry that raced itself); two e2e failures were my own selectors and a navigation that aborted an in-flight save; the owner found the review's top cut off at 710px.
 - What went well: held-lock race tests with mutation checks for each writer, cross-account design settled at checkpoint 1 (locks in id order, history on both sides), every figure matched across surfaces in the owner's click-through.
 - Process change to try: for every rule, test the raw API for the forbidden case, not just the UI path; when a panel's content swaps in place (form to review), scroll and focus the new content, not only on mount; an e2e that leaves a page must first wait for the save to finish.
+
+## How it works
+
+Trial of the post-slice walkthrough (read-only agent over `bdb4830..0d2726f`, checked against the code by the builder of
+this review: files, test counts, the 404 and 400 rules and the lock order were confirmed; no tests were re-run).
+
+**What the user can do now**
+
+1. Accounts, Add account, choose **Savings** (Credit card, Brokerage, Loan and Mortgage still say "coming soon"). Enter name, bank, owners, Balance and date. A bad Balance keeps what you typed; Cancel adds nothing. The starting amount is not income.
+2. Open the account: Money in, Money out, Edit account and Update balance work as on checking. The Update balance review shows the new Balance before you confirm.
+3. Add money in with the Interest category: it shows on the savings account and under Spending, Income, as income.
+4. Move an entry: Edit it, pick another account in the **Account** chooser. The review shows both Balances and both months' totals. Cancel changes nothing; Confirm needs a reason. History on both accounts shows where it went and where it came from (for example a $6,000 Salary moved to savings as Bonus).
+
+**What changed**
+
+- Database: `V10__bonus_category.sql` adds the income category Bonus.
+- API: `AccountType.java` gains SAVINGS and `holdsActivity`; `ActivityController.java` gains `GET /activity/{activityId}/replacement/preview`; the replacement request takes an optional `accountId`; new `MoveTarget.java`, `ReplacementPreviewService.java`; `EntryChangeService.java` updated; history entries carry `replaces` and `replacedBy`.
+- UI: `features/accounts/accountTypes.ts`, `AccountForms.tsx`, `AccountDetailPage.tsx`; `features/activity/AddEntry.tsx`, `EntryHistory.tsx`, `MoveFigures.tsx`, `useReturnFocus.ts` (focus returns to the button that opened a panel).
+- Tests: `SavingsApiTests` (7), `MoveEntryApiTests` (15), `SavingsSetup.test.tsx`, `MoveEntry.test.tsx`, `SavingsInterest.test.tsx`, `e2e/tests/11a-savings.spec.ts`.
+
+**How a move works**
+
+1. The edit form sends the replacement with a target `accountId` and a save key.
+2. `MoveTarget.resolve` checks the target: another household or unknown id is 404; a type that cannot hold activity is 400.
+3. The entry is checked as before; a Balance correction cannot move (400).
+4. Both account rows are locked, lowest id first, so opposite moves cannot deadlock.
+5. Under the locks: replay the result if the key already finished; re-check who entered it; check the date against the target's tracking start; mark the original replaced exactly once (the loser of a race gets 409).
+6. The new entry is written on the target in the same transaction; the UI reloads both accounts.
+
+The one server gate for "can this account hold activity" is `AccountType.holdsActivity`, used by the entry, historical-entry and balance-correction writers and by `MoveTarget`. The UI list in `accountTypes.ts` mirrors it by hand.
+
+**Decisions and open items:** D-035 (savings has the checking shape; one server gate; moves lock both accounts; history shows both sides). Open: no account type in the Accounts list or Household card (product decision); history tables scroll inside their card at 710px (since slice 02); no test for a target in another household (the household is a singleton); Q-004 upgrades.
+
+**How to verify:** `npm run coverage -- --require --slice 06`, `npm test`, `npm run e2e`, `npm run check`. Screens: Add account (Savings); savings detail (Edit, Update balance, Interest); an entry's Edit, then the move review and both histories; Accounts list, Household card and Spending (figures agree).

@@ -111,6 +111,10 @@ The client builds an absolute URL (`new URL(path, window.location.origin)`), tur
 `ApiError(..., 0)`, and uses the server `message` or a plain fallback per status. The query client does not retry
 4xx responses, which will not change on retry.
 
+### Panels: `Panel` and `useReturnFocus`
+
+A form or review that opens above a long table is wrapped in `Panel` (`features/activity/Panel.tsx`): it scrolls into view and takes focus when it appears. `useReturnFocus` returns focus to the button that opened it when it closes. A panel whose content swaps in place (form to review) must scroll and focus the new content too. Test at 710px and 1280px: top in view, focus inside.
+
 ### Routing: data mode with a layout route
 
 `createBrowserRouter` with a pathless `AppLayout` (header, nav with `aria-current`, skip link, `Container` main,
@@ -134,6 +138,10 @@ actions). The footer sits at the bottom with `min-h-dvh flex flex-col` on the sh
 - `onUnhandledRequest: 'error'` makes any un-mocked request fail the test.
 - Assert "no request was made" using the request log when validation should stop a submit.
 - Prove each new test can fail: change the behaviour on purpose, watch it go red, restore it.
+
+### Race tests
+
+A lock claim is tested with `holdUncommitted` in `LedgerApiTestBase`: hold a write on a second connection, start the request, assert it is still waiting, commit, assert the result. The test must fail when the lock is removed.
 
 ## Tooling
 

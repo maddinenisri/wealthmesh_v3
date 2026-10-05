@@ -21,8 +21,22 @@ commit, so the effect can be judged in later retro rows.
 | 2026-10-04 | The validator found races after the build a third time (slice 04): keyed saves were tested, but other writers of the account row were not raced against a new capability that changes it | Build step: when a capability changes a row that other saves read (opening, start date, status), list every writer of that row, take the account lock in each and race each against the new change | `.claude/skills/feature-session/SKILL.md` | see git log |
 | 2026-10-05 | The validator found gaps after the build a fourth time (slice 05): a member-state rule enforced only in the UI, an unlocked writer, lock claims without a committed test | Build step: enforce a state rule where the server writes, at every use of the member; a race test holds an uncommitted write on a second connection and fails when the lock is removed; try a long name and label at 710px | Read the retro rows after slice 07; if validator findings on locks and rules are gone, keep |
 | 2026-10-05 | The validator found gaps after the build a fifth time (slice 06): a Balance correction could be moved through the raw API (guard only in the UI), an enterer checked before the lock, a keyed retry that raced itself; the owner found a review panel cut off at 710px (content swapped in place, not scrolled) | Build step: a raw-API test of every forbidden case a feature adds, scroll and focus on content that swaps in place, an e2e waits for a save before leaving the page | Slice 07 retro: did the validator find a UI-only guard? |
+| 2026-10-05 | First review of all changes (`review-2026-10-05.md`): each rule fixed the last bug, so the next bug in a new shape slipped through; the Build step had grown to one cell of about 330 words; Cowork found 5 UI faults that 65 e2e tests, the validator and the builder missed | Build rules moved to `build-checklist.md` (yes/no items); inventory of shared rows and their readers and writers at checkpoint 1; the validator fills the checklist, a blank item is a failure; `holdUncommitted` shared in `LedgerApiTestBase`; Cowork pass with `ui-checklist.md` at checkpoint 2, every fault becomes a failing test; `Panel` and `useReturnFocus` recorded in `patterns.md`; per-slice "How it works" walkthrough by a read-only agent | `docs/process/`, `.claude/skills/feature-session/SKILL.md`, `.claude/agents/validator.md`, `docs/guides/patterns.md`, `docs/features/TEMPLATE.md`, `LedgerApiTestBase.java` | see git log |
+
 
 ## How to judge a change
 
 After three sessions, read the retro rows that followed it. If the problem it targeted is gone, keep it. If it
 did not help, or added ceremony, remove it and say so here.
+
+## Judgements
+
+Each row is a change judged against the retro rows that followed it. Dates are when it was judged.
+
+| Date | Change | Verdict | Why |
+| --- | --- | --- | --- |
+| 2026-10-05 | Checkpoint 2 click-through prose (710px, 1280px) | Removed as a rule; replaced | The owner still found faults in 02, 03 and 05, and 04 skipped it. Now `ui-checklist.md` (Cowork) plus Playwright assertions |
+| 2026-10-05 | Per-slice race and retry prose (after 02, 03, 04, 05, 06) | Removed as prose; replaced | Each rule fixed the last bug only. Now the inventory at checkpoint 1 and the checklist the validator fills |
+| 2026-10-05 | `pattern-reviewer` agent | Unproven | No retro row mentions a run; decide after slice 07 |
+| 2026-10-05 | `preflight`, script self-tests, validator, coverage script, docs layout, citeable count at Orient, dependency map, scripted-edit asserts, lint in Prove, retro before closing commit | Kept | No recurrence of what each targeted after it landed |
+| 2026-10-05 | Checklist, inventory and shared race helper (this change) | Check at the slice 07 retro | Success: no defect in the validator's report that the checklist item already covered; Cowork faults per slice trending to zero by slice 08 |

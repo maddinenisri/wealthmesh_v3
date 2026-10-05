@@ -35,6 +35,13 @@ a choice to `docs/decisions/decisions.md` only when other features will rely on 
 Levels: unit, API (Testcontainers), UI (Vitest + MSW), e2e (Playwright). Each ID needs at least one test that cites
 it by name, for example in the test title or a comment.
 
+### Inventory
+
+Every shared row or state this slice changes, with each reader and writer (grep result, not memory):
+
+| Row or state | Readers | Writers | Race test |
+| --- | --- | --- | --- |
+
 ## Coverage
 
 Filled from `npm run coverage -- --slice NN`: ID, test file, level. Deferred or blocked IDs also go in
@@ -44,6 +51,16 @@ Filled from `npm run coverage -- --slice NN`: ID, test file, level. Deferred or 
 
 Anything that needs the product owner. Add it to `docs/decisions/questions.md` as well (that is the register the
 next session reads), and mark the answer and date in both places when resolved.
+
+## Cowork findings
+
+| # | Check | Result | Fault seen | Test added |
+| --- | --- | --- | --- | --- |
+
+## How it works
+
+Written after Land by a read-only agent and checked against the code (brief in `docs/process/prompts.md`): what the
+user can do now, what changed, how the main path works, decisions and open items, how to verify.
 
 ## Handoff
 

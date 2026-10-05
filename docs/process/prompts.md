@@ -44,6 +44,19 @@ Review <paths or diff> against docs/guides/patterns.md and AGENTS.md. Report Blo
 line and the guide section for each. Say briefly what conforms.
 ```
 
+## Walkthrough brief (v1)
+
+```text
+Repo: <path>. Read-only: write a one-page plain-English "How it works" for slice <NN> for the product owner. Do not edit files.
+Sources: `git log --oneline <base>..HEAD`, `git diff --stat <base>..HEAD`, the diff for files you need,
+`docs/features/slice-<NN>-<name>.md`, the slice's IDs in `docs/features/slices.txt` and the matching scenarios, and
+the decisions it cites. Base every claim on those; leave out what you cannot confirm. Do not invent file names,
+endpoints or numbers.
+Sections: 1 What the user can do now (numbered click flow); 2 What changed (database, API, UI, tests, with file
+paths); 3 How the main path works (numbered, name the server-side guards and where they sit); 4 Decisions and
+deferred; 5 How to verify (commands, screens). Under 450 words. End with "Unconfirmed or unclear".
+```
+
 ## Change log
 
 | Date | Prompt | Change | Why |
@@ -51,3 +64,4 @@ line and the guide section for each. Say briefly what conforms.
 | 2026-10-04 | all | Created at version 1 | Preserve what starts and checks each session |
 | 2026-10-04 | kickoff | Feature session v1 becomes slice session v2: names a slice, not a feature path (D-018) | Feature files cut across capabilities; rows 02 and 03 stalled |
 | 2026-10-04 | kickoff | Slice prompt names `slices.txt`; foundations prompt marked done | The INDEX.md prompt had drifted from this file |
+| 2026-10-05 | walkthrough | Created at version 1 | Plain-English record of each slice for the owner, trialled on slice 06 |
