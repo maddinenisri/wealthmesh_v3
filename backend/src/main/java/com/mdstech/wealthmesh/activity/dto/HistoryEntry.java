@@ -22,7 +22,10 @@ public record HistoryEntry(
         String status,
         List<Event> events,
         Origin replaces,
-        Origin replacedBy) {
+        Origin replacedBy,
+        UUID movementId,
+        UUID counterAccountId,
+        String counterAccountName) {
 
     /** The other side of a replacement: the entry this one replaced, or the one that replaced it, and its account. */
     public record Origin(UUID id, UUID accountId, String accountName, String kind, String amount, LocalDate occurredOn,

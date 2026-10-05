@@ -26,14 +26,15 @@ public class SpendingController {
     }
 
     @GetMapping
-    public Mono<SpendingSummary> summary(@RequestParam(required = false) String month) {
-        return service.summary(month);
+    public Mono<SpendingSummary> summary(@RequestParam(required = false) String month,
+            @RequestParam(required = false) UUID accountId) {
+        return service.summary(month, accountId);
     }
 
     @GetMapping("/entries")
     public Flux<ActivityResponse> entries(@RequestParam(required = false) String month,
-            @RequestParam(required = false) UUID categoryId) {
-        return service.entries(month, categoryId);
+            @RequestParam(required = false) UUID categoryId, @RequestParam(required = false) UUID accountId) {
+        return service.entries(month, categoryId, accountId);
     }
 
     @GetMapping("/history")

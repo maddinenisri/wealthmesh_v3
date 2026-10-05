@@ -16,5 +16,8 @@ public record ActivityResponse(
         String categoryName,
         UUID enteredByMemberId,
         Instant createdAt,
-        String reason) {
+        String reason,
+        UUID movementId,
+        UUID counterAccountId,
+        String counterAccountName) {
 }

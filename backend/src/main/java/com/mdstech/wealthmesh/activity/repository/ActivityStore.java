@@ -29,9 +29,12 @@ public class ActivityStore {
 
     private static final String ENTRY_COLUMNS = """
             SELECT a.id, a.account_id, ac.name AS account_name, a.kind, a.amount, a.occurred_on, a.description,
-                   a.category_id, c.name AS category_name, a.entered_by_member_id, a.created_at, a.reason
+                   a.category_id, c.name AS category_name, a.entered_by_member_id, a.created_at, a.reason,
+                   a.movement_id, cp.account_id AS counter_account_id, cpa.name AS counter_account_name
             FROM activity a JOIN account ac ON ac.id = a.account_id
             LEFT JOIN category c ON c.id = a.category_id
+            LEFT JOIN activity cp ON cp.movement_id = a.movement_id AND cp.id <> a.id
+            LEFT JOIN account cpa ON cpa.id = cp.account_id
             WHERE a.removed_at IS NULL""";
 
     private final DatabaseClient client;
@@ -108,13 +111,18 @@ public class ActivityStore {
     }
 
     /** Entries of one kind (expense or income) in a month, optionally one category. */
-    public Flux<ActivityResponse> monthEntries(String kind, LocalDate from, LocalDate to, UUID categoryId) {
+    public Flux<ActivityResponse> monthEntries(String kind, LocalDate from, LocalDate to, UUID categoryId,
+            UUID accountId) {
         String sql = ENTRY_COLUMNS + " AND a.kind = :kind AND a.occurred_on >= :from AND a.occurred_on < :to"
                 + (categoryId == null ? "" : " AND a.category_id = :category")
+                + (accountId == null ? "" : " AND a.account_id = :account")
                 + " ORDER BY a.occurred_on, a.created_at";
         DatabaseClient.GenericExecuteSpec spec = client.sql(sql).bind("kind", kind).bind("from", from).bind("to", to);
         if (categoryId != null) {
             spec = spec.bind("category", categoryId);
+        }
+        if (accountId != null) {
+            spec = spec.bind("account", accountId);
         }
         return spec.map(ActivityStore::entry).all();
     }
@@ -131,13 +139,18 @@ public class ActivityStore {
     }
 
     /** Totals of one kind (expense or income) in a month, one row per category. */
-    public Flux<CategoryTotal> totalsByCategory(String kind, LocalDate from, LocalDate to) {
-        return client.sql("""
+    public Flux<CategoryTotal> totalsByCategory(String kind, LocalDate from, LocalDate to, UUID accountId) {
+        DatabaseClient.GenericExecuteSpec spec = client.sql("""
                 SELECT a.category_id, COALESCE(c.name, 'Uncategorized') AS name, SUM(a.amount) AS total, COUNT(*) AS n
                 FROM activity a LEFT JOIN category c ON c.id = a.category_id
-                WHERE a.removed_at IS NULL AND a.kind = :kind AND a.occurred_on >= :from AND a.occurred_on < :to
-                GROUP BY a.category_id, c.name ORDER BY SUM(a.amount) DESC, name""")
-                .bind("kind", kind).bind("from", from).bind("to", to)
+                WHERE a.removed_at IS NULL AND a.kind = :kind AND a.occurred_on >= :from AND a.occurred_on < :to"""
+                + (accountId == null ? "" : " AND a.account_id = :account")
+                + " GROUP BY a.category_id, c.name ORDER BY SUM(a.amount) DESC, name")
+                .bind("kind", kind).bind("from", from).bind("to", to);
+        if (accountId != null) {
+            spec = spec.bind("account", accountId);
+        }
+        return spec
                 .map((row, meta) -> new CategoryTotal(row.get("category_id", UUID.class), row.get("name", String.class),
                         row.get("total", BigDecimal.class), row.get("n", Long.class)))
                 .all();
@@ -210,7 +223,8 @@ public class ActivityStore {
                        pm.name AS p_by, p.created_at AS p_at,
                        r.account_id AS r_account_id, ra.name AS r_account_name, r.kind AS r_kind,
                        r.amount AS r_amount, r.occurred_on AS r_on, rc.name AS r_category,
-                       rm.name AS r_by, r.created_at AS r_at
+                       rm.name AS r_by, r.created_at AS r_at,
+                       a.movement_id, cp.account_id AS counter_account_id, cpa.name AS counter_account_name
                 FROM activity a LEFT JOIN category c ON c.id = a.category_id
                 LEFT JOIN household_member m ON m.id = a.entered_by_member_id
                 LEFT JOIN activity r ON r.replaces_id = a.id
@@ -221,7 +235,10 @@ public class ActivityStore {
                 LEFT JOIN account pa ON pa.id = p.account_id
                 LEFT JOIN category pc ON pc.id = p.category_id
                 LEFT JOIN household_member pm ON pm.id = p.entered_by_member_id
-                WHERE a.account_id = :account AND a.kind IN ('expense', 'income', 'correction')
+                LEFT JOIN activity cp ON cp.movement_id = a.movement_id AND cp.id <> a.id
+                LEFT JOIN account cpa ON cpa.id = cp.account_id
+                WHERE a.account_id = :account
+                  AND a.kind IN ('expense', 'income', 'correction', 'transfer_in', 'transfer_out')
                 ORDER BY a.created_at DESC, a.occurred_on DESC""")
                 .bind("account", accountId)
                 .map((row, meta) -> new HistoryEntry(row.get("id", UUID.class), row.get("kind", String.class),
@@ -232,7 +249,9 @@ public class ActivityStore {
                         row.get("replaces_id", UUID.class), row.get("replaced_by_id", UUID.class),
                         row.get("status", String.class),
                         events.getOrDefault(row.get("id", UUID.class), List.of()),
-                        origin(row, "replaces_id", "p_"), origin(row, "replaced_by_id", "r_")))
+                        origin(row, "replaces_id", "p_"), origin(row, "replaced_by_id", "r_"),
+                        row.get("movement_id", UUID.class), row.get("counter_account_id", UUID.class),
+                        row.get("counter_account_name", String.class)))
                 .all();
     }
 
@@ -261,6 +280,8 @@ public class ActivityStore {
                 Money.format(row.get("amount", BigDecimal.class)), row.get("occurred_on", LocalDate.class),
                 row.get("description", String.class), row.get("category_id", UUID.class),
                 row.get("category_name", String.class), row.get("entered_by_member_id", UUID.class),
-                row.get("created_at", java.time.OffsetDateTime.class).toInstant(), row.get("reason", String.class));
+                row.get("created_at", java.time.OffsetDateTime.class).toInstant(), row.get("reason", String.class),
+                row.get("movement_id", UUID.class), row.get("counter_account_id", UUID.class),
+                row.get("counter_account_name", String.class));
     }
 }

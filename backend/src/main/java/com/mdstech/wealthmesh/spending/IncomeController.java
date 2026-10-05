@@ -27,18 +27,20 @@ public class IncomeController {
     }
 
     @GetMapping("/income")
-    public Mono<SpendingSummary> income(@RequestParam(required = false) String month) {
-        return service.incomeSummary(month);
+    public Mono<SpendingSummary> income(@RequestParam(required = false) String month,
+            @RequestParam(required = false) UUID accountId) {
+        return service.incomeSummary(month, accountId);
     }
 
     @GetMapping("/income/entries")
     public Flux<ActivityResponse> entries(@RequestParam(required = false) String month,
-            @RequestParam(required = false) UUID categoryId) {
-        return service.incomeEntries(month, categoryId);
+            @RequestParam(required = false) UUID categoryId, @RequestParam(required = false) UUID accountId) {
+        return service.incomeEntries(month, categoryId, accountId);
     }
 
     @GetMapping("/review")
-    public Mono<MonthReview> review(@RequestParam(required = false) String month) {
-        return service.review(month);
+    public Mono<MonthReview> review(@RequestParam(required = false) String month,
+            @RequestParam(required = false) UUID accountId) {
+        return service.review(month, accountId);
     }
 }

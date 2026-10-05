@@ -87,7 +87,7 @@ public class EntryValidator {
         }
     }
 
-    private static String description(String text) {
+    static String description(String text) {
         String description = text == null || text.isBlank() ? null : text.strip();
         if (description != null && description.length() > 200) {
             throw bad("Description must be 200 characters or fewer");
@@ -116,6 +116,9 @@ public class EntryValidator {
 
     /** The same rule as {@link #member}, read under a share lock so a deactivate cannot slip in before the save. */
     public Mono<UUID> memberLocked(Account account, UUID memberId) {
+        if (memberId == null) {
+            return Mono.error(bad("Choose who entered this"));
+        }
         return members.findByIdForShare(memberId).filter(m -> m.householdId().equals(account.householdId()))
                 .switchIfEmpty(Mono.error(bad("Choose who entered this from this household")))
                 .flatMap(m -> m.active() ? Mono.just(m.id()) : Mono.error(bad("Choose an active member")));
