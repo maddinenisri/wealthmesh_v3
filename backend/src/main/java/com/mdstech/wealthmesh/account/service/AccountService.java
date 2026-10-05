@@ -68,7 +68,7 @@ public class AccountService {
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
                         "Create the household first")))
                 .flatMap(household -> Mono.fromCallable(() -> parse(request, LocalDate.now(clock)))
-                        .flatMap(parsed -> checkOwners(household.id(), request.ownerMemberIds())
+                        .flatMap(parsed -> checkOwners(household.id(), request.ownerMemberIds(), List.of())
                                 .flatMap(ownerIds -> accounts.save(mapper.toNewEntity(household.id(),
                                         parsed.type().wire(), parsed.name(), parsed.institution(), parsed.openedOn(),
                                         parsed.openingAmount()))
@@ -80,9 +80,12 @@ public class AccountService {
 
     @Transactional
     public Mono<AccountResponse> update(UUID id, AccountUpdateRequest request) {
+        // The account row is locked first, so two edits of one account take turns and the owners read below are
+        // the committed ones (an inactive owner cannot be put back from a stale list).
         return Mono.fromCallable(() -> requireDetailsOnly(request))
-                .then(Mono.defer(() -> load(id)))
-                .flatMap(existing -> checkOwners(existing.householdId(), request.ownerMemberIds())
+                .then(Mono.defer(() -> activity.lockAccount(id)).then(Mono.defer(() -> load(id))))
+                .flatMap(existing -> owners.ownersOf(existing.id())
+                        .flatMap(current -> checkOwners(existing.householdId(), request.ownerMemberIds(), current))
                         .flatMap(ownerIds -> accounts.save(mapper.toUpdatedEntity(request, existing))
                                 .flatMap(saved -> owners.replace(saved.householdId(), saved.id(), ownerIds)
                                         .thenReturn(saved))
@@ -146,15 +149,26 @@ public class AccountService {
         throw bad("Enter a valid amount");
     }
 
-    private Mono<List<UUID>> checkOwners(UUID householdId, List<UUID> requested) {
+    /**
+     * Owners must belong to the household. A member who is no longer active cannot become a new owner but may stay
+     * on an account they already own. The member rows are read FOR SHARE so a deactivate cannot slip in between
+     * this check and the save.
+     */
+    private Mono<List<UUID>> checkOwners(UUID householdId, List<UUID> requested, List<UUID> current) {
         if (requested == null || requested.isEmpty()) {
             return Mono.error(bad("Choose an owner"));
         }
         List<UUID> distinct = requested.stream().distinct().sorted().toList();
-        return members.findByHouseholdId(householdId).map(HouseholdMember::id).collectList()
-                .flatMap(inHousehold -> inHousehold.containsAll(distinct)
-                        ? Mono.just(distinct)
-                        : Mono.error(bad("Choose an owner from this household")));
+        return members.findByHouseholdIdForShare(householdId).collectList()
+                .flatMap(inHousehold -> {
+                    List<UUID> ids = inHousehold.stream().map(HouseholdMember::id).toList();
+                    if (!ids.containsAll(distinct)) {
+                        return Mono.error(bad("Choose an owner from this household"));
+                    }
+                    boolean newInactive = inHousehold.stream().anyMatch(member -> !member.active()
+                            && distinct.contains(member.id()) && !current.contains(member.id()));
+                    return newInactive ? Mono.error(bad("Choose an active member")) : Mono.just(distinct);
+                });
     }
 
     private Mono<AccountResponse> respond(Account account) {

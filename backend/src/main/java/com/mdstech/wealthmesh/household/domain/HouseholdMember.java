@@ -14,6 +14,7 @@ public record HouseholdMember(
         String label,
         String nameKey,
         String labelKey,
+        boolean active,
         Instant createdAt,
         Instant updatedAt) {
 }

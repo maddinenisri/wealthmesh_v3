@@ -110,7 +110,8 @@ public class EntryValidator {
             return Mono.error(bad("Choose who entered this"));
         }
         return members.findById(memberId).filter(m -> m.householdId().equals(account.householdId()))
-                .map(m -> m.id()).switchIfEmpty(Mono.error(bad("Choose who entered this from this household")));
+                .switchIfEmpty(Mono.error(bad("Choose who entered this from this household")))
+                .flatMap(m -> m.active() ? Mono.just(m.id()) : Mono.error(bad("Choose an active member")));
     }
 
     public static BigDecimal amount(Object value) {

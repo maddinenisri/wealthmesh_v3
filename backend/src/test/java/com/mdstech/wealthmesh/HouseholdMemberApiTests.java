@@ -202,7 +202,8 @@ class HouseholdMemberApiTests {
                 .exchange()
                 .expectStatus().isEqualTo(409)
                 .expectBody()
-                .jsonPath("$.message").isEqualTo("This member owns an account and cannot be deleted.");
+                .jsonPath("$.message").isEqualTo("This member is on your accounts or records and cannot be deleted. "
+                        + "Deactivate this member instead.");
 
         webTestClient.get()
                 .uri("/api/v1/household-members/{id}", owner)

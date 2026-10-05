@@ -52,6 +52,16 @@ public class HouseholdMemberController {
         return service.update(id, request);
     }
 
+    @PostMapping("/{id}/deactivate")
+    public Mono<HouseholdMemberResponse> deactivate(@PathVariable UUID id) {
+        return service.deactivate(id);
+    }
+
+    @PostMapping("/{id}/restore")
+    public Mono<HouseholdMemberResponse> restore(@PathVariable UUID id) {
+        return service.restore(id);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public Mono<Void> delete(@PathVariable UUID id) {
