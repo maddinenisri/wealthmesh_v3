@@ -26,8 +26,8 @@ test.describe.serial('money out and monthly spending journey', () => {
     page,
   }) => {
     await page.goto('/accounts/new')
-    await expect(page.getByLabel('Owner').locator('option')).toHaveText([
-      'Choose an owner',
+    await expect(page.getByRole('group', { name: 'Owners' }).getByRole('checkbox')).toHaveCount(2)
+    await expect(page.getByRole('group', { name: 'Owners' }).locator('label')).toHaveText([
       'Alex Doe (Parent)',
       'Samira Rivera (Child)',
     ])

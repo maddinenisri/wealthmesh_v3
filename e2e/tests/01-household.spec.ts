@@ -59,7 +59,11 @@ test.describe.serial('household journey', () => {
 
     const row = page.getByRole('listitem').filter({ has: page.getByLabel('Member name') })
     await row.getByLabel('Member name').fill('Samira Rivera')
-    await row.getByRole('button', { name: 'Save member' }).click()
+    await row.getByRole('button', { name: 'Review rename' }).click()
+    await page.getByRole('button', { name: 'Confirm rename' }).click()
+    // The review also names the new name, so wait for it to close: the save has finished then.
+    await expect(page.getByRole('region', { name: 'Review rename' })).toHaveCount(0)
+    await expect(page.getByText('Earlier name: Sam Rivera (Child)')).toBeVisible()
 
     await expect(page.getByRole('main').getByText('Samira Rivera')).toBeVisible()
     await expect(page.getByRole('main').getByText('Sam Rivera', { exact: true })).toHaveCount(0)

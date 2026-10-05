@@ -107,7 +107,7 @@ test.describe.serial('money in journey', () => {
     ]) {
       await page.goto('/accounts/new')
       await page.getByLabel('Account name').fill(name)
-      await page.getByLabel('Owner').selectOption({ label: 'Alex Doe (Parent)' })
+      await page.getByRole('checkbox', { name: 'Alex Doe (Parent)' }).check()
       await page.getByLabel('Opened on').fill('2026-09-01')
       if (balance) await page.getByLabel('Balance').fill(balance)
       await page.getByRole('button', { name: 'Save account' }).click()
@@ -166,7 +166,7 @@ test.describe.serial('money in journey', () => {
     await expect(page.getByLabel('Account type')).toHaveValue('checking')
     await expect(page.getByRole('option', { name: /Savings.*coming soon/ })).toBeDisabled()
     await page.getByLabel('Account name').fill('Overview Checking')
-    await page.getByLabel('Owner').selectOption({ label: 'Alex Doe (Parent)' })
+    await page.getByRole('checkbox', { name: 'Alex Doe (Parent)' }).check()
     await page.getByLabel('Opened on').fill('2026-09-01')
     await page.getByRole('button', { name: 'Save account' }).click()
 

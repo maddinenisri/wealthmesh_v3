@@ -9,7 +9,7 @@ test.describe.serial('checking account setup journey', () => {
   async function fill(page: Page, fields: { name?: string; balance?: string; opened?: string }) {
     if (fields.name) await page.getByLabel('Account name').fill(fields.name)
     await page.getByLabel('Bank').fill('Harbor Bank')
-    await page.getByLabel('Owner').selectOption({ label: 'Alex Doe (Parent)' })
+    await page.getByRole('checkbox', { name: 'Alex Doe (Parent)' }).check()
     await page.getByLabel('Opened on').fill(fields.opened ?? '2026-09-01')
     if (fields.balance) await page.getByLabel('Balance').fill(fields.balance)
   }
@@ -101,7 +101,7 @@ test.describe.serial('checking account setup journey', () => {
     await page.getByRole('link', { name: 'Everyday Checking', exact: true }).click()
     await page.getByRole('link', { name: 'Edit account' }).click()
     await page.getByLabel('Account name').fill('Household Checking')
-    await page.getByLabel('Owner').selectOption({ label: 'Samira Rivera (Child)' })
+    await page.getByRole('checkbox', { name: 'Samira Rivera (Child)' }).check()
     await page.getByRole('link', { name: 'Cancel' }).click()
 
     await expect(page.getByRole('heading', { name: 'Everyday Checking' })).toBeVisible()
@@ -122,7 +122,8 @@ test.describe.serial('checking account setup journey', () => {
 
     await expect(page.getByLabel('Balance')).toHaveCount(0)
     await page.getByLabel('Account name').fill('Household Checking')
-    await page.getByLabel('Owner').selectOption({ label: 'Samira Rivera (Child)' })
+    await page.getByRole('checkbox', { name: 'Alex Doe (Parent)' }).uncheck()
+    await page.getByRole('checkbox', { name: 'Samira Rivera (Child)' }).check()
     await page.getByLabel('Bank').fill('Harbor Credit Union')
     await page.getByRole('button', { name: 'Save details' }).click()
 
