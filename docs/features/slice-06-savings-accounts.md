@@ -105,7 +105,7 @@ Race tests in `MoveEntryApiTests` (each holds an uncommitted write or lock on a 
 
 ## Checkpoint 2 fixes (2026-10-05)
 
-1 fixed: opening the review brings its heading into view and focuses it (`AddEntry`), asserted at 710px and 1280px in e2e (`toBeInViewport({ ratio: 1 })`, `toBeFocused`; shown to fail without the fix). 2 fixed: `useReturnFocus` returns focus to the button that opened any activity panel (Edit, Add money in/out, Update balance, Remove, Undo) on Cancel or Confirm. 3 fixed: the "Replaced ... on <account>" note is a full-width row under the history row. Not fixed, logged: 4 (account type is not shown in the Accounts list or Household card) and 5 (history tables scroll inside their card at 710px, pre-existing since slice 02).
+1 fixed: opening the review brings its heading into view and focuses it (`AddEntry`), asserted at 710px and 1280px in e2e (`toBeInViewport({ ratio: 1 })`, `toBeFocused`; shown to fail without the fix). 2 fixed: `useReturnFocus` returns focus to the button that opened any activity panel (Edit, Add money in/out, Update balance, Remove, Undo) on Cancel or Confirm. 3 fixed: the "Replaced ... on <account>" note is a full-width row under the history row. Open: 4 (the Accounts list and Household card show no account type; may be a product decision for the owner, not a bug) and 5 (history tables scroll inside their card at 710px, pre-existing since slice 02). 3 was fixed in the same pass (see above), so it is logged as fixed, not open.
 
 ## Open questions
 
@@ -117,7 +117,7 @@ Filled at checkpoint 1 if the owner raises any. Candidates: should an entry that
 - Decisions: D-035. No new questions to the owner except the two logged faults (4, 5).
 - Existing screens that changed: the edit form has an Account chooser ("Paid from" / "Received into"); the review shows both Balances and both months; Savings is selectable on Add account and Credit card and the rest stay "coming soon"; history shows where a moved entry went and came from; focus returns to the opener on Cancel.
 - Watch for: a transfer (slice 07) and a card (slice 08) will each need `holdsActivity` widened and the frontend list updated together; `11a-savings.spec.ts` must run before `12-members.spec.ts` (12 renames Alex Doe); the key lookup in `swap` happens under the locks, keep it there; any new writer of an activity row must take the account lock (`MoveEntryApiTests.otherWritersTakeTheSameLock` lists the writers) and check its member with `memberLocked`.
-- Left for later: Accounts list and Household card show no account type (4); history table inner scroll at 710px (5); other-household target has no test (singleton household); Q-004 upgrades still open.
+- Left for later (open): Accounts list and Household card show no account type (4, possibly a product decision); history table inner scroll at 710px (5); other-household target has no test (singleton household); Q-004 upgrades still open.
 - Next: slice 07 (linked transfers and card payments, 13 IDs), which also adds savings-side activity SAVINGS 002, 005 to 007, 009, 010.
 
 ## Retro (3 lines, also appended to `docs/process/retro.md`)

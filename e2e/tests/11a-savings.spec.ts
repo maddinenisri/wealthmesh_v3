@@ -253,6 +253,10 @@ test.describe.serial('savings accounts and moving an entry', () => {
       await page.getByRole('button', { name: 'Review' }).click()
       await expectInView(page, 'Review change')
       // The whole heading is in view and has focus (the top of the review was once cut off at 710px).
+      const panel = page.getByRole('region', { name: 'Review change' })
+      const top = await panel.evaluate((el) => el.getBoundingClientRect().top)
+      expect(top).toBeGreaterThanOrEqual(0)
+      await expect(panel.locator(':focus')).toHaveCount(1)
       const heading = page.getByRole('heading', { name: 'Review change' })
       await expect(heading).toBeInViewport({ ratio: 1 })
       await expect(heading).toBeFocused()
