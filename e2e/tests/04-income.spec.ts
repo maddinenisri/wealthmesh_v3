@@ -164,7 +164,7 @@ test.describe.serial('money in journey', () => {
       .getByRole('link', { name: 'Add account' })
       .click()
     await expect(page.getByLabel('Account type')).toHaveValue('checking')
-    await expect(page.getByRole('option', { name: /Savings.*coming soon/ })).toBeDisabled()
+    await expect(page.getByRole('option', { name: /Credit card.*coming soon/ })).toBeDisabled()
     await page.getByLabel('Account name').fill('Overview Checking')
     await page.getByRole('checkbox', { name: 'Alex Doe (Parent)' }).check()
     await page.getByLabel('Opened on').fill('2026-09-01')
