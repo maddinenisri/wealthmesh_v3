@@ -1,8 +1,8 @@
 # Slice 08: Credit cards
 
 - Slice: 08 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/credit-cards/setup.feature`, `accounts/credit-cards/activity.feature`, `spending/monthly-review/review-spending.feature`, `household/history/manage-supporting-records.feature`
-- Status: in-progress (checkpoint 1 approved)
-- Started: 2026-10-05 13:28 (ET, session clock)  Finished:  Commit:
+- Status: done, local (not pushed; the owner pushes, D-002)
+- Started: 2026-10-05 13:28 (ET, session clock)  Finished: 2026-10-05  Commit: `939f26d` (commits from `b5d8aab`)
 
 ## Prompts and directions
 
@@ -67,7 +67,7 @@ What exists (grep, not memory):
 1. **Card Balance is stored with the asset sign.** Owed is negative, Card credit is positive; `opening_amount` carries it. Nothing in Balance, wealth or `SIGNED` changes. The API still takes a positive amount plus `balanceSide` (`owed` or `credit`) on a card (create, Update balance, statement), never a signed amount from the user, and returns the signed string. A blank amount is `0.00` with no side. A side sent for a non-card is 400. The UI shows "$1,000.00 owed" / "$50.00 Card credit" from the sign.
 2. **Per-type rules, not just `holdsActivity`.** `AccountType` gains `CREDIT_CARD` and a rule per use: which entry kinds (expense, refund, income), source or destination of a transfer (a card is neither: plain transfers to or from a card are 400 "Use Record payment"), source of a card payment (checking or savings), target of a moved entry (expense and refund only). Every gate in the gap analysis is changed together and each refusal gets a raw-API test.
 3. **Refund is a real entry kind.** Same service and endpoint family as expense (`POST /accounts/{id}/refunds`), spending category, positive amount, any activity-holding account. Spending = expense minus refund in every reader; a category or month may be negative (CARD_008), with the explanation "refunds exceed purchases" in the API and UI. Edit, remove and Undo of a refund follow the entry rules.
-4. **Card payment is the second `MovementKind`.** Bank leg `card_payment` (money out, as foundations 7 says); card leg is a **new kind `card_payment_in`** (V12 widens the kind CHECK, extends the movement-id CHECK and the one-live-row-per-side index to both new kinds, adds both to `SIGNED` and to the history filter). Card side distinct from `transfer_in` so the exclusion from income and spending, labels and the transfer-only guards stay structural. Endpoint family under `/api/v1/card-payments` (create, preview, replacement, removal, undo) reusing `MovementService` with the kind; the pair is never half changed; lock order, key replay and member checks are slice 07's.
+4. **Card payment is the second `MovementKind`.** Bank leg `card_payment` (money out, as foundations 7 says); card leg is a **new kind `card_payment_in`** (V13 widens the kind CHECK and the movement-id CHECK, the one-live-row-per-side index already covers any kind; both kinds are in `SIGNED` and the history filter). Card side distinct from `transfer_in` so the exclusion from income and spending, labels and the transfer-only guards stay structural. Endpoint family under `/api/v1/card-payments` (create, preview, replacement, removal, undo) reusing `MovementService` with the kind; the pair is never half changed; lock order, key replay and member checks are slice 07's.
 5. **Overpayment and overdraft.** An overpayment is allowed: the review states the resulting Card credit; Income and spending stay 0.00 (kinds). The overdraft label and warning apply to bank accounts only. A card payment may overdraw its checking Balance and shows the existing warning.
 6. **Seed two spending categories** (V12, as V10 did): "Interest charged" and "Annual fee" (CARD_011). Read-only until slice 10.
 7. **Update balance and statements on a card** use the Owed / Card credit chooser; the review says "increase in debt $20.00" or "decrease in debt"; the correction row is unchanged (`correction`, signed, never spending). A statement keeps its meaning (`balanceSide`) and never feeds Balance.
@@ -202,8 +202,35 @@ Owner's Cowork pass (2026-10-05, dev data, Entering as Maya): all seven steps pa
 
 ## How it works
 
-Written after Land by a read-only agent and checked against the code (brief in `docs/process/prompts.md`): what the
-user can do now, what changed, how the main path works, decisions and open items, how to verify.
+Written by a read-only agent over `5eac320..HEAD` from the notes and decisions, not the diff bodies; the builder checked the V12/V13 split, the sign rule, `Counted`, the per-kind `MovementService` and the save-key fix against the code.
+
+**What the user can do now**
+
+1. Add account > Credit card: enter the Balance and choose Owed or Card credit; the list shows "$1,000.00 owed" or "$50.00 Card credit".
+2. On the card: Record purchase, Record refund, and purchases named Interest charged or Annual fee.
+3. Record payment from the card page: pick checking or savings (the card is fixed), review both Balances, Cancel or confirm; an overpayment shows as Card credit. Edit, remove, or Undo from history.
+4. Update balance on the card: the review says "increase in debt" or "decrease in debt"; a reason is required.
+5. Attach a statement, then replace it with a corrected version; both stay, the Balance does not move.
+6. Spending filtered to the card agrees with the Household page and the Accounts list.
+
+**What changed**
+
+- Database: `V12__card_charge_categories.sql` (two categories), `V13__card_payments.sql` (kind `card_payment_in`, movement-id check).
+- API: `AccountType` (per-type rules), `AccountService.signed`, `ActivityStore.Counted`, `MovementConfiguration`, `CardPaymentController` (`/api/v1/card-payments`), refunds at `POST /accounts/{id}/refunds`, `balanceSide` on setup, corrections and statements.
+- UI: `features/accounts` (`cardBalance.ts`, `BalanceFigure.tsx`, setup, detail), `features/transfers` (`TransferForm` in payment mode), `ActivityList` and `EntryHistory` (card amounts, narrow columns).
+- Tests: `CardSetup`, `CardActivity`, `CardPaymentApiTests`, `CardPaymentRaceApiTests`, `CardCorrectionApiTests`; four `.test.tsx` files; `11c-cards.spec.ts`.
+
+**How the main path works**
+
+1. A card amount arrives positive with a side; `AccountService.signed` stores owed as negative, so Balance sums and wealth are unchanged.
+2. `AccountType` and `EntryValidator` refuse income on a card, plain transfers to or from it, starting-balance moves and pre-start entries.
+3. Spending is `ActivityStore.Counted`: expenses minus refunds; a total below zero is shown with "Refunds exceed purchases".
+4. A payment goes through the per-kind `MovementService`: it locks both accounts lowest id first, replays a finished key, checks the member and the dates under the locks, and writes `card_payment` and `card_payment_in` in one transaction.
+5. Update balance reads its save key under the account lock.
+
+**Decisions and open items:** D-038 to D-040; Q-034 (pay a card from checking or savings); no starting-balance correction on a card (checkpoint answer 3); the UI offers refunds on a card only; 1280px rests on e2e.
+
+**How to verify:** `npm run coverage -- --require --slice 08`, `npm test`, `npm run e2e`, `npm run lint`, `npm run check`; click "What to click" above at 710px and 1280px.
 
 ## Handoff
 
