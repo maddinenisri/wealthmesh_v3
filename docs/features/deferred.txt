@@ -1,1 +1,2 @@
-V2_CHECKING_006 Older saved file and legacy "Starting balance needed" need starting-balance recovery and statements (slice 04)
+V2_CHECKING_006 waits on a feature that can create an account with no opening amount (Q-030)
+V2_WEALTH_005 waits on a feature that can create an account with no opening amount (Q-030)
