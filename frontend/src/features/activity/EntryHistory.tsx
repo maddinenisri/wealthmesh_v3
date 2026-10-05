@@ -1,6 +1,7 @@
 import type { HistoryEntry } from '../../api/activity'
 import { Amount, Button, Table, Td, Th } from '../../design-system'
 import { useAccountHistory } from '../../hooks/useActivity'
+import { useOpeningRevisions } from '../../hooks/useStartingBalance'
 import { signedAmount } from './signedAmount'
 
 const STATUS = { effective: 'Effective', replaced: 'Replaced', removed: 'Removed' } as const
@@ -26,10 +27,24 @@ export function EntryHistory({
   onUndo?: (entry: HistoryEntry) => void
 }) {
   const history = useAccountHistory(accountId, true)
+  const revisions = useOpeningRevisions(accountId)
 
   if (history.isPending) return <p className="text-sm text-ink-muted">Loading history</p>
   if (history.isError) return <p role="alert">{history.error.message}</p>
-  if (history.data.length === 0 && !opening) {
+  // Until the corrections are known the account's current opening could be a corrected figure, not the original.
+  if (revisions.isError) return <p role="alert">{revisions.error.message}</p>
+  if (revisions.isPending) return <p className="text-sm text-ink-muted">Loading history</p>
+  const corrections = revisions.data ?? []
+  // The Initial Balance row shows the original start; each correction of it follows, and only the last counts.
+  // Newest first, as the other rows are; the row above an older one is what replaced it.
+  const reversed = [...corrections].reverse()
+  const laterBy = (replacement: { enteredByName: string; createdAt: string }) =>
+    `${replacement.enteredByName} ${stamp(replacement.createdAt)}`
+  const original =
+    corrections.length > 0
+      ? { amount: corrections[0].previousAmount, on: corrections[0].previousOn }
+      : opening
+  if (history.data.length === 0 && !original) {
     return <p className="mt-2 text-sm text-ink-muted">Nothing has been saved yet.</p>
   }
   const replacement = (entry: HistoryEntry) =>
@@ -99,15 +114,55 @@ export function EntryHistory({
               </Td>
             </tr>
           ))}
-          {opening && (
+          {reversed.map((correction, index) => (
+            <tr key={correction.id}>
+              <Td className="whitespace-nowrap">{correction.openedOn}</Td>
+              <Td>
+                {correction.openedOn === correction.previousOn
+                  ? 'Starting balance correction'
+                  : 'Tracking start moved'}
+                {correction.openedOn !== correction.previousOn && (
+                  <span className="block text-caption text-ink-muted">
+                    from {correction.previousOn}
+                  </span>
+                )}
+              </Td>
+              <Td />
+              <Td className="text-right whitespace-nowrap">
+                <Amount value={Number(correction.openingAmount)} />
+              </Td>
+              <Td>
+                {index === 0 ? 'Effective' : 'Replaced'}
+                {index > 0 && (
+                  <span className="block text-caption text-ink-muted">
+                    Replaced by {laterBy(reversed[index - 1])}
+                  </span>
+                )}
+              </Td>
+              <Td>
+                {correction.enteredByName}
+                <div className="text-caption text-ink-muted">{stamp(correction.createdAt)}</div>
+              </Td>
+              <Td>{correction.reason}</Td>
+              <Td />
+            </tr>
+          ))}
+          {original && (
             <tr>
-              <Td className="whitespace-nowrap">{opening.on}</Td>
+              <Td className="whitespace-nowrap">{original.on}</Td>
               <Td>Initial Balance</Td>
               <Td />
               <Td className="text-right whitespace-nowrap">
-                <Amount value={Number(opening.amount)} />
+                <Amount value={Number(original.amount)} />
               </Td>
-              <Td>Effective</Td>
+              <Td>
+                {corrections.length > 0 ? 'Replaced' : 'Effective'}
+                {corrections.length > 0 && (
+                  <span className="block text-caption text-ink-muted">
+                    Replaced by {laterBy(corrections[0])}
+                  </span>
+                )}
+              </Td>
               <Td />
               <Td />
               <Td />

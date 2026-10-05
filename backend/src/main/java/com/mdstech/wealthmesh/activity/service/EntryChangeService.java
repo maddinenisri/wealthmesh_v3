@@ -3,6 +3,7 @@ package com.mdstech.wealthmesh.activity.service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import org.springframework.dao.DuplicateKeyException;
@@ -65,11 +66,24 @@ public class EntryChangeService {
     /** Undo of a removal. A replaced entry stays replaced: edit or remove its replacement instead. */
     public Mono<HistoryEntry> undo(UUID accountId, UUID activityId, UUID memberId) {
         Mono<Long> restored = original(accountId, activityId)
-                .flatMap(original -> actor(accountId, memberId).then(Mono.defer(() -> store.clearRemoved(activityId))))
+                .flatMap(original -> actor(accountId, memberId)
+                        .then(Mono.defer(() -> lockedStart(accountId, original.occurredOn())))
+                        .then(Mono.defer(() -> store.clearRemoved(activityId))))
                 .filter(updated -> updated > 0)
                 .switchIfEmpty(Mono.error(conflict("Only a removed entry can be restored.")))
                 .flatMap(updated -> store.recordEvent(activityId, "restored", memberId, clock.instant()));
         return transactions.transactional(restored).then(Mono.defer(() -> entry(accountId, activityId)));
+    }
+
+    /**
+     * Locks the account row and checks, on its current row, that a date is not before the tracking start. The start
+     * may have moved since the entry was saved or the form was opened.
+     */
+    private Mono<Void> lockedStart(UUID accountId, LocalDate date) {
+        return store.lockAccount(accountId).then(Mono.defer(() -> accounts.findById(accountId)))
+                .filter(account -> !date.isBefore(account.openedOn()))
+                .switchIfEmpty(Mono.error(conflict("This entry is dated before the account's tracking start.")))
+                .then();
     }
 
     private Mono<UUID> actor(UUID accountId, UUID memberId) {
@@ -103,7 +117,8 @@ public class EntryChangeService {
     Mono<EntryService.Saved> swap(Activity original, EntryValidator.Entry entry, String key, String reason,
             Instant now) {
         String note = reason == null || reason.isBlank() ? null : reason.strip();
-        Mono<EntryService.Saved> swapped = store.markRemoved(original.id(), entry.memberId(), now)
+        Mono<EntryService.Saved> swapped = lockedStart(original.accountId(), entry.occurredOn())
+                .then(Mono.defer(() -> store.markRemoved(original.id(), entry.memberId(), now)))
                 .filter(updated -> updated > 0)
                 .switchIfEmpty(Mono.error(conflict("This entry was already changed or removed.")))
                 .then(Mono.defer(() -> store.recordEvent(original.id(), "replaced", entry.memberId(), now)))

@@ -70,7 +70,7 @@ describe('recording an expense', () => {
     expect(api.accounts[0].balance.amount).toBe('5000.00')
   })
 
-  it('asks for a date on or after the opening date next to the Date field', async () => {
+  it('sends a date before the opening date to the historical setup review and saves nothing', async () => {
     const api = mockApi(seed())
     const { user } = renderRoute(`/accounts/${everyday.id}`)
     await openForm(user)
@@ -79,11 +79,11 @@ describe('recording an expense', () => {
     await user.click(screen.getByRole('button', { name: 'Review' }))
 
     expect(
-      await screen.findByText("This date is before the account's opening date"),
+      await screen.findByRole('region', { name: 'Review historical setup' }),
     ).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Review money out' })).toBeNull()
-    expect(screen.getByLabelText('Amount')).toHaveValue('20.00')
     expect(api.activity).toHaveLength(0)
+    expect(api.requests.filter((r) => r.startsWith('POST'))).toEqual([])
   })
 
   it('V2_CHECKING_011 rejects -$100.00, then saves $100.00 once when the answer to the first save is lost', async () => {

@@ -64,6 +64,15 @@ public class ActivityStore {
                 .one().defaultIfEmpty(Delta.NONE);
     }
 
+    /** The date of the account's earliest entry that still counts; empty when it has none. */
+    public Mono<LocalDate> earliestOf(UUID accountId) {
+        return client.sql("SELECT MIN(occurred_on) AS earliest FROM activity "
+                        + "WHERE removed_at IS NULL AND account_id = :account")
+                .bind("account", accountId)
+                .map((row, meta) -> java.util.Optional.ofNullable(row.get("earliest", LocalDate.class)))
+                .one().flatMap(Mono::justOrEmpty);
+    }
+
     /** Signed activity up to and including a date, leaving out one row (the correction being corrected). */
     public Mono<BigDecimal> changeUpTo(UUID accountId, LocalDate asOn, UUID excluding) {
         DatabaseClient.GenericExecuteSpec spec = client.sql("SELECT COALESCE(SUM(" + SIGNED + "), 0) AS delta "

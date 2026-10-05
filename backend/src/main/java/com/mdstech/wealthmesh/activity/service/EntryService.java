@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
@@ -37,9 +38,11 @@ public class EntryService {
     private final ActivityRepository activities;
     private final ActivityStore store;
     private final Clock clock;
+    private final TransactionalOperator transactions;
 
     public EntryService(AccountRepository accounts, EntryValidator validator, ActivityRepository activities,
-            ActivityStore store, Clock clock) {
+            ActivityStore store, Clock clock, TransactionalOperator transactions) {
+        this.transactions = transactions;
         this.accounts = accounts;
         this.validator = validator;
         this.activities = activities;
@@ -53,9 +56,14 @@ public class EntryService {
 
     /** `kind` is "expense" (money out) or "income" (money in): it fixes the category kind and Balance direction. */
     public Mono<Saved> record(UUID accountId, String key, String kind, ExpenseRequest request) {
+        // The account row is locked and read again, so a tracking-start move cannot slip in between the date check
+        // and the insert (an entry would be left dated before the start).
         return Mono.fromCallable(() -> requireKey(key))
                 .then(Mono.defer(() -> load(accountId)))
-                .flatMap(account -> validator.parse(account, kind, request).flatMap(entry -> save(entry, key)));
+                .flatMap(account -> transactions.transactional(store.lockAccount(account.id())
+                        .then(Mono.defer(() -> load(accountId)))
+                        .flatMap(fresh -> validator.parse(fresh, kind, request))
+                        .flatMap(entry -> save(entry, key))));
     }
 
     private Mono<Saved> save(EntryValidator.Entry entry, String key) {
@@ -69,7 +77,7 @@ public class EntryService {
                 .then(activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
                         .flatMap(existing -> replay(existing, entry))
                         .switchIfEmpty(Mono.defer(() -> insert)))
-                // Two identical requests racing: the loser hits the unique key and replays the winner's row.
+                // Unreachable while record() holds the account lock; in its transaction this recovery could not run.
                 .onErrorResume(DuplicateKeyException.class, e -> activities
                         .findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
                         .flatMap(existing -> replay(existing, entry)));

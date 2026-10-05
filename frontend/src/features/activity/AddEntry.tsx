@@ -22,8 +22,10 @@ import {
 } from '../../hooks/useActivity'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney, parseAmount } from '../../lib/money'
+import { MONTH_NAMES } from '../../lib/months'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { EnteredBy } from './EnteredBy'
+import { HistoricalSetup } from './HistoricalSetup'
 
 type Values = {
   description: string
@@ -32,21 +34,6 @@ type Values = {
   categoryId: string
   reason: string
 }
-
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-]
 
 /** One id per form instance: a repeat of the same save carries the same id (D-024). */
 function newKey(): string {
@@ -94,6 +81,8 @@ export function AddEntry({
   const remind = useSaveReminder(account.id)
   const { member, setMemberId } = useEnteringAs(members)
   const [reviewing, setReviewing] = useState<Values | null>(null)
+  // An entry dated before tracking began goes through a reviewed move of the start (V2_CHECKING_016).
+  const [historical, setHistorical] = useState<Values | null>(null)
   const [key] = useState(newKey)
   const { control, handleSubmit } = useForm<Values>({
     defaultValues: {
@@ -148,6 +137,25 @@ export function AddEntry({
     } else {
       record.mutate({ key, entry }, { onSuccess: onDone })
     }
+  }
+
+  if (historical) {
+    return (
+      <HistoricalSetup
+        kind={kind}
+        account={account}
+        members={members}
+        entry={{
+          description: historical.description.trim(),
+          amount: parseAmount(historical.amount)!,
+          occurredOn: historical.occurredOn,
+          categoryId: historical.categoryId,
+          categoryName: categoryName(historical.categoryId),
+        }}
+        onBack={() => setHistorical(null)}
+        onDone={onDone}
+      />
+    )
   }
 
   if (reviewing) {
@@ -232,7 +240,11 @@ export function AddEntry({
       <form
         noValidate
         className="mt-3 flex max-w-md flex-col gap-4"
-        onSubmit={handleSubmit((values) => setReviewing(values))}
+        onSubmit={handleSubmit((values) =>
+          !editing && values.occurredOn < account.openedOn
+            ? setHistorical(values)
+            : setReviewing(values),
+        )}
       >
         <p className="text-sm text-ink-muted">
           {words.place} <strong>{account.name}</strong>
@@ -255,7 +267,9 @@ export function AddEntry({
             required: 'Enter a date',
             validate: (value) =>
               value <= today
-                ? value >= account.openedOn || "This date is before the account's opening date"
+                ? !editing ||
+                  value >= account.openedOn ||
+                  "This date is before the account's opening date"
                 : !editing || 'Future activity cannot replace a saved entry',
           }}
         />

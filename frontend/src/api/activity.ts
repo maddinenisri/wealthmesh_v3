@@ -200,6 +200,27 @@ export const replaceEntry = (
     parse: parseActivity,
   })
 
+/** An entry dated before tracking began, saved together with the reviewed move of the start. */
+export type HistoricalEntry = {
+  kind: EntryKind
+  entry: NewEntry
+  startRevision: {
+    openingAmount: string
+    openedOn: string
+    reason: string
+    enteredByMemberId: string
+  }
+}
+
+/** Both are saved or neither. `key` makes a repeated save safe (D-024). */
+export const saveHistoricalEntry = (accountId: string, key: string, body: HistoricalEntry) =>
+  request(`/accounts/${accountId}/historical-entries`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+    body,
+    parse: parseActivity,
+  })
+
 /** Removes an entry (soft) or restores a removed one. Who did it is recorded (D-025). */
 export const changeEntry = (
   accountId: string,

@@ -33,6 +33,32 @@ export type MockActivity = {
   events?: { action: string; byName: string; at: string }[]
 }
 
+export type MockOpeningRevision = {
+  id: string
+  accountId: string
+  key: string
+  previousAmount: string
+  previousOn: string
+  openingAmount: string
+  openedOn: string
+  reason: string
+  enteredByMemberId: string
+  createdAt: string
+}
+
+export type MockStatement = {
+  id: string
+  accountId: string
+  key?: string
+  statementOn: string
+  balance: string
+  note: string | null
+  reason?: string | null
+  replacesId?: string | null
+  enteredByMemberId: string
+  createdAt?: string
+}
+
 type MockReminder = {
   id: string
   accountId: string
@@ -103,6 +129,8 @@ export function mockApi(
     today?: string
     /** Expenses already recorded, by account. */
     activity?: MockActivity[]
+    /** Supporting statements already attached. */
+    statements?: MockStatement[]
   } = {},
 ) {
   const today = seed.today ?? '2026-10-03'
@@ -112,6 +140,8 @@ export function mockApi(
     accounts: [...(seed.accounts ?? [])],
     activity: [...(seed.activity ?? [])],
     reminders: [] as MockReminder[],
+    statements: [...(seed.statements ?? [])],
+    openingRevisions: [] as MockOpeningRevision[],
     /** Save keys seen on POST expenses, in order. */
     keys: [] as string[],
     /** When true the next expense is stored but its response is lost (a slow or dropped answer). */
@@ -134,6 +164,70 @@ export function mockApi(
     live()
       .filter((a) => a.accountId === account.id && a.occurredOn <= date && a.id !== excluding)
       .reduce((sum, a) => sum + signed(a), 0)
+  /** The entry that waits on the start moving: Balance with it and its month's totals. */
+  const previewEntry = (account: MockAccount, opening: number, query: URLSearchParams) => {
+    const entry = Number(query.get('entryAmount'))
+    const income = query.get('entryKind') === 'income'
+    const month = (query.get('entryOn') ?? '').slice(0, 7)
+    const total = (kind: string) =>
+      live()
+        .filter((a) => a.kind === kind && a.occurredOn.startsWith(month))
+        .reduce((sum, a) => sum + Number(a.amount), 0)
+    const afterStart = currentBalance(account) - Number(account.openingAmount) + opening
+    return {
+      balanceWithEntry: (income ? afterStart + entry : afterStart - entry).toFixed(2),
+      monthIncomeAfter: (total('income') + (income ? entry : 0)).toFixed(2),
+      monthSpendingAfter: (total('expense') + (income ? 0 : entry)).toFixed(2),
+    }
+  }
+  const statementView = (s: MockStatement) => {
+    const next = state.statements.find((n) => n.replacesId === s.id)
+    return {
+      id: s.id,
+      accountId: s.accountId,
+      statementOn: s.statementOn,
+      balance: s.balance,
+      note: s.note,
+      reason: s.reason ?? null,
+      replacesId: s.replacesId ?? null,
+      replacedById: next?.id ?? null,
+      latest: !next,
+      enteredByMemberId: s.enteredByMemberId,
+      enteredByName: nameOf(s.enteredByMemberId),
+      createdAt: s.createdAt ?? '2026-10-03T12:00:00Z',
+    }
+  }
+  const saveStatement = async (request: Request, accountId: string, replaces: string | null) => {
+    const key = request.headers.get('Idempotency-Key') ?? ''
+    const body = (await request.json()) as {
+      statementOn: string
+      balance: string
+      note: string
+      reason?: string
+      enteredByMemberId: string
+    }
+    if (!/^-?\d+(\.\d{1,2})?$/.test(body.balance)) return problem(400, 'Enter a valid amount')
+    if (replaces && !body.reason?.trim())
+      return problem(400, 'Enter a reason for the corrected statement')
+    const existing = state.statements.find((s) => s.key === key)
+    if (existing) return HttpResponse.json(statementView(existing), { status: 200 })
+    if (replaces && state.statements.some((s) => s.replacesId === replaces)) {
+      return problem(409, 'This statement was already revised.')
+    }
+    const statement: MockStatement = {
+      id: newId(),
+      accountId,
+      key,
+      statementOn: body.statementOn,
+      balance: Number(body.balance).toFixed(2),
+      note: body.note?.trim() || null,
+      reason: body.reason?.trim() || null,
+      replacesId: replaces,
+      enteredByMemberId: body.enteredByMemberId,
+    }
+    state.statements.push(statement)
+    return HttpResponse.json(statementView(statement), { status: 201 })
+  }
   const currentBalance = (account: MockAccount) => balanceOn(account, '9999-12-31')
   const monthTotals = (month: string, kind: string) => {
     const rows = live().filter((a) => a.kind === kind && a.occurredOn.startsWith(month))
@@ -336,6 +430,133 @@ export function mockApi(
       state.activity.push(entry)
       account.balance = { amount: currentBalance(account).toFixed(2), asOf: account.balance.asOf }
       return HttpResponse.json(decorate(entry, state.accounts), { status: 201 })
+    }),
+    http.get(
+      '*/api/v1/accounts/:id/starting-balance-corrections/preview',
+      ({ request, params }) => {
+        log(request)
+        const account = state.accounts.find((a) => a.id === params.id)
+        if (!account) return problem(404, 'Account not found')
+        const query = new URL(request.url).searchParams
+        const amount = Number(query.get('openingAmount'))
+        const current = currentBalance(account)
+        return HttpResponse.json({
+          originalAmount: Number(account.openingAmount).toFixed(2),
+          originalOn: account.openedOn,
+          openingAmount: amount.toFixed(2),
+          openedOn: query.get('openedOn'),
+          currentBalance: current.toFixed(2),
+          currentBalanceAfter: (current - Number(account.openingAmount) + amount).toFixed(2),
+          overdraft: current - Number(account.openingAmount) + amount < 0,
+          ...(query.get('entryAmount') ? previewEntry(account, amount, query) : {}),
+        })
+      },
+    ),
+    http.post('*/api/v1/accounts/:id/historical-entries', async ({ request, params }) => {
+      log(request)
+      const account = state.accounts.find((a) => a.id === params.id)
+      if (!account) return problem(404, 'Account not found')
+      const key = request.headers.get('Idempotency-Key') ?? ''
+      const body = (await request.json()) as {
+        kind: string
+        entry: ExpenseBody
+        startRevision: { openingAmount: string; openedOn: string; reason: string }
+      }
+      const existing = state.activity.find((a) => a.key === key)
+      if (existing) return HttpResponse.json(decorate(existing, state.accounts), { status: 200 })
+      if (!body.startRevision.reason?.trim()) return problem(400, 'Enter a reason')
+      state.openingRevisions.push({
+        id: newId(),
+        accountId: account.id,
+        key,
+        previousAmount: Number(account.openingAmount).toFixed(2),
+        previousOn: account.openedOn,
+        openingAmount: Number(body.startRevision.openingAmount).toFixed(2),
+        openedOn: body.startRevision.openedOn,
+        reason: body.startRevision.reason.trim(),
+        enteredByMemberId: body.entry.enteredByMemberId,
+        createdAt: '2026-10-03T12:00:00Z',
+      })
+      account.openingAmount = Number(body.startRevision.openingAmount).toFixed(2)
+      account.openedOn = body.startRevision.openedOn
+      const entry: MockActivity = {
+        id: newId(),
+        accountId: account.id,
+        key,
+        kind: body.kind,
+        amount: Number(body.entry.amount).toFixed(2),
+        occurredOn: body.entry.occurredOn,
+        description: body.entry.description.trim() || null,
+        categoryId: body.entry.categoryId,
+        enteredByMemberId: body.entry.enteredByMemberId,
+      }
+      state.activity.push(entry)
+      account.balance = { amount: currentBalance(account).toFixed(2), asOf: account.balance.asOf }
+      return HttpResponse.json(decorate(entry, state.accounts), { status: 201 })
+    }),
+    http.get('*/api/v1/accounts/:id/starting-balance-corrections', ({ request, params }) => {
+      log(request)
+      return HttpResponse.json(
+        state.openingRevisions
+          .filter((r) => r.accountId === params.id)
+          .map((r) => ({ ...r, enteredByName: nameOf(r.enteredByMemberId) })),
+      )
+    }),
+    http.post('*/api/v1/accounts/:id/starting-balance-corrections', async ({ request, params }) => {
+      log(request)
+      const account = state.accounts.find((a) => a.id === params.id)
+      if (!account) return problem(404, 'Account not found')
+      const key = request.headers.get('Idempotency-Key') ?? ''
+      const body = (await request.json()) as {
+        openingAmount: string
+        openedOn: string
+        reason: string
+        enteredByMemberId: string
+      }
+      const existing = state.openingRevisions.find((r) => r.key === key)
+      if (existing) {
+        return HttpResponse.json(
+          { ...existing, enteredByName: nameOf(existing.enteredByMemberId) },
+          { status: 200 },
+        )
+      }
+      if (!/^-?\d+(\.\d{1,2})?$/.test(body.openingAmount))
+        return problem(400, 'Enter a valid amount')
+      if (!body.reason?.trim()) return problem(400, 'Enter a reason')
+      const revision: MockOpeningRevision = {
+        id: newId(),
+        accountId: account.id,
+        key,
+        previousAmount: Number(account.openingAmount).toFixed(2),
+        previousOn: account.openedOn,
+        openingAmount: Number(body.openingAmount).toFixed(2),
+        openedOn: body.openedOn,
+        reason: body.reason.trim(),
+        enteredByMemberId: body.enteredByMemberId,
+        createdAt: '2026-10-03T12:00:00Z',
+      }
+      state.openingRevisions.push(revision)
+      account.openingAmount = revision.openingAmount
+      account.openedOn = revision.openedOn
+      account.balance = { amount: currentBalance(account).toFixed(2), asOf: account.balance.asOf }
+      return HttpResponse.json(
+        { ...revision, enteredByName: nameOf(revision.enteredByMemberId) },
+        { status: 201 },
+      )
+    }),
+    http.get('*/api/v1/accounts/:id/statements', ({ request, params }) => {
+      log(request)
+      return HttpResponse.json(
+        state.statements.filter((s) => s.accountId === params.id).map(statementView),
+      )
+    }),
+    http.post('*/api/v1/accounts/:id/statements', async ({ request, params }) => {
+      log(request)
+      return saveStatement(request, params.id as string, null)
+    }),
+    http.post('*/api/v1/accounts/:id/statements/:sid/revision', async ({ request, params }) => {
+      log(request)
+      return saveStatement(request, params.id as string, params.sid as string)
     }),
     http.get('*/api/v1/reminders', ({ request }) => {
       log(request)

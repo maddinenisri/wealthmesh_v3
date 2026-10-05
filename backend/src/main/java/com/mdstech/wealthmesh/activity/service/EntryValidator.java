@@ -105,7 +105,7 @@ public class EntryValidator {
                         + " category")));
     }
 
-    Mono<UUID> member(Account account, UUID memberId) {
+    public Mono<UUID> member(Account account, UUID memberId) {
         if (memberId == null) {
             return Mono.error(bad("Choose who entered this"));
         }
@@ -113,7 +113,7 @@ public class EntryValidator {
                 .map(m -> m.id()).switchIfEmpty(Mono.error(bad("Choose who entered this from this household")));
     }
 
-    static BigDecimal amount(Object value) {
+    public static BigDecimal amount(Object value) {
         if (!(value instanceof String text) || Money.parse(text).isEmpty()) {
             throw bad("Enter a valid amount");
         }
@@ -124,7 +124,7 @@ public class EntryValidator {
         return amount;
     }
 
-    static ResponseStatusException bad(String message) {
+    public static ResponseStatusException bad(String message) {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 }

@@ -16,14 +16,17 @@ import {
   recordEntry,
   replaceEntry,
   saveCorrection,
+  saveHistoricalEntry,
   saveReminder,
   type EditedEntry,
+  type HistoricalEntry,
   type EntryKind,
   type NewCorrection,
   type NewReminder,
   type NewEntry,
 } from '../api/activity'
 import { accountsKey } from './useAccounts'
+import { openingRevisionsKey } from './useStartingBalance'
 import { wealthKey } from './useWealth'
 
 const activityKey = (accountId: string) => ['activity', accountId] as const
@@ -50,6 +53,23 @@ export function useRecordEntry(accountId: string, kind: EntryKind) {
     mutationFn: ({ key, entry }: { key: string; entry: NewEntry }) =>
       recordEntry(accountId, kind, key, entry),
     onSuccess: refresh,
+  })
+}
+
+/** Saves an entry dated before tracking began together with the reviewed move of the start. */
+export function useSaveHistoricalEntry(accountId: string) {
+  const queryClient = useQueryClient()
+  const refresh = useRefreshMoney(accountId)
+  return useMutation({
+    mutationFn: ({ key, body }: { key: string; body: HistoricalEntry }) =>
+      saveHistoricalEntry(accountId, key, body),
+    onSuccess: async () => {
+      await refresh()
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: openingRevisionsKey(accountId) }),
+        queryClient.invalidateQueries({ queryKey: ['balance', accountId] }),
+      ])
+    },
   })
 }
 

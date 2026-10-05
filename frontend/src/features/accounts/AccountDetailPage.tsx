@@ -17,10 +17,11 @@ import { useAccount, useToday } from '../../hooks/useAccounts'
 import type { EntryKind } from '../../api/activity'
 import type { Activity as ActivityEntry } from '../../api/activity'
 import { AddEntry } from '../activity/AddEntry'
-import { BalanceCorrection } from '../activity/BalanceCorrection'
+import { UpdateBalance } from '../activity/UpdateBalance'
 import { ActivityList } from '../activity/ActivityList'
 import { Panel } from '../activity/Panel'
 import { RemindersCard } from '../activity/RemindersCard'
+import { StatementsCard } from '../statements/StatementsCard'
 import { ChangeEntry, type ChangeTarget } from '../activity/ChangeEntry'
 import { OVERDRAFT_NOTICE, OverdrawnLabel } from './Overdrawn'
 import { ownerNames } from './ownerNames'
@@ -191,7 +192,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
       )}
       {correcting && today.data && members && (
         <Panel key={`correct-${correcting.editing?.id ?? 'new'}`}>
-          <BalanceCorrection
+          <UpdateBalance
             account={account}
             members={members}
             today={today.data}
@@ -254,6 +255,12 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
       </Card>
       {today.data && <BalanceOnDate account={account} today={today.data} />}
       <RemindersCard accountId={account.id} />
+      <StatementsCard
+        accountId={account.id}
+        balance={account.balance.amount}
+        members={members}
+        today={today.data}
+      />
     </>
   )
 }

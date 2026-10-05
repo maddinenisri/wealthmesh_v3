@@ -63,6 +63,18 @@ abstract class LedgerApiTestBase {
         return id.get();
     }
 
+    /** A checking account owned by Maya with its start on the given date. */
+    protected String accountOpenedOn(String name, String opening, String openedOn) {
+        AtomicReference<String> id = new AtomicReference<>();
+        webTestClient.post().uri("/api/v1/accounts").contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"type": "checking", "name": "%s", "ownerMemberIds": ["%s"],
+                         "openedOn": "%s", "openingBalance": "%s"}""".formatted(name, mayaId, openedOn, opening))
+                .exchange().expectStatus().isCreated()
+                .expectBody().jsonPath("$.id").value(String.class, id::set);
+        return id.get();
+    }
+
     protected WebTestClient.ResponseSpec post(String accountId, String path, String key, String json) {
         return webTestClient.post().uri("/api/v1/accounts/{id}/{path}", accountId, path)
                 .contentType(MediaType.APPLICATION_JSON).header("Idempotency-Key", key)

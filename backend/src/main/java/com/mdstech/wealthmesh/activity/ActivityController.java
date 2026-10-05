@@ -15,10 +15,12 @@ import org.springframework.web.bind.annotation.RestController;
 import com.mdstech.wealthmesh.activity.dto.ActivityResponse;
 import com.mdstech.wealthmesh.activity.dto.ChangeRequest;
 import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
+import com.mdstech.wealthmesh.activity.dto.HistoricalEntryRequest;
 import com.mdstech.wealthmesh.activity.dto.HistoryEntry;
 import com.mdstech.wealthmesh.activity.dto.ReplacementRequest;
 import com.mdstech.wealthmesh.activity.service.EntryChangeService;
 import com.mdstech.wealthmesh.activity.service.EntryService;
+import com.mdstech.wealthmesh.activity.service.HistoricalEntryService;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -29,10 +31,12 @@ public class ActivityController {
 
     private final EntryService service;
     private final EntryChangeService changes;
+    private final HistoricalEntryService historical;
 
-    public ActivityController(EntryService service, EntryChangeService changes) {
+    public ActivityController(EntryService service, EntryChangeService changes, HistoricalEntryService historical) {
         this.service = service;
         this.changes = changes;
+        this.historical = historical;
     }
 
     @GetMapping("/activity/history")
@@ -60,6 +64,15 @@ public class ActivityController {
             @RequestHeader(name = "Idempotency-Key", required = false) String key,
             @RequestBody ExpenseRequest request) {
         return save(accountId, key, "expense", request);
+    }
+
+    /** An entry dated before tracking began, saved with the reviewed move of the start (V2_CHECKING_016). */
+    @PostMapping("/historical-entries")
+    public Mono<ResponseEntity<ActivityResponse>> recordHistorical(@PathVariable UUID accountId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String key,
+            @RequestBody HistoricalEntryRequest request) {
+        return historical.save(accountId, key, request).map(saved -> ResponseEntity
+                .status(saved.created() ? HttpStatus.CREATED : HttpStatus.OK).body(saved.activity()));
     }
 
     @PostMapping("/income")

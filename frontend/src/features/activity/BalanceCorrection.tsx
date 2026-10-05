@@ -29,6 +29,8 @@ export function BalanceCorrection({
   members,
   today,
   editing,
+  onBeforeStart,
+  onReviewing,
   onDone,
 }: {
   account: Account
@@ -36,11 +38,16 @@ export function BalanceCorrection({
   today: string
   /** An effective correction being corrected: saving replaces it. */
   editing?: Activity
+  /** A date before tracking began is a tracking-start review, not a dated correction. */
+  onBeforeStart?: (draft: { amount: string; on: string }) => void
+  /** Tells the parent whether a review is showing, so the mode choice can be locked. */
+  onReviewing?: (reviewing: boolean) => void
   onDone: () => void
 }) {
   const { member, setMemberId } = useEnteringAs(members)
   const [reviewing, setReviewing] = useState<{ requested: string; asOn: string } | null>(null)
   const [key] = useState(newKey)
+  useEffect(() => onReviewing?.(reviewing !== null), [reviewing, onReviewing])
   const save = useSaveCorrection(account.id)
   const { control, handleSubmit, setValue, getFieldState, formState } = useForm<Values>({
     defaultValues: { requested: '', asOn: editing?.occurredOn ?? today, reason: '' },
@@ -179,7 +186,9 @@ export function BalanceCorrection({
         noValidate
         className="mt-3 flex max-w-md flex-col gap-4"
         onSubmit={handleSubmit((values) =>
-          setReviewing({ requested: parseAmount(values.requested)!, asOn: values.asOn }),
+          onBeforeStart && values.asOn < account.openedOn
+            ? onBeforeStart({ amount: parseAmount(values.requested)!, on: values.asOn })
+            : setReviewing({ requested: parseAmount(values.requested)!, asOn: values.asOn }),
         )}
       >
         <TextField
@@ -200,7 +209,9 @@ export function BalanceCorrection({
             validate: (value) =>
               value > today
                 ? 'A correction cannot be dated in the future'
-                : value >= account.openedOn || "This date is before the account's opening date",
+                : value >= account.openedOn ||
+                  !!onBeforeStart ||
+                  "This date is before the account's opening date",
           }}
         />
         <p className="text-sm text-ink-muted">

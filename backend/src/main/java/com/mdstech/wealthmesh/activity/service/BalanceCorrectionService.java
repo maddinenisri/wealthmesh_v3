@@ -85,8 +85,9 @@ public class BalanceCorrectionService {
         String reason = reason(request.reason());
         // The account row is locked first, so the Balance on the date is read and the row written with no other
         // correction (or replacement) of this account in between.
-        Mono<EntryService.Saved> locked = store.lockAccount(account.id()).then(Mono.defer(
-                () -> figures(account, request.requestedBalance(), request.asOn(), request.replacesId())))
+        // The account is read again under the lock: a starting-balance correction may have changed its opening.
+        Mono<EntryService.Saved> locked = store.lockAccount(account.id()).then(Mono.defer(() -> load(account.id())))
+                .flatMap(fresh -> figures(fresh, request.requestedBalance(), request.asOn(), request.replacesId()))
                 .flatMap(f -> {
                     if (f.replaced() == null && f.difference().signum() == 0) {
                         return Mono.error(EntryValidator.bad("The Balance already matches this amount"));
