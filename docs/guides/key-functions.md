@@ -16,6 +16,7 @@ The files that carry the design, and what breaks or gets harder without each. Pa
 | `account/repository/AccountOwnerStore`         | Owner links (composite key) with plain SQL: `replace`, `ownersByAccount`, `ownersOf` | Joint accounts later need no schema change                  |
 | `activity/service/EntryService`                | `record(accountId, key, kind, request)`: validates and saves an expense or income; replay by key (D-024) | One place for money in and out; `kind` picks the category kind and the Balance direction |
 | `activity/service/EntryChangeService`          | `replace` (edit as replacement), `remove`, `undo`, `history` with who/when events (`activity_event`) | Money rows are never updated in place; a replacement and the original swap in one transaction |
+| `activity/service/MoveTarget`, `ReplacementPreviewService` | `resolve`: the account a replacement lands on (same household, holds activity); `preview`: both Balances and both months after a move, read-only | A move changes two accounts; the server decides the target and the review shows the figures (slice 06, D-035) |
 | `activity/service/EntryValidator`              | `parse` (entries) and `parseReminder`: amount, date, category kind, member    | One place for entry rules; the date rule differs for reminders |
 | `statement/service/StatementService`           | `attach`, `revise` (repeat-safe), `ofAccount`; table `statement` (V7), `UNIQUE (replaces_id)` | Statements never feed Balance; only one revision per version, so concurrent revisions cannot both win (slice 04) |
 | `opening/service/OpeningRevisionService`       | `preview` (optionally with a pending entry), `save`, `applyLocked`; table `opening_revision` (V8) | Starting-balance and tracking-start correction under the account lock; keeps the replaced amount and date; never income or spending |
@@ -97,6 +98,7 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | `e2e/playwright.config.ts`             | `webServer` runs the stack, `workers: 1`, health URL, graceful shutdown              |
 | `e2e/tests/01-household.spec.ts`       | The ordered journey from an empty database; specs run by file name, so the number is the order |
 | `e2e/tests/02-checking-setup.spec.ts`  | Checking setup journey; needs the household and members left by 01                  |
+| `e2e/tests/11a-savings.spec.ts`        | Savings setup, edit, interest, and moving an entry to another account at 710px and 1280px; runs before 12 because 12 renames Alex Doe |
 | `e2e/tests/12-members.spec.ts`         | Joint owners, rename, remove at 710px and 1280px; renames Alex Doe to Alex Patel, so it runs last |
 | `e2e/tests/shell.spec.ts`              | Shell, navigation without reload, not-found view, API and health endpoints           |
 | `.pre-commit-config.yaml`              | All hooks, grouped by stage                                                          |
