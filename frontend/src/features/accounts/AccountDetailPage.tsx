@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
 import { Button, Card, CardTitle, EmptyState, PageHeader, buttonStyles } from '../../design-system'
-import { useAccount, useToday } from '../../hooks/useAccounts'
+import { useAccount, useAccounts, useToday } from '../../hooks/useAccounts'
 import type { EntryKind } from '../../api/activity'
 import type { Activity as ActivityEntry } from '../../api/activity'
 import { AddEntry } from '../activity/AddEntry'
@@ -163,7 +163,7 @@ function BalanceOnDate({ account, today }: { account: Account; today: string }) 
 
 /** The transfer panel that is open: a new transfer, a correction, a removal, an Undo, or an expense changed. */
 type TransferPanel =
-  | { kind: 'new'; payment?: boolean }
+  | { kind: 'new'; payment?: boolean; fromBank?: boolean }
   | { kind: 'edit'; entry: ActivityEntry }
   | { kind: 'remove' | 'undo'; entry: TransferTarget }
   | { kind: 'convert'; entry: ActivityEntry }
@@ -185,6 +185,9 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
   )
   const [transfer, setTransfer] = useState<TransferPanel | null>(null)
   const [batching, setBatching] = useState(false)
+  const accounts = useAccounts()
+  // "Pay a card" needs a card to pay (Q-034).
+  const hasCard = (accounts.data ?? []).some((candidate) => isCard(candidate.type))
   const today = useToday()
   const ready =
     !adding &&
@@ -271,6 +274,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               today={today.data}
               editing={transfer.kind === 'edit' ? transfer.entry : undefined}
               payment={transfer.kind === 'new' ? transfer.payment : undefined}
+              fromBank={transfer.kind === 'new' ? transfer.fromBank : undefined}
               onDone={closeTransfer}
             />
           )}
@@ -475,6 +479,23 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             >
               Add transfer
             </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setTransfer({ kind: 'new', payment: true, fromBank: true })
+              }}
+              disabled={!ready || !hasCard}
+              title={hasCard ? undefined : 'Add a credit card to pay it from here'}
+            >
+              Pay a card
+            </Button>
+            {!hasCard && (
+              <span className="self-center text-caption text-ink-muted">
+                Add a credit card to pay it from here.
+              </span>
+            )}
           </div>
         )}
       </Card>

@@ -55,6 +55,7 @@ export function TransferForm({
   today,
   editing,
   payment,
+  fromBank,
   onDone,
 }: {
   account: Account
@@ -64,6 +65,11 @@ export function TransferForm({
   editing?: Activity
   /** A payment to a card (the card is `account`, or the other side of `editing`); a plain transfer otherwise. */
   payment?: boolean
+  /**
+   * A new payment started from the bank account (`account`): the bank is fixed and the person chooses the card
+   * (Q-034). The card page starts the same payment the other way round.
+   */
+  fromBank?: boolean
   /** `saved` is true after Confirm, so the page can show the new row. */
   onDone: (saved?: boolean) => void
 }) {
@@ -77,6 +83,11 @@ export function TransferForm({
       !isCard(candidate.type),
   )
   const cardOf = (id: string) => accounts.data?.find((candidate) => candidate.id === id)
+  const cards = (accounts.data ?? []).filter(
+    (candidate) =>
+      ACCOUNT_TYPES.some((type) => type.ready && type.value === candidate.type) &&
+      isCard(candidate.type),
+  )
   const outgoing = editing ? givesMoney(editing) : !isPay
   const other = editing?.counterAccountId ?? ''
   const save = useSaveTransfer(
@@ -88,8 +99,14 @@ export function TransferForm({
   const [key] = useState(newKey)
   const { control, handleSubmit } = useForm<Values>({
     defaultValues: {
-      fromAccountId: editing ? (outgoing ? account.id : other) : isPay ? '' : account.id,
-      toAccountId: editing ? (outgoing ? other : account.id) : isPay ? account.id : '',
+      fromAccountId: editing
+        ? outgoing
+          ? account.id
+          : other
+        : isPay && !fromBank
+          ? ''
+          : account.id,
+      toAccountId: editing ? (outgoing ? other : account.id) : isPay && !fromBank ? account.id : '',
       amount: editing?.amount ?? '',
       occurredOn: editing?.occurredOn ?? today,
       description: editing?.description ?? '',
@@ -196,31 +213,52 @@ export function TransferForm({
   return (
     <Card aria-labelledby="transfer-heading">
       <CardTitle id="transfer-heading" className="text-lg">
-        {editing ? words.edit : words.add}
+        {editing ? words.edit : fromBank ? 'Pay a card' : words.add}
       </CardTitle>
       <form
         noValidate
         className="mt-3 flex max-w-md flex-col gap-4"
         onSubmit={handleSubmit(setReviewing)}
       >
-        <SelectField
-          control={control}
-          name="fromAccountId"
-          label={isPay ? 'Paid from' : 'From'}
-          rules={{
-            required: isPay
-              ? 'Choose the bank account that paid the card'
-              : 'Choose the account the money comes from',
-          }}
-        >
-          <option value="">Choose an account</option>
-          {choices.map((candidate) => (
-            <option key={candidate.id} value={candidate.id}>
-              {accountChoice(candidate)}
-            </option>
-          ))}
-        </SelectField>
-        {isPay ? (
+        {fromBank && !editing ? (
+          <div>
+            <p className="text-sm font-medium">Paid from</p>
+            <p className="mt-1">{account.name}</p>
+          </div>
+        ) : (
+          <SelectField
+            control={control}
+            name="fromAccountId"
+            label={isPay ? 'Paid from' : 'From'}
+            rules={{
+              required: isPay
+                ? 'Choose the bank account that paid the card'
+                : 'Choose the account the money comes from',
+            }}
+          >
+            <option value="">Choose an account</option>
+            {choices.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {accountChoice(candidate)}
+              </option>
+            ))}
+          </SelectField>
+        )}
+        {isPay && fromBank && !editing ? (
+          <SelectField
+            control={control}
+            name="toAccountId"
+            label="Card to pay"
+            rules={{ required: 'Choose the card to pay' }}
+          >
+            <option value="">Choose a card</option>
+            {cards.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {accountChoice(candidate)}
+              </option>
+            ))}
+          </SelectField>
+        ) : isPay ? (
           <div>
             <p className="text-sm font-medium">Paid to</p>
             <p className="mt-1">{cardOf(toId)?.name ?? ''}</p>
