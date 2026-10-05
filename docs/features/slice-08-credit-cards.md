@@ -1,8 +1,8 @@
 # Slice 08: Credit cards
 
 - Slice: 08 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/credit-cards/setup.feature`, `accounts/credit-cards/activity.feature`, `spending/monthly-review/review-spending.feature`, `household/history/manage-supporting-records.feature`
-- Status: done, local (not pushed; the owner pushes, D-002)
-- Started: 2026-10-05 13:28 (ET, session clock)  Finished: 2026-10-05  Commit: `939f26d` (commits from `b5d8aab`)
+- Status: done and pushed (2026-10-05, on the owner's word, D-002)
+- Started: 2026-10-05 13:28 (ET, session clock)  Finished: 2026-10-05  Commit: `5caca17` (commits from `b5d8aab`)
 
 ## Prompts and directions
 
