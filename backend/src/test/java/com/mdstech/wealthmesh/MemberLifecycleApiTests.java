@@ -10,21 +10,16 @@ import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 import io.r2dbc.spi.Connection;
-import io.r2dbc.spi.ConnectionFactory;
 import reactor.core.publisher.Mono;
 
 /** Joint owners, renaming a member and removing (deactivating) a member (slice 05). */
 class MemberLifecycleApiTests extends LedgerApiTestBase {
 
     private static String jointId;
-
-    @Autowired
-    ConnectionFactory connectionFactory;
 
     @Order(0)
     @Test
@@ -286,15 +281,6 @@ class MemberLifecycleApiTests extends LedgerApiTestBase {
             Mono.from(other.close()).block();
             webTestClient.post().uri("/api/v1/household-members/{id}/restore", samId).exchange().expectStatus().isOk();
         }
-    }
-
-    /** Starts a transaction on its own connection and runs a write that stays uncommitted: its row lock is held. */
-    private Connection holdUncommitted(String sql, String memberId) {
-        Connection connection = Mono.from(connectionFactory.create()).block();
-        Mono.from(connection.beginTransaction()).block();
-        Mono.from(connection.createStatement(sql).bind(0, UUID.fromString(memberId)).execute())
-                .flatMap(result -> Mono.from(result.getRowsUpdated())).block();
-        return connection;
     }
 
     private String newMember(String name) {

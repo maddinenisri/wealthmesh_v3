@@ -14,6 +14,12 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
+import java.util.UUID;
+
+import io.r2dbc.spi.Connection;
+import io.r2dbc.spi.ConnectionFactory;
+import reactor.core.publisher.Mono;
+
 /**
  * Shared set-up for API tests that need a household, members, checking accounts and entries. Each subclass gets its
  * own database (DirtiesContext), so household-wide figures such as September income are exact.
@@ -34,6 +40,30 @@ abstract class LedgerApiTestBase {
 
     @Autowired
     protected MutableClock clock;
+
+    @Autowired
+    protected ConnectionFactory connectionFactory;
+
+    /**
+     * Race tests: starts a transaction on its own connection and runs a write that stays uncommitted, so its row lock
+     * is held. Call {@link #commit} then {@link #close} (in a finally) to release it. A race test must fail when the
+     * lock it claims is taken out of the service.
+     */
+    protected Connection holdUncommitted(String sql, String id) {
+        Connection connection = Mono.from(connectionFactory.create()).block();
+        Mono.from(connection.beginTransaction()).block();
+        Mono.from(connection.createStatement(sql).bind(0, UUID.fromString(id)).execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated())).block();
+        return connection;
+    }
+
+    protected void commit(Connection connection) {
+        Mono.from(connection.commitTransaction()).block();
+    }
+
+    protected void close(Connection connection) {
+        Mono.from(connection.close()).block();
+    }
 
     @BeforeEach
     void resetToday() {

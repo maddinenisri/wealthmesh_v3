@@ -12,12 +12,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 import io.r2dbc.spi.Connection;
-import io.r2dbc.spi.ConnectionFactory;
 import reactor.core.publisher.Mono;
 
 /**
@@ -25,9 +23,6 @@ import reactor.core.publisher.Mono;
  * write on a second connection, so each fails when the lock it claims is taken out.
  */
 class MoveEntryApiTests extends LedgerApiTestBase {
-
-    @Autowired
-    ConnectionFactory connectionFactory;
 
     private static String checking;
     private static String savings;
@@ -459,22 +454,12 @@ class MoveEntryApiTests extends LedgerApiTestBase {
         return CompletableFuture.supplyAsync(call);
     }
 
-    /** Starts a transaction on its own connection and runs a statement that stays uncommitted: its lock is held. */
+    /** Holds the statement uncommitted and also the account row lock, whatever the statement did. */
     private Connection hold(String account, String sql) {
-        Connection connection = Mono.from(connectionFactory.create()).block();
-        Mono.from(connection.beginTransaction()).block();
-        Mono.from(connection.createStatement(sql).bind(0, UUID.fromString(account)).execute())
-                .flatMap(result -> Mono.from(result.getRowsUpdated())).block();
+        Connection connection = holdUncommitted(sql, account);
         Mono.from(connection.createStatement("SELECT 1 FROM wealthmesh.account WHERE id = $1 FOR UPDATE")
                 .bind(0, UUID.fromString(account)).execute()).flatMap(r -> Mono.from(r.getRowsUpdated())).block();
         return connection;
     }
 
-    private void commit(Connection connection) {
-        Mono.from(connection.commitTransaction()).block();
-    }
-
-    private void close(Connection connection) {
-        Mono.from(connection.close()).block();
-    }
 }
