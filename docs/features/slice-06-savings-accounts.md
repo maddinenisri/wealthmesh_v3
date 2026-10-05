@@ -1,8 +1,8 @@
 # Slice 06: Savings accounts
 
 - Slice: 06 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/savings/setup.feature`, `accounts/savings/activity.feature`, `spending/income/record-income.feature`, `spending/expenses/record-expenses.feature`, `household/setup/set-up-household.feature`
-- Status: in-progress (checkpoint 2 fixes done, awaiting commit approval)
-- Started: 2026-10-05  Finished:  Commit:
+- Status: built and committed, not pushed (row turns done when the owner pushes, D-002)
+- Started: 2026-10-05  Finished: 2026-10-05  Commit: `4de1712` (five commits from `65acfd8`)
 
 ## Prompts and directions
 
