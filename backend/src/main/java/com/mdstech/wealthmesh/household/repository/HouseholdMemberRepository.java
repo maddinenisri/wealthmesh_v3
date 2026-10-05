@@ -18,6 +18,10 @@ public interface HouseholdMemberRepository extends ReactiveCrudRepository<Househ
     @Query("SELECT * FROM household_member WHERE household_id = :householdId FOR SHARE")
     Flux<HouseholdMember> findByHouseholdIdForShare(UUID householdId);
 
+    /** Reads one member and blocks a concurrent deactivate or rename until the caller's transaction ends. */
+    @Query("SELECT * FROM household_member WHERE id = :id FOR SHARE")
+    Mono<HouseholdMember> findByIdForShare(UUID id);
+
     /** Reads one member and blocks any other writer of it until the caller's transaction ends. */
     @Query("SELECT * FROM household_member WHERE id = :id FOR UPDATE")
     Mono<HouseholdMember> findByIdForUpdate(UUID id);

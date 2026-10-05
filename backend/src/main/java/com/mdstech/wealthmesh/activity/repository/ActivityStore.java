@@ -119,6 +119,14 @@ public class ActivityStore {
         return spec.map(ActivityStore::entry).all();
     }
 
+    /** Total of one kind (expense or income) in a month; removed rows never count. */
+    public Mono<BigDecimal> monthTotal(String kind, LocalDate from, LocalDate to) {
+        return client.sql("SELECT COALESCE(SUM(amount), 0) AS total FROM activity WHERE removed_at IS NULL "
+                        + "AND kind = :kind AND occurred_on >= :from AND occurred_on < :to")
+                .bind("kind", kind).bind("from", from).bind("to", to)
+                .map((row, meta) -> row.get("total", BigDecimal.class)).one();
+    }
+
     public record CategoryTotal(UUID categoryId, String name, BigDecimal total, long count) {
     }
 
@@ -196,10 +204,23 @@ public class ActivityStore {
                        a.entered_by_member_id, m.name AS entered_by_name, a.created_at, a.reason, a.replaces_id,
                        r.id AS replaced_by_id,
                        CASE WHEN r.id IS NOT NULL THEN 'replaced' WHEN a.removed_at IS NOT NULL THEN 'removed'
-                            ELSE 'effective' END AS status
+                            ELSE 'effective' END AS status,
+                       p.account_id AS p_account_id, pa.name AS p_account_name, p.kind AS p_kind,
+                       p.amount AS p_amount, p.occurred_on AS p_on, pc.name AS p_category,
+                       pm.name AS p_by, p.created_at AS p_at,
+                       r.account_id AS r_account_id, ra.name AS r_account_name, r.kind AS r_kind,
+                       r.amount AS r_amount, r.occurred_on AS r_on, rc.name AS r_category,
+                       rm.name AS r_by, r.created_at AS r_at
                 FROM activity a LEFT JOIN category c ON c.id = a.category_id
                 LEFT JOIN household_member m ON m.id = a.entered_by_member_id
                 LEFT JOIN activity r ON r.replaces_id = a.id
+                LEFT JOIN account ra ON ra.id = r.account_id
+                LEFT JOIN category rc ON rc.id = r.category_id
+                LEFT JOIN household_member rm ON rm.id = r.entered_by_member_id
+                LEFT JOIN activity p ON p.id = a.replaces_id
+                LEFT JOIN account pa ON pa.id = p.account_id
+                LEFT JOIN category pc ON pc.id = p.category_id
+                LEFT JOIN household_member pm ON pm.id = p.entered_by_member_id
                 WHERE a.account_id = :account AND a.kind IN ('expense', 'income', 'correction')
                 ORDER BY a.created_at DESC, a.occurred_on DESC""")
                 .bind("account", accountId)
@@ -210,8 +231,23 @@ public class ActivityStore {
                         instant(row, "created_at"), row.get("reason", String.class),
                         row.get("replaces_id", UUID.class), row.get("replaced_by_id", UUID.class),
                         row.get("status", String.class),
-                        events.getOrDefault(row.get("id", UUID.class), List.of())))
+                        events.getOrDefault(row.get("id", UUID.class), List.of()),
+                        origin(row, "replaces_id", "p_"), origin(row, "replaced_by_id", "r_")))
                 .all();
+    }
+
+    /** The row on the other side of a replacement, read from the columns that start with the prefix. */
+    private static HistoryEntry.Origin origin(io.r2dbc.spi.Readable row, String idColumn, String prefix) {
+        UUID id = row.get(idColumn, UUID.class);
+        if (id == null) {
+            return null;
+        }
+        return new HistoryEntry.Origin(id, row.get(prefix + "account_id", UUID.class),
+                row.get(prefix + "account_name", String.class), row.get(prefix + "kind", String.class),
+                Money.format(row.get(prefix + "amount", BigDecimal.class)),
+                row.get(prefix + "on", LocalDate.class),
+                row.get(prefix + "category", String.class), row.get(prefix + "by", String.class),
+                instant(row, prefix + "at"));
     }
 
     private static Instant instant(io.r2dbc.spi.Readable row, String column) {

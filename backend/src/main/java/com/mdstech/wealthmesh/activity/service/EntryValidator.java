@@ -114,6 +114,13 @@ public class EntryValidator {
                 .flatMap(m -> m.active() ? Mono.just(m.id()) : Mono.error(bad("Choose an active member")));
     }
 
+    /** The same rule as {@link #member}, read under a share lock so a deactivate cannot slip in before the save. */
+    public Mono<UUID> memberLocked(Account account, UUID memberId) {
+        return members.findByIdForShare(memberId).filter(m -> m.householdId().equals(account.householdId()))
+                .switchIfEmpty(Mono.error(bad("Choose who entered this from this household")))
+                .flatMap(m -> m.active() ? Mono.just(m.id()) : Mono.error(bad("Choose an active member")));
+    }
+
     public static BigDecimal amount(Object value) {
         if (!(value instanceof String text) || Money.parse(text).isEmpty()) {
             throw bad("Enter a valid amount");

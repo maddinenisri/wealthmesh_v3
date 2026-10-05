@@ -3,8 +3,12 @@ package com.mdstech.wealthmesh.activity.dto;
 import java.time.LocalDate;
 import java.util.UUID;
 
-/** A corrected entry. The reason is optional and shown in history when given. */
+/**
+ * A corrected entry. The reason is optional and shown in history when given. {@code accountId} moves the entry to
+ * another account; omitted means the account it is on.
+ */
 public record ReplacementRequest(
+        UUID accountId,
         String description,
         Object amount,
         LocalDate occurredOn,

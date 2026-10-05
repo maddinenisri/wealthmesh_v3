@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.mdstech.wealthmesh.account.domain.Account;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.domain.Activity;
 import com.mdstech.wealthmesh.activity.dto.HistoryEntry;
@@ -34,10 +35,12 @@ public class EntryChangeService {
     private final ActivityStore store;
     private final Clock clock;
     private final TransactionalOperator transactions;
+    private final MoveTarget moveTarget;
 
     public EntryChangeService(AccountRepository accounts, EntryValidator validator, ActivityRepository activities,
-            ActivityStore store, Clock clock, TransactionalOperator transactions) {
+            ActivityStore store, Clock clock, TransactionalOperator transactions, MoveTarget moveTarget) {
         this.transactions = transactions;
+        this.moveTarget = moveTarget;
         this.accounts = accounts;
         this.validator = validator;
         this.activities = activities;
@@ -101,23 +104,36 @@ public class EntryChangeService {
         return Mono.fromCallable(() -> requireKey(key))
                 .then(Mono.defer(() -> store.expireKey(key, cutoff)))
                 .then(Mono.defer(() -> original(accountId, activityId, true)))
-                .flatMap(original -> accounts.findById(accountId).flatMap(account -> validator
+                .flatMap(original -> moveTarget.resolve(accountId, request.accountId()).flatMap(account -> validator
                         .parse(account, replacementKind(original), request.asEntry())
                         .doOnNext(entry -> checkFeeMatchesCorrection(original, entry))
+                        .doOnNext(entry -> checkStaysPut(original, entry))
                         .flatMap(entry -> activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
                                 .flatMap(existing -> replay(existing, entry, activityId))
                                 .switchIfEmpty(Mono.defer(() -> original.removedAt() != null
                                         ? Mono.error(conflict("This entry was already changed or removed."))
-                                        : swap(original, entry, key, request.reason(), now))))))
+                                        : swap(original, entry, key, request.reason(), now, cutoff, account))))))
                 .onErrorMap(DuplicateKeyException.class,
                         e -> conflict("This save was already used. Start a new entry."));
     }
 
     /** One transaction: the original leaves the totals only if the replacement is saved, and only once. */
     Mono<EntryService.Saved> swap(Activity original, EntryValidator.Entry entry, String key, String reason,
-            Instant now) {
+            Instant now, Instant cutoff, Account target) {
+        // Under the locks: a request with this key that finished while this one waited is replayed, and the person
+        // who entered it is checked again, so a deactivate in between is not missed (D-034).
+        Mono<EntryService.Saved> swapped = lockBoth(original.accountId(), entry.accountId())
+                .then(Mono.defer(() -> activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
+                        .flatMap(existing -> replay(existing, entry, original.id()))
+                        .switchIfEmpty(Mono.defer(() -> validator.memberLocked(target, entry.memberId())
+                                .then(Mono.defer(() -> swapLocked(original, entry, key, reason, now)))))));
+        return transactions.transactional(swapped);
+    }
+
+    private Mono<EntryService.Saved> swapLocked(Activity original, EntryValidator.Entry entry, String key,
+            String reason, Instant now) {
         String note = reason == null || reason.isBlank() ? null : reason.strip();
-        Mono<EntryService.Saved> swapped = lockedStart(original.accountId(), entry.occurredOn())
+        return lockedStart(entry.accountId(), entry.occurredOn())
                 .then(Mono.defer(() -> store.markRemoved(original.id(), entry.memberId(), now)))
                 .filter(updated -> updated > 0)
                 .switchIfEmpty(Mono.error(conflict("This entry was already changed or removed.")))
@@ -126,7 +142,19 @@ public class EntryChangeService {
                         entry.amount(), entry.occurredOn(), entry.description(), entry.categoryId(), entry.memberId(),
                         key, now, note, original.id(), null, null))))
                 .flatMap(saved -> store.byId(saved.id())).map(a -> new EntryService.Saved(a, true));
-        return transactions.transactional(swapped);
+    }
+
+    /** A Balance correction is replaced by its fee on the same account; it never moves to another one. */
+    private static void checkStaysPut(Activity original, EntryValidator.Entry entry) {
+        if ("correction".equals(original.kind()) && !original.accountId().equals(entry.accountId())) {
+            throw EntryValidator.bad("A Balance correction can only be replaced on its own account");
+        }
+    }
+
+    /** Locks both accounts, lowest id first, so two moves in opposite directions cannot wait on each other. */
+    private Mono<Void> lockBoth(UUID first, UUID second) {
+        return Flux.fromStream(java.util.stream.Stream.of(first, second).distinct().sorted())
+                .concatMap(store::lockAccount).then();
     }
 
     private Mono<EntryService.Saved> replay(Activity existing, EntryValidator.Entry entry, UUID activityId) {
@@ -137,7 +165,7 @@ public class EntryChangeService {
     }
 
     /** A correction can only be replaced by the expense that explains it (slice 03, V2_CHECKING_014). */
-    private static String replacementKind(Activity original) {
+    static String replacementKind(Activity original) {
         return "correction".equals(original.kind()) ? "expense" : original.kind();
     }
 

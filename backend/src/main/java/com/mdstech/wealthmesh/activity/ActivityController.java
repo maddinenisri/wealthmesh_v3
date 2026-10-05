@@ -1,5 +1,6 @@
 package com.mdstech.wealthmesh.activity;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.mdstech.wealthmesh.activity.dto.ActivityResponse;
@@ -17,10 +19,12 @@ import com.mdstech.wealthmesh.activity.dto.ChangeRequest;
 import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
 import com.mdstech.wealthmesh.activity.dto.HistoricalEntryRequest;
 import com.mdstech.wealthmesh.activity.dto.HistoryEntry;
+import com.mdstech.wealthmesh.activity.dto.ReplacementPreview;
 import com.mdstech.wealthmesh.activity.dto.ReplacementRequest;
 import com.mdstech.wealthmesh.activity.service.EntryChangeService;
 import com.mdstech.wealthmesh.activity.service.EntryService;
 import com.mdstech.wealthmesh.activity.service.HistoricalEntryService;
+import com.mdstech.wealthmesh.activity.service.ReplacementPreviewService;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -32,8 +36,11 @@ public class ActivityController {
     private final EntryService service;
     private final EntryChangeService changes;
     private final HistoricalEntryService historical;
+    private final ReplacementPreviewService replacementPreviews;
 
-    public ActivityController(EntryService service, EntryChangeService changes, HistoricalEntryService historical) {
+    public ActivityController(EntryService service, EntryChangeService changes, HistoricalEntryService historical,
+            ReplacementPreviewService replacementPreviews) {
+        this.replacementPreviews = replacementPreviews;
         this.service = service;
         this.changes = changes;
         this.historical = historical;
@@ -51,6 +58,14 @@ public class ActivityController {
             @RequestBody ReplacementRequest request) {
         return changes.replace(accountId, activityId, key, request).map(saved -> ResponseEntity
                 .status(saved.created() ? HttpStatus.CREATED : HttpStatus.OK).body(saved.activity()));
+    }
+
+    /** What a replacement would change in both accounts and both months. Informational: nothing is saved. */
+    @GetMapping("/activity/{activityId}/replacement/preview")
+    public Mono<ReplacementPreview> previewReplacement(@PathVariable UUID accountId, @PathVariable UUID activityId,
+            @RequestParam(required = false) UUID targetAccountId, @RequestParam String amount,
+            @RequestParam LocalDate occurredOn) {
+        return replacementPreviews.preview(accountId, activityId, targetAccountId, amount, occurredOn);
     }
 
     @GetMapping("/activity")
