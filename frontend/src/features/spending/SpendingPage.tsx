@@ -6,11 +6,12 @@ import {
   CardTitle,
   Field,
   PageHeader,
+  Select,
   Table,
   Td,
   Th,
 } from '../../design-system'
-import { useToday } from '../../hooks/useAccounts'
+import { useAccounts, useToday } from '../../hooks/useAccounts'
 import {
   useIncome,
   useIncomeEntries,
@@ -38,6 +39,9 @@ const plural = (count: number, word: string, many = `${word}s`) =>
 export function SpendingPage() {
   const today = useToday()
   const [chosen, setChosen] = useState<string | null>(null)
+  // One account's figures, or the whole household. Transfers are neither income nor spending in either view.
+  const [accountId, setAccountId] = useState<string | null>(null)
+  const accounts = useAccounts()
   const month = chosen ?? today.data?.slice(0, 7) ?? ''
 
   return (
@@ -50,19 +54,45 @@ export function SpendingPage() {
         <p className="text-ink-muted">Loading</p>
       ) : (
         <>
-          <div className="max-w-xs">
-            <Field
-              label="Month"
-              type="month"
-              value={month}
-              onChange={(event) => {
-                if (event.target.value) setChosen(event.target.value)
-              }}
-            />
+          <div className="flex flex-wrap gap-4">
+            <div className="w-full max-w-xs">
+              <Field
+                label="Month"
+                type="month"
+                value={month}
+                onChange={(event) => {
+                  if (event.target.value) setChosen(event.target.value)
+                }}
+              />
+            </div>
+            <div className="w-full max-w-xs">
+              <Select
+                label="Account"
+                value={accountId ?? ''}
+                onChange={(event) => setAccountId(event.target.value || null)}
+              >
+                <option value="">All accounts</option>
+                {accounts.data?.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
-          <Review month={month} />
-          <MonthSection key={`income-${month}`} kind="income" month={month} />
-          <MonthSection key={`expense-${month}`} kind="expense" month={month} />
+          <Review month={month} accountId={accountId} />
+          <MonthSection
+            key={`income-${month}-${accountId}`}
+            kind="income"
+            month={month}
+            accountId={accountId}
+          />
+          <MonthSection
+            key={`expense-${month}-${accountId}`}
+            kind="expense"
+            month={month}
+            accountId={accountId}
+          />
           <History onMonth={setChosen} />
         </>
       )}
@@ -71,8 +101,8 @@ export function SpendingPage() {
 }
 
 /** Income, spending and the difference for the chosen month. */
-function Review({ month }: { month: string }) {
-  const review = useMonthReview(month)
+function Review({ month, accountId }: { month: string; accountId: string | null }) {
+  const review = useMonthReview(month, accountId)
 
   return (
     <Card aria-labelledby="review-heading">
@@ -128,11 +158,19 @@ const KIND = {
 } as const
 
 /** One kind of money for the month: the total, one row per category and the entries behind a category. */
-function MonthSection({ kind, month }: { kind: 'expense' | 'income'; month: string }) {
+function MonthSection({
+  kind,
+  month,
+  accountId,
+}: {
+  kind: 'expense' | 'income'
+  month: string
+  accountId: string | null
+}) {
   const words = KIND[kind]
-  const totals = words.summary(month)
+  const totals = words.summary(month, accountId)
   const [categoryId, setCategoryId] = useState<string | null>(null)
-  const entries = words.entries(month, categoryId)
+  const entries = words.entries(month, categoryId, accountId)
   // Income is its own region named "Income"; spending keeps the month name as its heading.
   const heading = kind === 'income' ? 'Income' : monthName(month, true)
 

@@ -12,6 +12,7 @@ import {
 } from '../../design-system'
 import { useAccounts } from '../../hooks/useAccounts'
 import { useWealth } from '../../hooks/useWealth'
+import { accountTypeLabel } from '../accounts/accountTypes'
 import { OverdrawnLabel } from '../accounts/Overdrawn'
 import { ownerNames } from '../accounts/ownerNames'
 import { useAccountContext } from '../accounts/useAccountContext'
@@ -128,6 +129,10 @@ function AccountsAndWealth() {
                 >
                   {account.name}
                 </Link>{' '}
+                <span className="text-sm text-ink-muted">{accountTypeLabel(account.type)}</span>{' '}
+                <span aria-hidden className="text-sm text-ink-muted">
+                  ·
+                </span>{' '}
                 <span className="text-sm text-ink-muted">
                   {ownerNames(account.ownerMemberIds, members)}
                 </span>

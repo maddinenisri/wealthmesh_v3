@@ -14,6 +14,10 @@ export type Activity = {
   categoryName: string | null
   enteredByMemberId: string | null
   reason: string | null
+  /** Set on a transfer row: the movement both rows share, and the account on the other side. */
+  movementId: string | null
+  counterAccountId: string | null
+  counterAccountName: string | null
 }
 
 /** The other side of a replacement: what the entry was, where, and who saved it when. */
@@ -47,6 +51,9 @@ export type HistoryEntry = {
   /** The entry that replaced this one, and where it went. */
   replacedBy: HistoryOrigin | null
   status: 'effective' | 'replaced' | 'removed'
+  movementId: string | null
+  counterAccountId: string | null
+  counterAccountName: string | null
   /** Who replaced, removed or restored the entry and when, oldest first. */
   events: { action: 'replaced' | 'removed' | 'restored'; byName: string; at: string }[]
 }
@@ -139,6 +146,9 @@ function parseActivity(value: unknown): Activity {
     categoryName: strOrNull(data.categoryName),
     enteredByMemberId: strOrNull(data.enteredByMemberId),
     reason: strOrNull(data.reason),
+    movementId: strOrNull(data.movementId),
+    counterAccountId: strOrNull(data.counterAccountId),
+    counterAccountName: strOrNull(data.counterAccountName),
   }
 }
 
@@ -198,6 +208,9 @@ function parseHistoryEntry(value: unknown): HistoryEntry {
     replaces: data.replaces == null ? null : parseOrigin(data.replaces),
     replacedBy: data.replacedBy == null ? null : parseOrigin(data.replacedBy),
     status,
+    movementId: strOrNull(data.movementId),
+    counterAccountId: strOrNull(data.counterAccountId),
+    counterAccountName: strOrNull(data.counterAccountName),
     events: list(data.events, (entry) => {
       const event = record(entry)
       const action = str(event.action)
@@ -433,19 +446,26 @@ export const saveCorrection = (accountId: string, key: string, correction: NewCo
     parse: parseActivity,
   })
 
-export const getSpending = (month: string) =>
-  request(`/spending?month=${month}`, { parse: parseSummary })
+/** `&accountId=...` for one account's figures, nothing for the whole household. Transfers count in neither. */
+const forAccount = (accountId: string | null) => (accountId ? `&accountId=${accountId}` : '')
 
-export const getIncome = (month: string) =>
-  request(`/income?month=${month}`, { parse: parseSummary })
+export const getSpending = (month: string, accountId: string | null = null) =>
+  request(`/spending?month=${month}${forAccount(accountId)}`, { parse: parseSummary })
 
-export const listIncomeEntries = (month: string, categoryId: string) =>
-  request(`/income/entries?month=${month}&categoryId=${categoryId}`, {
+export const getIncome = (month: string, accountId: string | null = null) =>
+  request(`/income?month=${month}${forAccount(accountId)}`, { parse: parseSummary })
+
+export const listIncomeEntries = (
+  month: string,
+  categoryId: string,
+  accountId: string | null = null,
+) =>
+  request(`/income/entries?month=${month}&categoryId=${categoryId}${forAccount(accountId)}`, {
     parse: (value) => list(value, parseActivity),
   })
 
-export const getMonthReview = (month: string) =>
-  request(`/review?month=${month}`, {
+export const getMonthReview = (month: string, accountId: string | null = null) =>
+  request(`/review?month=${month}${forAccount(accountId)}`, {
     parse: (value): MonthReview => {
       const data = record(value)
       return {
@@ -457,8 +477,12 @@ export const getMonthReview = (month: string) =>
     },
   })
 
-export const listSpendingEntries = (month: string, categoryId: string) =>
-  request(`/spending/entries?month=${month}&categoryId=${categoryId}`, {
+export const listSpendingEntries = (
+  month: string,
+  categoryId: string,
+  accountId: string | null = null,
+) =>
+  request(`/spending/entries?month=${month}&categoryId=${categoryId}${forAccount(accountId)}`, {
     parse: (value) => list(value, parseActivity),
   })
 

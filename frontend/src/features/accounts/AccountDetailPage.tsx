@@ -24,6 +24,10 @@ import { useReturnFocus } from '../activity/useReturnFocus'
 import { RemindersCard } from '../activity/RemindersCard'
 import { StatementsCard } from '../statements/StatementsCard'
 import { ChangeEntry, type ChangeTarget } from '../activity/ChangeEntry'
+import { isTransfer } from '../activity/transferRows'
+import { ChangeToTransfer } from '../transfers/ChangeToTransfer'
+import { TransferChange, type TransferTarget } from '../transfers/TransferChange'
+import { TransferForm } from '../transfers/TransferForm'
 import { accountTypeLabel } from './accountTypes'
 import { OVERDRAFT_NOTICE, OverdrawnLabel } from './Overdrawn'
 import { ownerNames } from './ownerNames'
@@ -158,7 +162,21 @@ function BalanceOnDate({ account, today }: { account: Account; today: string }) 
   )
 }
 
-/** Money in and out are live; transfers stay visible but inactive until they are built. */
+/** The transfer panel that is open: a new transfer, a correction, a removal, an Undo, or an expense changed. */
+type TransferPanel =
+  | { kind: 'new' }
+  | { kind: 'edit'; entry: ActivityEntry }
+  | { kind: 'remove' | 'undo'; entry: TransferTarget }
+  | { kind: 'convert'; entry: ActivityEntry }
+
+/** A new panel for a different transfer: the key changes with the panel's kind and the row it works on. */
+function transferKey(panel: TransferPanel): string {
+  if (!('entry' in panel)) return panel.kind
+  const { entry } = panel
+  return `${panel.kind}-${entry.movementId ?? ('id' in entry ? entry.id : '')}`
+}
+
+/** Money in and out, transfers and Balance updates: each opens one panel above the activity table. */
 function Activity({ account, members }: { account: Account; members: Member[] | undefined }) {
   const [adding, setAdding] = useState<EntryKind | null>(null)
   const [editing, setEditing] = useState<ActivityEntry | null>(null)
@@ -166,9 +184,20 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
   const [changing, setChanging] = useState<{ mode: 'remove' | 'undo'; entry: ChangeTarget } | null>(
     null,
   )
+  const [transfer, setTransfer] = useState<TransferPanel | null>(null)
   const today = useToday()
-  const ready = !adding && !editing && !correcting && !changing && !!today.data && !!members
-  const remember = useReturnFocus(!!adding || !!editing || !!correcting || !!changing)
+  const ready =
+    !adding && !editing && !correcting && !changing && !transfer && !!today.data && !!members
+  // After a save the new row is what the person came for, so the table's top is brought into view.
+  const closeTransfer = (saved?: boolean) => {
+    setTransfer(null)
+    if (saved) {
+      requestAnimationFrame(() =>
+        document.getElementById('activity-heading')?.scrollIntoView?.({ block: 'start' }),
+      )
+    }
+  }
+  const remember = useReturnFocus(!!adding || !!editing || !!correcting || !!changing || !!transfer)
 
   return (
     <>
@@ -191,8 +220,42 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             members={members}
             today={today.data}
             editing={editing}
+            onChangeToTransfer={() => {
+              setTransfer({ kind: 'convert', entry: editing })
+              setEditing(null)
+            }}
             onDone={() => setEditing(null)}
           />
+        </Panel>
+      )}
+      {transfer && today.data && members && (
+        <Panel key={transferKey(transfer)}>
+          {(transfer.kind === 'new' || transfer.kind === 'edit') && (
+            <TransferForm
+              account={account}
+              members={members}
+              today={today.data}
+              editing={transfer.kind === 'edit' ? transfer.entry : undefined}
+              onDone={closeTransfer}
+            />
+          )}
+          {(transfer.kind === 'remove' || transfer.kind === 'undo') && (
+            <TransferChange
+              mode={transfer.kind}
+              account={account}
+              entry={transfer.entry}
+              members={members}
+              onDone={closeTransfer}
+            />
+          )}
+          {transfer.kind === 'convert' && (
+            <ChangeToTransfer
+              account={account}
+              entry={transfer.entry}
+              members={members}
+              onDone={closeTransfer}
+            />
+          )}
         </Panel>
       )}
       {correcting && today.data && members && (
@@ -229,7 +292,8 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             ready
               ? (entry) => {
                   remember()
-                  setEditing(entry)
+                  if (isTransfer(entry)) setTransfer({ kind: 'edit', entry })
+                  else setEditing(entry)
                 }
               : undefined
           }
@@ -245,7 +309,8 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             ready
               ? (entry) => {
                   remember()
-                  setChanging({ mode: 'remove', entry })
+                  if (isTransfer(entry)) setTransfer({ kind: 'remove', entry })
+                  else setChanging({ mode: 'remove', entry })
                 }
               : undefined
           }
@@ -253,7 +318,8 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             ready
               ? (entry) => {
                   remember()
-                  setChanging({ mode: 'undo', entry })
+                  if (entry.movementId) setTransfer({ kind: 'undo', entry })
+                  else setChanging({ mode: 'undo', entry })
                 }
               : undefined
           }
@@ -292,13 +358,18 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
           >
             Update balance
           </Button>
-          <Button variant="secondary" size="sm" disabled>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              remember()
+              setTransfer({ kind: 'new' })
+            }}
+            disabled={!ready}
+          >
             Add transfer
           </Button>
         </div>
-        <p className="mt-3 text-caption text-ink-muted">
-          Transfers become available with a later feature.
-        </p>
       </Card>
       {today.data && <BalanceOnDate account={account} today={today.data} />}
       <RemindersCard accountId={account.id} />

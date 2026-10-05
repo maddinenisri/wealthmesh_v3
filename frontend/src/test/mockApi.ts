@@ -36,6 +36,8 @@ export type MockActivity = {
   createdAt?: string
   reason?: string | null
   replacesId?: string | null
+  /** The two rows of a transfer share one movement id. */
+  movementId?: string
   /** Set when the entry was removed or replaced; such rows never count. */
   removedAt?: string | null
   events?: { action: string; byName: string; at: string }[]
@@ -99,11 +101,19 @@ export const CATEGORIES = [
   { id: 'c0000000-0000-4000-8000-000000000008', name: 'Bonus', kind: 'income' },
 ]
 
-function decorate(a: MockActivity, accounts: MockAccount[]) {
+function decorate(a: MockActivity, accounts: MockAccount[], all: MockActivity[] = []) {
+  const counter = a.movementId
+    ? all.find((x) => x.movementId === a.movementId && x.id !== a.id)
+    : undefined
   return {
     ...a,
     accountName: accounts.find((x) => x.id === a.accountId)?.name ?? '',
     categoryName: CATEGORIES.find((c) => c.id === a.categoryId)?.name ?? null,
+    movementId: a.movementId ?? null,
+    counterAccountId: counter?.accountId ?? null,
+    counterAccountName: counter
+      ? (accounts.find((x) => x.id === counter.accountId)?.name ?? null)
+      : null,
   }
 }
 
@@ -167,7 +177,8 @@ export function mockApi(
   const nameOf = (id: string | null | undefined) =>
     state.members.find((m) => m.id === id)?.name ?? ''
   const live = () => state.activity.filter((a) => !a.removedAt)
-  const signed = (a: MockActivity) => (a.kind === 'expense' ? -Number(a.amount) : Number(a.amount))
+  const signed = (a: MockActivity) =>
+    a.kind === 'expense' || a.kind === 'transfer_out' ? -Number(a.amount) : Number(a.amount)
   /** Opening amount plus live activity up to a date, leaving out one row. */
   const balanceOn = (account: MockAccount, date: string, excluding?: string) =>
     Number(account.openingAmount) +
@@ -239,8 +250,13 @@ export function mockApi(
     return HttpResponse.json(statementView(statement), { status: 201 })
   }
   const currentBalance = (account: MockAccount) => balanceOn(account, '9999-12-31')
-  const monthTotals = (month: string, kind: string) => {
-    const rows = live().filter((a) => a.kind === kind && a.occurredOn.startsWith(month))
+  const monthTotals = (month: string, kind: string, accountId?: string | null) => {
+    const rows = live().filter(
+      (a) =>
+        a.kind === kind &&
+        a.occurredOn.startsWith(month) &&
+        (!accountId || a.accountId === accountId),
+    )
     const byCategory = new Map<string, { total: number; count: number }>()
     rows.forEach((a) => {
       const row = byCategory.get(a.categoryId) ?? { total: 0, count: 0 }
@@ -257,6 +273,237 @@ export function mockApi(
       })),
     }
   }
+
+  const adjust = (account: MockAccount, delta: number) => {
+    account.balance = {
+      ...account.balance,
+      amount: (Number(account.balance.amount) + delta).toFixed(2),
+    }
+  }
+  const rowsOf = (movementId: string) => state.activity.filter((a) => a.movementId === movementId)
+  const transferView = (movementId: string) => {
+    const rows = rowsOf(movementId)
+    const out = rows.find((a) => a.kind === 'transfer_out')!
+    const into = rows.find((a) => a.kind === 'transfer_in')!
+    const name = (a: MockActivity) => state.accounts.find((x) => x.id === a.accountId)?.name ?? ''
+    const replaced = rows.some((a) => state.activity.some((r) => r.replacesId === a.id))
+    return {
+      movementId,
+      from: { activityId: out.id, accountId: out.accountId, accountName: name(out) },
+      to: { activityId: into.id, accountId: into.accountId, accountName: name(into) },
+      amount: out.amount,
+      occurredOn: out.occurredOn,
+      description: out.description,
+      enteredByName: nameOf(out.enteredByMemberId),
+      reason: out.reason ?? null,
+      status: replaced ? 'replaced' : out.removedAt ? 'removed' : 'effective',
+    }
+  }
+  const writePair = (
+    body: {
+      fromAccountId: string
+      toAccountId: string
+      amount: string
+      occurredOn: string
+      description?: string
+      enteredByMemberId: string
+      reason?: string
+    },
+    key: string,
+    replaces?: { out: MockActivity; into?: MockActivity },
+  ) => {
+    const movementId = newId()
+    const base = {
+      kind: '',
+      amount: Number(body.amount).toFixed(2),
+      occurredOn: body.occurredOn,
+      description: body.description?.trim() || null,
+      categoryId: '',
+      enteredByMemberId: body.enteredByMemberId,
+      createdAt: '2026-10-03T09:05:00Z',
+      reason: body.reason?.trim() || null,
+      movementId,
+    }
+    state.activity.push(
+      {
+        ...base,
+        id: newId(),
+        accountId: body.fromAccountId,
+        kind: 'transfer_out',
+        key,
+        replacesId: replaces?.out.id,
+      },
+      {
+        ...base,
+        id: newId(),
+        accountId: body.toAccountId,
+        kind: 'transfer_in',
+        replacesId: replaces?.into?.id,
+      },
+    )
+    adjust(
+      state.accounts.find((a) => a.id === body.fromAccountId)!,
+      -Number(body.amount),
+    )
+    adjust(
+      state.accounts.find((a) => a.id === body.toAccountId)!,
+      Number(body.amount),
+    )
+    return movementId
+  }
+  const retire = (rows: MockActivity[], sign: 1 | -1, action: string, memberId: string) => {
+    rows.forEach((row) => {
+      row.removedAt = sign === 1 ? '2026-10-03T09:10:00Z' : null
+      row.events = [
+        ...(row.events ?? []),
+        { action, byName: nameOf(memberId), at: '2026-10-03T09:10:00Z' },
+      ]
+      adjust(
+        state.accounts.find((a) => a.id === row.accountId)!,
+        (sign === 1 ? -1 : 1) * signed(row),
+      )
+    })
+  }
+  const transferHandlers = () => [
+    http.post('*/api/v1/transfers', async ({ request }) => {
+      log(request)
+      const key = request.headers.get('Idempotency-Key') ?? ''
+      state.keys.push(key)
+      const body = (await request.json()) as Parameters<typeof writePair>[0]
+      if (body.fromAccountId === body.toAccountId) return problem(400, 'Choose a different account')
+      if (!(Number(body.amount) > 0)) return problem(400, 'Enter an amount greater than zero')
+      if (body.occurredOn > today)
+        return problem(400, 'Future activity is not saved as completed history yet')
+      const existing = state.activity.find((a) => a.key === key && a.movementId)
+      if (existing) return HttpResponse.json(transferView(existing.movementId!), { status: 200 })
+      return HttpResponse.json(transferView(writePair(body, key)), { status: 201 })
+    }),
+    http.get('*/api/v1/transfers/preview', ({ request }) => {
+      log(request)
+      const query = new URL(request.url).searchParams
+      const from = state.accounts.find((a) => a.id === query.get('fromAccountId'))
+      const to = state.accounts.find((a) => a.id === query.get('toAccountId'))
+      if (!from || !to) return problem(404, 'Account not found')
+      if (from.id === to.id) return problem(400, 'Choose a different account')
+      const expense = state.activity.find((a) => a.id === query.get('activityId'))
+      const amount = expense ? Number(expense.amount) : Number(query.get('amount'))
+      const delta = new Map<string, number>()
+      const add = (id: string, value: number) => delta.set(id, (delta.get(id) ?? 0) + value)
+      const movementId = query.get('movementId')
+      if (movementId) {
+        const rows = rowsOf(movementId)
+        ;[...rows].reverse().forEach((row) => add(row.accountId, -signed(row)))
+      }
+      if (expense) add(expense.accountId, Number(expense.amount))
+      add(from.id, -amount)
+      add(to.id, amount)
+      const month = expense?.occurredOn.slice(0, 7)
+      const before = month
+        ? live()
+            .filter((a) => a.kind === 'expense' && a.occurredOn.startsWith(month))
+            .reduce((sum, a) => sum + Number(a.amount), 0)
+        : 0
+      return HttpResponse.json({
+        accounts: [...delta].map(([id, change]) => {
+          const account = state.accounts.find((a) => a.id === id)!
+          return {
+            id,
+            name: account.name,
+            balanceAfter: (Number(account.balance.amount) + change).toFixed(2),
+          }
+        }),
+        spending: month
+          ? {
+              month,
+              kind: 'spending',
+              before: before.toFixed(2),
+              after: (before - amount).toFixed(2),
+            }
+          : null,
+      })
+    }),
+    http.post('*/api/v1/transfers/:id/replacement', async ({ request, params }) => {
+      log(request)
+      const key = request.headers.get('Idempotency-Key') ?? ''
+      const body = (await request.json()) as Parameters<typeof writePair>[0]
+      const rows = rowsOf(String(params.id))
+      if (rows.length !== 2) return problem(404, 'Transfer not found')
+      if (body.fromAccountId === body.toAccountId) return problem(400, 'Choose a different account')
+      if (!(Number(body.amount) > 0)) return problem(400, 'Enter an amount greater than zero')
+      const existing = state.activity.find((a) => a.key === key && a.movementId)
+      if (existing) return HttpResponse.json(transferView(existing.movementId!), { status: 200 })
+      if (rows.some((row) => row.removedAt))
+        return problem(409, 'This transfer was already changed or removed.')
+      retire(rows, 1, 'replaced', body.enteredByMemberId)
+      const out = rows.find((a) => a.kind === 'transfer_out')!
+      const into = rows.find((a) => a.kind === 'transfer_in')!
+      return HttpResponse.json(transferView(writePair(body, key, { out, into })), { status: 201 })
+    }),
+    ...(['removal', 'undo'] as const).map((action) =>
+      http.post(`*/api/v1/transfers/:id/${action}`, async ({ request, params }) => {
+        log(request)
+        const rows = rowsOf(String(params.id))
+        if (rows.length !== 2) return problem(404, 'Transfer not found')
+        const { enteredByMemberId } = (await request.json()) as { enteredByMemberId: string }
+        const replaced = rows.some((row) => state.activity.some((r) => r.replacesId === row.id))
+        if (action === 'removal' ? rows.some((r) => r.removedAt) : !rows[0].removedAt || replaced)
+          return problem(409, 'This transfer was already changed or removed.')
+        retire(
+          rows,
+          action === 'removal' ? 1 : -1,
+          action === 'removal' ? 'removed' : 'restored',
+          enteredByMemberId,
+        )
+        return HttpResponse.json(transferView(String(params.id)))
+      }),
+    ),
+    http.post(
+      '*/api/v1/accounts/:id/activity/:activityId/transfer',
+      async ({ request, params }) => {
+        log(request)
+        const key = request.headers.get('Idempotency-Key') ?? ''
+        const body = (await request.json()) as {
+          toAccountId: string
+          enteredByMemberId: string
+          reason: string
+        }
+        const original = state.activity.find((a) => a.id === params.activityId)
+        if (!original) return problem(404, 'Entry not found')
+        if (!body.reason?.trim()) return problem(400, 'Give a reason for the change')
+        if (body.toAccountId === original.accountId)
+          return problem(400, 'Choose a different account')
+        const existing = state.activity.find((a) => a.key === key && a.movementId)
+        if (existing) return HttpResponse.json(transferView(existing.movementId!), { status: 200 })
+        if (original.removedAt) return problem(409, 'This entry was already changed or removed.')
+        adjust(
+          state.accounts.find((a) => a.id === original.accountId)!,
+          Number(original.amount),
+        )
+        original.removedAt = '2026-10-03T09:10:00Z'
+        original.events = [
+          ...(original.events ?? []),
+          {
+            action: 'replaced',
+            byName: nameOf(body.enteredByMemberId),
+            at: '2026-10-03T09:10:00Z',
+          },
+        ]
+        const movementId = writePair(
+          {
+            fromAccountId: original.accountId,
+            toAccountId: body.toAccountId,
+            amount: original.amount,
+            occurredOn: original.occurredOn,
+            enteredByMemberId: body.enteredByMemberId,
+            reason: body.reason,
+          },
+          key,
+          { out: original },
+        )
+        return HttpResponse.json(transferView(movementId), { status: 201 })
+      },
+    ),
+  ]
 
   server.use(
     http.get('*/api/v1/household', ({ request }) => {
@@ -356,7 +603,7 @@ export function mockApi(
       return HttpResponse.json(
         live()
           .filter((a) => a.accountId === params.id)
-          .map((a) => decorate(a, state.accounts))
+          .map((a) => decorate(a, state.accounts, state.activity))
           .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn)),
       )
     }),
@@ -440,6 +687,9 @@ export function mockApi(
               replacedBy: origin(replacement),
               events: a.events ?? [],
               status: replacement ? 'replaced' : a.removedAt ? 'removed' : 'effective',
+              movementId: a.movementId ?? null,
+              counterAccountId: decorate(a, state.accounts, state.activity).counterAccountId,
+              counterAccountName: decorate(a, state.accounts, state.activity).counterAccountName,
             }
           })
           .reverse(),
@@ -869,8 +1119,9 @@ export function mockApi(
     ).flatMap(([path, kind]) => [
       http.get(`*/api/v1/${path}`, ({ request }) => {
         log(request)
+        const query = new URL(request.url).searchParams
         return HttpResponse.json(
-          monthTotals(new URL(request.url).searchParams.get('month') ?? '', kind),
+          monthTotals(query.get('month') ?? '', kind, query.get('accountId')),
         )
       }),
       http.get(`*/api/v1/${path}/entries`, ({ request }) => {
@@ -882,17 +1133,19 @@ export function mockApi(
               (a) =>
                 a.kind === kind &&
                 a.occurredOn.startsWith(query.get('month') ?? '') &&
-                a.categoryId === query.get('categoryId'),
+                a.categoryId === query.get('categoryId') &&
+                (!query.get('accountId') || a.accountId === query.get('accountId')),
             )
-            .map((a) => decorate(a, state.accounts)),
+            .map((a) => decorate(a, state.accounts, state.activity)),
         )
       }),
     ]),
     http.get('*/api/v1/review', ({ request }) => {
       log(request)
-      const month = new URL(request.url).searchParams.get('month') ?? ''
-      const income = Number(monthTotals(month, 'income').total)
-      const spending = Number(monthTotals(month, 'expense').total)
+      const query = new URL(request.url).searchParams
+      const month = query.get('month') ?? ''
+      const income = Number(monthTotals(month, 'income', query.get('accountId')).total)
+      const spending = Number(monthTotals(month, 'expense', query.get('accountId')).total)
       return HttpResponse.json({
         month,
         income: income.toFixed(2),
@@ -937,6 +1190,7 @@ export function mockApi(
         annualEstimate: recorded.length ? ((sum * 12) / recorded.length).toFixed(2) : null,
       })
     }),
+    ...transferHandlers(),
     http.get('*/api/v1/accounts/:id', ({ request, params }) => {
       log(request)
       const account = state.accounts.find((a) => a.id === params.id)

@@ -74,7 +74,11 @@ export function EntryHistory({
               <tr>
                 <Td className="whitespace-nowrap">{entry.occurredOn}</Td>
                 <Td>
-                  {entry.kind === 'correction' ? 'Balance correction' : (entry.description ?? '')}
+                  {entry.kind === 'correction'
+                    ? 'Balance correction'
+                    : entry.kind === 'transfer_out' || entry.kind === 'transfer_in'
+                      ? `Transfer ${entry.kind === 'transfer_out' ? 'to' : 'from'} ${entry.counterAccountName ?? 'account'}`
+                      : (entry.description ?? '')}
                 </Td>
                 <Td>{entry.categoryName ?? ''}</Td>
                 <Td className="text-right whitespace-nowrap">
@@ -85,6 +89,14 @@ export function EntryHistory({
                   {entry.replacedBy && entry.replacedBy.accountId !== accountId && (
                     <span className="block text-caption text-ink-muted [overflow-wrap:anywhere]">
                       Moved to {entry.replacedBy.accountName}
+                    </span>
+                  )}
+                  {entry.kind === 'expense' && entry.replacedBy?.kind === 'transfer_out' && (
+                    <span className="block text-caption text-ink-muted">Changed to a transfer</span>
+                  )}
+                  {entry.kind === 'transfer_out' && entry.replaces?.kind === 'expense' && (
+                    <span className="block text-caption text-ink-muted [overflow-wrap:anywhere]">
+                      Was recorded as {entry.replaces.categoryName ?? 'an expense'}
                     </span>
                   )}
                   {entry.status === 'replaced' &&
@@ -112,7 +124,11 @@ export function EntryHistory({
                     <Button
                       variant="ghost"
                       size="sm"
-                      aria-label={`Undo ${entry.description ?? entry.categoryName ?? 'entry'}`}
+                      aria-label={`Undo ${
+                        entry.movementId
+                          ? `transfer ${entry.kind === 'transfer_out' ? 'to' : 'from'} ${entry.counterAccountName ?? 'account'}`
+                          : (entry.description ?? entry.categoryName ?? 'entry')
+                      }`}
                       disabled={!onUndo}
                       onClick={() => onUndo?.(entry)}
                     >

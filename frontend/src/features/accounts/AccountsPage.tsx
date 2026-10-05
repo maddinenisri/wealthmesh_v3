@@ -10,6 +10,7 @@ import {
   buttonStyles,
 } from '../../design-system'
 import { useAccounts } from '../../hooks/useAccounts'
+import { accountTypeLabel } from './accountTypes'
 import { OverdrawnLabel } from './Overdrawn'
 import { ownerNames } from './ownerNames'
 import { useAccountContext } from './useAccountContext'
@@ -60,6 +61,9 @@ export function AccountsPage() {
                     >
                       {account.name}
                     </Link>
+                    <span className="block text-caption text-ink-muted">
+                      {accountTypeLabel(account.type)}
+                    </span>
                   </Td>
                   <Td>{ownerNames(account.ownerMemberIds, members)}</Td>
                   <Td>{account.institution}</Td>

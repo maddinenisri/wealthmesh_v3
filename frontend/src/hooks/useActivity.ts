@@ -183,42 +183,50 @@ export function useChangeEntry(accountId: string, activityId: string, action: 'r
   })
 }
 
-export function useSpending(month: string) {
+export function useSpending(month: string, accountId: string | null = null) {
   return useQuery({
-    queryKey: [...spendingKey, 'month', month],
-    queryFn: () => getSpending(month),
+    queryKey: [...spendingKey, 'month', month, accountId],
+    queryFn: () => getSpending(month, accountId),
     enabled: month !== '',
   })
 }
 
-export function useSpendingEntries(month: string, categoryId: string | null) {
+export function useSpendingEntries(
+  month: string,
+  categoryId: string | null,
+  accountId: string | null = null,
+) {
   return useQuery({
-    queryKey: [...spendingKey, 'entries', month, categoryId],
-    queryFn: () => listSpendingEntries(month, categoryId!),
+    queryKey: [...spendingKey, 'entries', month, categoryId, accountId],
+    queryFn: () => listSpendingEntries(month, categoryId!, accountId),
     enabled: month !== '' && categoryId !== null,
   })
 }
 
-export function useIncome(month: string) {
+export function useIncome(month: string, accountId: string | null = null) {
   return useQuery({
-    queryKey: [...spendingKey, 'income', month],
-    queryFn: () => getIncome(month),
+    queryKey: [...spendingKey, 'income', month, accountId],
+    queryFn: () => getIncome(month, accountId),
     enabled: month !== '',
   })
 }
 
-export function useIncomeEntries(month: string, categoryId: string | null) {
+export function useIncomeEntries(
+  month: string,
+  categoryId: string | null,
+  accountId: string | null = null,
+) {
   return useQuery({
-    queryKey: [...spendingKey, 'income-entries', month, categoryId],
-    queryFn: () => listIncomeEntries(month, categoryId!),
+    queryKey: [...spendingKey, 'income-entries', month, categoryId, accountId],
+    queryFn: () => listIncomeEntries(month, categoryId!, accountId),
     enabled: month !== '' && categoryId !== null,
   })
 }
 
-export function useMonthReview(month: string) {
+export function useMonthReview(month: string, accountId: string | null = null) {
   return useQuery({
-    queryKey: [...spendingKey, 'review', month],
-    queryFn: () => getMonthReview(month),
+    queryKey: [...spendingKey, 'review', month, accountId],
+    queryFn: () => getMonthReview(month, accountId),
     enabled: month !== '',
   })
 }

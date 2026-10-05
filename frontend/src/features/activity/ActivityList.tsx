@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import type { Activity, HistoryEntry } from '../../api/activity'
 import type { Member } from '../../api/household'
+import { Link } from 'react-router'
 import { Amount, Button, Table, Td, Th } from '../../design-system'
 import { useAccountActivity } from '../../hooks/useActivity'
 import { ownerNames } from '../accounts/ownerNames'
 import { EntryHistory } from './EntryHistory'
 import { signedAmount } from './signedAmount'
+import { isTransfer, rowName } from './transferRows'
 
 /** Saved activity of one account, newest first. Income shows as money in, expenses as money out. */
 export function ActivityList({
@@ -57,9 +59,13 @@ export function ActivityList({
                 <tr key={entry.id}>
                   <Td className="whitespace-nowrap">{entry.occurredOn}</Td>
                   <Td>
-                    {entry.kind === 'correction'
-                      ? `Balance correction${entry.reason ? `: ${entry.reason}` : ''}`
-                      : (entry.description ?? '')}
+                    {entry.kind === 'correction' ? (
+                      `Balance correction${entry.reason ? `: ${entry.reason}` : ''}`
+                    ) : isTransfer(entry) ? (
+                      <TransferLabel entry={entry} />
+                    ) : (
+                      (entry.description ?? '')
+                    )}
                   </Td>
                   <Td>{entry.categoryName ?? ''}</Td>
                   <Td>
@@ -84,7 +90,7 @@ export function ActivityList({
                         <Button
                           variant="ghost"
                           size="sm"
-                          aria-label={`Edit ${entry.description ?? entry.categoryName ?? 'entry'}`}
+                          aria-label={`Edit ${rowName(entry)}`}
                           disabled={!onEdit}
                           onClick={() => onEdit?.(entry)}
                         >
@@ -93,7 +99,7 @@ export function ActivityList({
                         <Button
                           variant="ghost"
                           size="sm"
-                          aria-label={`Remove ${entry.description ?? entry.categoryName ?? 'entry'}`}
+                          aria-label={`Remove ${rowName(entry)}`}
                           disabled={!onRemove}
                           onClick={() => onRemove?.(entry)}
                         >
@@ -115,5 +121,27 @@ export function ActivityList({
         {showHistory && <EntryHistory accountId={accountId} opening={opening} onUndo={onUndo} />}
       </div>
     </>
+  )
+}
+
+/** "Transfer to Emergency Savings": the other account opens from here, so both sides are one click apart. */
+function TransferLabel({ entry }: { entry: Activity }) {
+  return (
+    <span className="[overflow-wrap:anywhere]">
+      Transfer {entry.kind === 'transfer_out' ? 'to' : 'from'}{' '}
+      {entry.counterAccountId ? (
+        <Link
+          to={`/accounts/${entry.counterAccountId}`}
+          className="font-medium underline-offset-2 hover:underline"
+        >
+          {entry.counterAccountName}
+        </Link>
+      ) : (
+        entry.counterAccountName
+      )}
+      {entry.description ? (
+        <span className="block text-caption text-ink-muted">{entry.description}</span>
+      ) : null}
+    </span>
   )
 }

@@ -70,6 +70,7 @@ export function AddEntry({
   members,
   today,
   editing,
+  onChangeToTransfer,
   onDone,
 }: {
   kind: EntryKind
@@ -78,6 +79,8 @@ export function AddEntry({
   today: string
   /** An effective entry being corrected: the form starts from it and saving replaces it. */
   editing?: Activity
+  /** Offered while editing money out: the expense was really a transfer (V2_EXPENSE_008). */
+  onChangeToTransfer?: () => void
   onDone: () => void
 }) {
   const words = WORDS[kind]
@@ -350,6 +353,11 @@ export function AddEntry({
           <Button type="submit">
             {!editing && futureDate > today ? 'Save reminder' : 'Review'}
           </Button>
+          {editing && kind === 'expense' && onChangeToTransfer && (
+            <Button variant="secondary" onClick={onChangeToTransfer}>
+              Change to transfer
+            </Button>
+          )}
           <Button variant="ghost" onClick={onDone}>
             Cancel
           </Button>
