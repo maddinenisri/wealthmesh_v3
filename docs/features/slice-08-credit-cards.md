@@ -171,6 +171,18 @@ Race and keyed-save tests: `CardPaymentRaceApiTests` (9: lock waits on bank and 
 Anything that needs the product owner. Add it to `docs/decisions/questions.md` as well (that is the register the
 next session reads), and mark the answer and date in both places when resolved.
 
+## What to click (710px and 1280px; `docs/process/ui-checklist.md` for the Cowork pass)
+
+App: `npm run dev` is running (backend 8081, Vite http://localhost:5180). V12 and V13 are applied. Use Entering as: Alex.
+
+1. Accounts > Add account > Credit card. Issuer, owner, date 2026-09-01, Balance $1,000.00, Balance means Owed. Save: list shows "$1,000.00 owed". Repeat with Card credit $50.00: "$50.00 Card credit". Try a blank name and "one thousand".
+2. Open the card: Record purchase (try -$100.00, then $100.00 Groceries 2026-09-10), Record refund $20.00, purchases named Interest charged and Annual fee. Balance follows ($1,080 owed after the refund).
+3. Record payment from the card detail: the card is the destination, choose checking, review shows both Balances (try an overpayment: Card credit is explained), Cancel, then confirm. Edit it, Remove it, Show history > Undo.
+4. Update balance on the card to $600.00 Owed dated 2026-09-30: review says "increase in debt"; confirm needs a reason.
+5. Supporting statements: attach a statement ($600.00 owed), then Replace with corrected version with a reason; both versions stay.
+6. Spending: Month September, Account = the card: Groceries total, open it; a refund-only card shows a negative total with "Refunds exceed purchases". Household page and Accounts list show the same card figures.
+7. Transfers: a card is not offered in Add transfer; income is not offered on a card.
+
 ## Cowork findings
 
 | # | Check | Result | Fault seen | Test added |
