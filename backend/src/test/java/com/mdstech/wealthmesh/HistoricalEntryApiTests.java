@@ -100,7 +100,7 @@ class HistoricalEntryApiTests extends LedgerApiTestBase {
                 .exchange().expectStatus().isBadRequest();
         // The new start is after the entry's date, so the entry would still be before tracking.
         save(other, "k-late-start", "6500.00", "2026-09-05", "Rent", "2026-09-03").expectStatus().isBadRequest();
-        save(other, "k-zero", "0.00", "2026-09-01", "", "2026-09-03").expectStatus().isBadRequest();
+        save(other, "k-zero", "0.00", "2026-09-01", "No such category", "2026-09-03").expectStatus().isBadRequest();
         assertRevisionCount(other, 0);
         assertActivityCount(other, 0);
         assertBalance(other, "5000.00");

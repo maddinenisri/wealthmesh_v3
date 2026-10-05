@@ -16,6 +16,7 @@ import com.mdstech.wealthmesh.activity.domain.Activity;
 import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
 import com.mdstech.wealthmesh.category.domain.Category;
 import com.mdstech.wealthmesh.category.repository.CategoryRepository;
+import com.mdstech.wealthmesh.category.service.CategoryService;
 import com.mdstech.wealthmesh.household.repository.HouseholdMemberRepository;
 import com.mdstech.wealthmesh.money.Money;
 
@@ -27,7 +28,7 @@ public class EntryValidator {
 
     /** The validated parts of an entry request. */
     public record Entry(UUID accountId, String kind, BigDecimal amount, LocalDate occurredOn, String description,
-            UUID categoryId, UUID memberId) {
+            UUID categoryId, UUID memberId, String classification) {
 
         /** True when the stored row holds exactly these details (a repeated save). */
         boolean matches(Activity existing) {
@@ -35,6 +36,7 @@ public class EntryValidator {
                     && existing.amount().compareTo(amount) == 0 && existing.occurredOn().equals(occurredOn)
                     && Objects.equals(existing.description(), description)
                     && Objects.equals(existing.categoryId(), categoryId)
+                    && Objects.equals(existing.classification(), classification)
                     && Objects.equals(existing.enteredByMemberId(), memberId);
         }
     }
@@ -69,10 +71,11 @@ public class EntryValidator {
             BigDecimal amount = amount(request.amount());
             checkDate(account, request.occurredOn(), reminder);
             return new Object[] { amount, description(request.description()) };
-        }).flatMap(parts -> category(kind, request)
+        }).flatMap(parts -> category(kind, request, reminder)
                 .flatMap(category -> member(account, request.enteredByMemberId())
                         .map(memberId -> new Entry(account.id(), kind, (BigDecimal) parts[0], request.occurredOn(),
-                                (String) parts[1], category.id(), memberId))));
+                                (String) parts[1], category.map(Category::id).orElse(null), memberId,
+                                classification(kind, request, category.orElse(null))))));
     }
 
     private void checkDate(Account account, LocalDate date, boolean reminder) {
@@ -99,14 +102,40 @@ public class EntryValidator {
         return description;
     }
 
-    private Mono<Category> category(String kind, ExpenseRequest request) {
+    /**
+     * The category an entry names. An expense may have none (CATEGORIES_006: it is saved as Uncategorized and flagged
+     * for review); income, refunds and reminders must name one of their own kind.
+     */
+    private Mono<java.util.Optional<Category>> category(String kind, ExpenseRequest request, boolean reminder) {
         String categoryKind = "income".equals(kind) ? "income" : "spending";
+        boolean named = request.categoryId() != null || request.category() != null && !request.category().isBlank();
+        if (!named && "expense".equals(kind) && !reminder) {
+            return Mono.just(java.util.Optional.empty());
+        }
         Mono<Category> found = request.categoryId() != null ? categories.findById(request.categoryId())
-                : request.category() != null && !request.category().isBlank()
-                        ? categories.findByName(request.category().strip()) : Mono.empty();
-        return found.filter(c -> categoryKind.equals(c.kind()))
+                : named ? categories.findByName(request.category().strip()) : Mono.empty();
+        return found.filter(c -> categoryKind.equals(c.kind())).map(java.util.Optional::of)
                 .switchIfEmpty(Mono.error(bad("Choose " + ("income".equals(categoryKind) ? "an income" : "a spending")
                         + " category")));
+    }
+
+    /**
+     * The class an expense or refund is saved with: the one chosen, else the category's default at this moment. It is
+     * stored on the entry, so changing a default later never rewrites it (CATEGORIES_002). Income has none.
+     */
+    private static String classification(String kind, ExpenseRequest request, Category category) {
+        String chosen = request.classification() == null || request.classification().isBlank() ? null
+                : request.classification();
+        if ("income".equals(kind)) {
+            if (chosen != null) {
+                throw bad("An income entry has no Essential or Discretionary choice");
+            }
+            return null;
+        }
+        if (chosen != null && !CategoryService.CLASSES.contains(chosen)) {
+            throw bad("Choose Essential or Discretionary");
+        }
+        return chosen != null ? chosen : category == null ? null : category.defaultClass();
     }
 
     public Mono<UUID> member(Account account, UUID memberId) {

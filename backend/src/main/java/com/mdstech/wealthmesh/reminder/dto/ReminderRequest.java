@@ -16,6 +16,6 @@ public record ReminderRequest(
         UUID enteredByMemberId) {
 
     public ExpenseRequest asEntry() {
-        return new ExpenseRequest(description, amount, dueOn, category, categoryId, enteredByMemberId);
+        return new ExpenseRequest(description, amount, dueOn, category, categoryId, enteredByMemberId, null);
     }
 }

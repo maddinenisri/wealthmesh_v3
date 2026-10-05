@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   changeEntry,
+  createCategory,
   getBalanceAsOf,
   getIncome,
   getMonthReview,
@@ -40,6 +41,15 @@ export function useCategories(kind: EntryKind) {
     queryKey: ['categories', kind],
     queryFn: () => listCategories(kind === 'income' ? 'income' : 'spending'),
     staleTime: Infinity,
+  })
+}
+
+/** Adds a category and refreshes every list that offers one. */
+export function useCreateCategory() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: createCategory,
+    onSuccess: () => client.invalidateQueries({ queryKey: ['categories'] }),
   })
 }
 

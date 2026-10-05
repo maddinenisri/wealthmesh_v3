@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Objects;
 import java.util.UUID;
 
 import org.springframework.dao.DuplicateKeyException;
@@ -15,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.mdstech.wealthmesh.account.domain.Account;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.domain.Activity;
+import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
 import com.mdstech.wealthmesh.activity.dto.HistoryEntry;
 import com.mdstech.wealthmesh.activity.dto.ReplacementRequest;
 import com.mdstech.wealthmesh.activity.repository.ActivityRepository;
@@ -105,7 +107,7 @@ public class EntryChangeService {
                 .then(Mono.defer(() -> store.expireKey(key, cutoff)))
                 .then(Mono.defer(() -> original(accountId, activityId, true)))
                 .flatMap(original -> moveTarget.resolve(accountId, request.accountId()).flatMap(account -> validator
-                        .parse(account, replacementKind(original), request.asEntry())
+                        .parse(account, replacementKind(original), keepClass(original, request))
                         .doOnNext(entry -> checkFeeMatchesCorrection(original, entry))
                         .doOnNext(entry -> checkStaysPut(original, entry))
                         .flatMap(entry -> activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
@@ -140,7 +142,7 @@ public class EntryChangeService {
                 .then(Mono.defer(() -> store.recordEvent(original.id(), "replaced", entry.memberId(), now)))
                 .then(Mono.defer(() -> activities.save(new Activity(null, entry.accountId(), entry.kind(),
                         entry.amount(), entry.occurredOn(), entry.description(), entry.categoryId(), entry.memberId(),
-                        key, now, note, original.id(), null, null))))
+                        key, now, note, original.id(), null, null, entry.classification()))))
                 .flatMap(saved -> store.byId(saved.id())).map(a -> new EntryService.Saved(a, true));
     }
 
@@ -162,6 +164,20 @@ public class EntryChangeService {
             return Mono.error(conflict("This save was already used with different details. Start a new entry."));
         }
         return store.byId(existing.id()).map(a -> new EntryService.Saved(a, false));
+    }
+
+    /**
+     * An edit that names no class and keeps the category keeps the class the entry was saved with, so an override
+     * (an Essential grocery marked Discretionary) is not lost by correcting the date.
+     */
+    private static ExpenseRequest keepClass(Activity original, ReplacementRequest request) {
+        ExpenseRequest entry = request.asEntry();
+        boolean sameCategory = Objects.equals(request.categoryId(), original.categoryId())
+                && (request.category() == null || request.category().isBlank());
+        return entry.classification() == null && sameCategory && original.classification() != null
+                ? new ExpenseRequest(entry.description(), entry.amount(), entry.occurredOn(), entry.category(),
+                        entry.categoryId(), entry.enteredByMemberId(), original.classification())
+                : entry;
     }
 
     /** A correction can only be replaced by the expense that explains it (slice 03, V2_CHECKING_014). */

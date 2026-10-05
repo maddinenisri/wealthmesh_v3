@@ -33,8 +33,10 @@ public class SpendingController {
 
     @GetMapping("/entries")
     public Flux<ActivityResponse> entries(@RequestParam(required = false) String month,
-            @RequestParam(required = false) UUID categoryId, @RequestParam(required = false) UUID accountId) {
-        return service.entries(month, categoryId, accountId);
+            @RequestParam(required = false) UUID categoryId, @RequestParam(required = false) UUID accountId,
+            @RequestParam(defaultValue = "false") boolean uncategorized) {
+        return uncategorized ? service.uncategorizedEntries(month, accountId)
+                : service.entries(month, categoryId, accountId);
     }
 
     @GetMapping("/history")

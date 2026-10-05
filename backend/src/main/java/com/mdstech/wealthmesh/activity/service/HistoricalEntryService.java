@@ -74,7 +74,7 @@ public class HistoricalEntryService {
                 .flatMap(moved -> validator.parse(moved, request.kind(), request.entry()))
                 .flatMap(entry -> activities.save(new Activity(null, entry.accountId(), entry.kind(), entry.amount(),
                         entry.occurredOn(), entry.description(), entry.categoryId(), entry.memberId(), key, now,
-                        null, null, null, null)))
+                        null, null, null, null, entry.classification())))
                 .flatMap(saved -> store.byId(saved.id())).map(a -> new EntryService.Saved(a, true));
     }
 

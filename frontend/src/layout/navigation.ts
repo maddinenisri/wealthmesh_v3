@@ -3,6 +3,7 @@ export const navigation = [
   { to: '/', label: 'Household', end: true },
   { to: '/accounts', label: 'Accounts', end: false },
   { to: '/spending', label: 'Spending', end: false },
+  { to: '/categories', label: 'Categories', end: false },
   { to: '/design', label: 'Design system', end: false },
 ] as const
 

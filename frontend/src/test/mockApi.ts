@@ -31,7 +31,10 @@ export type MockActivity = {
   amount: string
   occurredOn: string
   description: string | null
+  /** Empty for an expense saved with no category (CATEGORIES_006). */
   categoryId: string
+  /** essential or discretionary, stored when the entry was saved; null when unclassified. */
+  classification?: string | null
   enteredByMemberId: string | null
   createdAt?: string
   reason?: string | null
@@ -85,23 +88,74 @@ type ExpenseBody = {
   description: string
   amount: string
   occurredOn: string
-  categoryId: string
+  categoryId?: string
+  classification?: string
   enteredByMemberId: string
 }
 
-/** The seeded category list the backend ships (names and kinds only). */
-export const CATEGORIES = [
-  { id: 'c0000000-0000-4000-8000-000000000001', name: 'Rent', kind: 'spending' },
-  { id: 'c0000000-0000-4000-8000-000000000002', name: 'Utilities', kind: 'spending' },
-  { id: 'c0000000-0000-4000-8000-000000000003', name: 'Groceries', kind: 'spending' },
-  { id: 'c0000000-0000-4000-8000-000000000004', name: 'Salary', kind: 'income' },
-  { id: 'c0000000-0000-4000-8000-000000000005', name: 'Dining', kind: 'spending' },
-  { id: 'c0000000-0000-4000-8000-000000000006', name: 'Bank fees', kind: 'spending' },
-  { id: 'c0000000-0000-4000-8000-000000000007', name: 'Interest', kind: 'income' },
-  { id: 'c0000000-0000-4000-8000-000000000008', name: 'Bonus', kind: 'income' },
-  { id: 'c0000000-0000-4000-8000-000000000009', name: 'Interest charged', kind: 'spending' },
-  { id: 'c0000000-0000-4000-8000-00000000000a', name: 'Annual fee', kind: 'spending' },
+type MockCategory = { id: string; name: string; kind: string; defaultClass: string | null }
+
+/** The seeded category list the backend ships, with the default class of each spending category. */
+const SEEDED: MockCategory[] = [
+  {
+    id: 'c0000000-0000-4000-8000-000000000001',
+    name: 'Rent',
+    kind: 'spending',
+    defaultClass: 'essential',
+  },
+  {
+    id: 'c0000000-0000-4000-8000-000000000002',
+    name: 'Utilities',
+    kind: 'spending',
+    defaultClass: 'essential',
+  },
+  {
+    id: 'c0000000-0000-4000-8000-000000000003',
+    name: 'Groceries',
+    kind: 'spending',
+    defaultClass: 'essential',
+  },
+  {
+    id: 'c0000000-0000-4000-8000-000000000004',
+    name: 'Salary',
+    kind: 'income',
+    defaultClass: null,
+  },
+  {
+    id: 'c0000000-0000-4000-8000-000000000005',
+    name: 'Dining',
+    kind: 'spending',
+    defaultClass: 'discretionary',
+  },
+  {
+    id: 'c0000000-0000-4000-8000-000000000006',
+    name: 'Bank fees',
+    kind: 'spending',
+    defaultClass: 'essential',
+  },
+  {
+    id: 'c0000000-0000-4000-8000-000000000007',
+    name: 'Interest',
+    kind: 'income',
+    defaultClass: null,
+  },
+  { id: 'c0000000-0000-4000-8000-000000000008', name: 'Bonus', kind: 'income', defaultClass: null },
+  {
+    id: 'c0000000-0000-4000-8000-000000000009',
+    name: 'Interest charged',
+    kind: 'spending',
+    defaultClass: 'essential',
+  },
+  {
+    id: 'c0000000-0000-4000-8000-00000000000a',
+    name: 'Annual fee',
+    kind: 'spending',
+    defaultClass: 'essential',
+  },
 ]
+
+/** The live list: `mockApi()` resets it to the seeded categories, and a created category is added to it. */
+export const CATEGORIES: MockCategory[] = SEEDED.map((c) => ({ ...c }))
 
 function decorate(a: MockActivity, accounts: MockAccount[], all: MockActivity[] = []) {
   const counter = a.movementId
@@ -110,7 +164,9 @@ function decorate(a: MockActivity, accounts: MockAccount[], all: MockActivity[] 
   return {
     ...a,
     accountName: accounts.find((x) => x.id === a.accountId)?.name ?? '',
+    categoryId: a.categoryId || null,
     categoryName: CATEGORIES.find((c) => c.id === a.categoryId)?.name ?? null,
+    classification: a.classification ?? null,
     movementId: a.movementId ?? null,
     counterAccountId: counter?.accountId ?? null,
     counterAccountName: counter
@@ -155,6 +211,7 @@ export function mockApi(
     statements?: MockStatement[]
   } = {},
 ) {
+  CATEGORIES.splice(0, CATEGORIES.length, ...SEEDED.map((c) => ({ ...c })))
   const today = seed.today ?? '2026-10-03'
   const state = {
     household: seed.household ?? (null as MockHousehold | null),
@@ -257,6 +314,13 @@ export function mockApi(
     state.statements.push(statement)
     return HttpResponse.json(statementView(statement), { status: 201 })
   }
+  /** Saved with the entry: the class chosen, else the category's default now; income has none. */
+  const classOf = (kind: string, body: ExpenseBody) =>
+    kind === 'income'
+      ? null
+      : (body.classification ??
+        CATEGORIES.find((c) => c.id === body.categoryId)?.defaultClass ??
+        null)
   const currentBalance = (account: MockAccount) => balanceOn(account, '9999-12-31')
   /** What counts toward a month figure: spending is expenses minus refunds (the server defines it once). */
   const counted = (a: MockActivity, kind: string) =>
@@ -276,17 +340,30 @@ export function mockApi(
       byCategory.set(a.categoryId, { total: row.total + effect(a), count: row.count + 1 })
     })
     const total = rows.reduce((sum, a) => sum + effect(a), 0)
+    const byClass = (cls: string | null) =>
+      rows
+        .filter((a) => (a.classification ?? null) === cls)
+        .reduce((sum, a) => sum + effect(a), 0)
+        .toFixed(2)
     return {
       month,
       total: total.toFixed(2),
       note: refundNote(total),
       categories: [...byCategory].map(([categoryId, row]) => ({
-        categoryId,
-        name: CATEGORIES.find((c) => c.id === categoryId)?.name,
+        categoryId: categoryId || null,
+        name: CATEGORIES.find((c) => c.id === categoryId)?.name ?? 'Uncategorized',
         total: row.total.toFixed(2),
         count: row.count,
         note: refundNote(row.total),
       })),
+      classes:
+        kind === 'expense'
+          ? {
+              essential: byClass('essential'),
+              discretionary: byClass('discretionary'),
+              unclassified: byClass(null),
+            }
+          : null,
     }
   }
 
@@ -657,6 +734,32 @@ export function mockApi(
       const kind = new URL(request.url).searchParams.get('kind')
       return HttpResponse.json(CATEGORIES.filter((c) => !kind || c.kind === kind))
     }),
+    http.post('*/api/v1/categories', async ({ request }) => {
+      log(request)
+      const body = (await request.json()) as {
+        name: string
+        kind: string
+        defaultClass?: string
+        enteredByMemberId?: string
+      }
+      const name = (body.name ?? '').trim()
+      if (!name) return problem(400, 'Enter a category name')
+      if (body.kind === 'income' && body.defaultClass)
+        return problem(400, 'An income category has no Essential or Discretionary choice')
+      if (!body.enteredByMemberId) return problem(400, 'Choose who entered this')
+      const same = CATEGORIES.find(
+        (c) => c.kind === body.kind && c.name.toLowerCase() === name.toLowerCase(),
+      )
+      if (same) return problem(409, `"${same.name}" already exists. Use that category instead.`)
+      const created: MockCategory = {
+        id: newId(),
+        name,
+        kind: body.kind,
+        defaultClass: body.defaultClass ?? null,
+      }
+      CATEGORIES.push(created)
+      return HttpResponse.json(created, { status: 201 })
+    }),
     http.get('*/api/v1/accounts/:id/activity', ({ request, params }) => {
       log(request)
       return HttpResponse.json(
@@ -893,7 +996,7 @@ export function mockApi(
         amount: Number(body.entry.amount).toFixed(2),
         occurredOn: body.entry.occurredOn,
         description: body.entry.description.trim() || null,
-        categoryId: body.entry.categoryId,
+        categoryId: body.entry.categoryId ?? '',
         enteredByMemberId: body.entry.enteredByMemberId,
       }
       state.activity.push(entry)
@@ -992,7 +1095,7 @@ export function mockApi(
         amount: Number(body.amount).toFixed(2),
         dueOn: body.dueOn,
         description: body.description.trim() || null,
-        categoryId: body.categoryId,
+        categoryId: body.categoryId ?? '',
         enteredByMemberId: body.enteredByMemberId,
       }
       if (!existing) state.reminders.push(reminder)
@@ -1099,7 +1202,15 @@ export function mockApi(
           amount: amount.toFixed(2),
           occurredOn: body.occurredOn,
           description: body.description.trim() || null,
-          categoryId: body.categoryId,
+          categoryId: body.categoryId ?? '',
+          classification: classOf(newKind, {
+            ...body,
+            classification:
+              body.classification ??
+              ((body.categoryId ?? '') === original.categoryId
+                ? (original.classification ?? undefined)
+                : undefined),
+          }),
           enteredByMemberId: body.enteredByMemberId,
           createdAt: '2026-10-03T09:05:00Z',
           reason: body.reason?.trim() || null,
@@ -1150,6 +1261,11 @@ export function mockApi(
           return problem(400, 'Future activity is not saved as completed history yet')
         const existing = state.activity.find((a) => a.key === key)
         if (existing) return HttpResponse.json(decorate(existing, state.accounts), { status: 200 })
+        if (!body.categoryId && kind !== 'expense')
+          return problem(
+            400,
+            kind === 'income' ? 'Choose an income category' : 'Choose a spending category',
+          )
         const entry: MockActivity = {
           id: newId(),
           accountId: account.id,
@@ -1158,7 +1274,8 @@ export function mockApi(
           amount: amount.toFixed(2),
           occurredOn: body.occurredOn,
           description: body.description.trim() || null,
-          categoryId: body.categoryId,
+          categoryId: body.categoryId ?? '',
+          classification: classOf(kind, body),
           enteredByMemberId: body.enteredByMemberId,
         }
         state.activity.push(entry)
@@ -1197,7 +1314,9 @@ export function mockApi(
               (a) =>
                 counted(a, kind) &&
                 a.occurredOn.startsWith(query.get('month') ?? '') &&
-                a.categoryId === query.get('categoryId') &&
+                (query.get('uncategorized') === 'true'
+                  ? a.categoryId === ''
+                  : a.categoryId === query.get('categoryId')) &&
                 (!query.get('accountId') || a.accountId === query.get('accountId')),
             )
             .map((a) => decorate(a, state.accounts, state.activity)),

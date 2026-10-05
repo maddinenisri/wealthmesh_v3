@@ -28,6 +28,7 @@ import { MONTH_NAMES } from '../../lib/months'
 import { ACCOUNT_TYPES } from '../accounts/accountTypes'
 import { balanceText, isCard } from '../accounts/cardBalance'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
+import { CLASS_LABEL, classText } from './classes'
 import { EnteredBy } from './EnteredBy'
 import { HistoricalSetup } from './HistoricalSetup'
 import { MoveFigures } from './MoveFigures'
@@ -37,6 +38,8 @@ type Values = {
   amount: string
   occurredOn: string
   categoryId: string
+  /** Empty: the category's default applies. */
+  classification: string
   reason: string
   /** The account the entry lands on; only an edit can choose another one. */
   accountId: string
@@ -109,6 +112,7 @@ export function AddEntry({
       amount: editing?.amount ?? '',
       occurredOn: editing?.occurredOn ?? today,
       categoryId: editing?.categoryId ?? '',
+      classification: editing?.classification ?? '',
       reason: '',
       accountId: account.id,
     },
@@ -164,6 +168,12 @@ export function AddEntry({
   )
 
   const categoryName = (id: string) => categories.data?.find((c) => c.id === id)?.name ?? ''
+  // Money out and refunds carry a class; income has none. An expense may have no category (CATEGORIES_006).
+  const classed = kind !== 'income'
+  const chosenCategory = useWatch({ control, name: 'categoryId' })
+  const defaultClass = categories.data?.find((c) => c.id === chosenCategory)?.defaultClass
+  /** What the entry will be saved with: the class chosen, else the category's default now. */
+  const savedClass = (values: Values) => values.classification || defaultClass || null
 
   const confirm = () => {
     if (!reviewing || !member) return
@@ -172,6 +182,7 @@ export function AddEntry({
       amount: parseAmount(reviewing.amount)!,
       occurredOn: reviewing.occurredOn,
       categoryId: reviewing.categoryId,
+      ...(classed && reviewing.classification ? { classification: reviewing.classification } : {}),
       enteredByMemberId: member.id,
     }
     if (isReminder(reviewing.occurredOn)) {
@@ -199,6 +210,7 @@ export function AddEntry({
           amount: parseAmount(historical.amount)!,
           occurredOn: historical.occurredOn,
           categoryId: historical.categoryId,
+          classification: historical.classification,
           categoryName: categoryName(historical.categoryId),
         }}
         onBack={() => setHistorical(null)}
@@ -250,8 +262,24 @@ export function AddEntry({
             </Item>
           )}
           <Item label="Category">
-            {changed(editing?.categoryName ?? undefined, categoryName(reviewing.categoryId))}
+            {changed(
+              editing ? (editing.categoryName ?? 'No category') : undefined,
+              categoryName(reviewing.categoryId) || 'No category',
+            )}
+            {!reviewing.categoryId && kind === 'expense' && (
+              <span className="block text-caption text-ink-muted">
+                Saved as Uncategorized, to review later
+              </span>
+            )}
           </Item>
+          {classed && (
+            <Item label="Class">
+              {changed(
+                editing ? classText(editing.classification) : undefined,
+                classText(savedClass(reviewing)),
+              )}
+            </Item>
+          )}
           {reviewing.description.trim() && <Item label="Description">{reviewing.description}</Item>}
           {reviewing.reason.trim() && <Item label="Reason">{reviewing.reason.trim()}</Item>}
         </dl>
@@ -360,9 +388,11 @@ export function AddEntry({
           control={control}
           name="categoryId"
           label="Category"
-          rules={{ required: 'Choose a category' }}
+          rules={kind === 'expense' ? undefined : { required: 'Choose a category' }}
         >
-          <option value="">Choose a category</option>
+          <option value="">
+            {kind === 'expense' ? 'No category (review later)' : 'Choose a category'}
+          </option>
           {categories.data
             ?.filter((category) => onCard || !CARD_ONLY_CATEGORIES.includes(category.name))
             .map((category) => (
@@ -371,6 +401,17 @@ export function AddEntry({
               </option>
             ))}
         </SelectField>
+        {classed && (
+          <SelectField control={control} name="classification" label="Class">
+            <option value="">
+              {defaultClass
+                ? `Category default (${CLASS_LABEL[defaultClass]})`
+                : 'Category default (none)'}
+            </option>
+            <option value="essential">Essential</option>
+            <option value="discretionary">Discretionary</option>
+          </SelectField>
+        )}
         {editing && <TextField control={control} name="reason" label="Reason" />}
         {!editing && futureDate > today && (
           <p role="status" className="max-w-md rounded-control border border-line p-3 text-sm">

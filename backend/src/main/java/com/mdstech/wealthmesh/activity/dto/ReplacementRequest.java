@@ -15,9 +15,11 @@ public record ReplacementRequest(
         String category,
         UUID categoryId,
         UUID enteredByMemberId,
-        String reason) {
+        String reason,
+        String classification) {
 
     public ExpenseRequest asEntry() {
-        return new ExpenseRequest(description, amount, occurredOn, category, categoryId, enteredByMemberId);
+        return new ExpenseRequest(description, amount, occurredOn, category, categoryId, enteredByMemberId,
+                classification);
     }
 }

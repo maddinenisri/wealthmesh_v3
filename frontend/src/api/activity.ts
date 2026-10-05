@@ -1,6 +1,15 @@
 import { request } from './client'
 
-export type Category = { id: string; name: string; kind: string }
+/** A spending category's default class is essential or discretionary; an income category has none. */
+export type Category = { id: string; name: string; kind: string; defaultClass: string | null }
+
+/** A new category; the server answers 409 with the existing one's name when it already exists. */
+export type NewCategory = {
+  name: string
+  kind: 'spending' | 'income'
+  defaultClass?: 'essential' | 'discretionary'
+  enteredByMemberId: string
+}
 
 export type Activity = {
   id: string
@@ -12,6 +21,8 @@ export type Activity = {
   description: string | null
   categoryId: string | null
   categoryName: string | null
+  /** essential or discretionary, saved with the entry; null when unclassified (and for income). */
+  classification: string | null
   enteredByMemberId: string | null
   reason: string | null
   /** Set on a transfer row: the movement both rows share, and the account on the other side. */
@@ -63,7 +74,10 @@ export type NewEntry = {
   description: string
   amount: string
   occurredOn: string
+  /** Empty for an expense with no category (flagged for review). */
   categoryId: string
+  /** Left out (or empty): the category's default applies. */
+  classification?: string
   enteredByMemberId: string
 }
 
@@ -97,6 +111,8 @@ export type SpendingSummary = {
   total: string
   note: string | null
   categories: CategorySpending[]
+  /** Spending split by the class saved on each entry; null for income. */
+  classes: { essential: string; discretionary: string; unclassified: string } | null
 }
 /** Income uses the same shape as spending: a total and one row per category. */
 export type MonthReview = {
@@ -136,7 +152,12 @@ function list<T>(value: unknown, item: (entry: unknown) => T): T[] {
 
 function parseCategory(value: unknown): Category {
   const data = record(value)
-  return { id: str(data.id), name: str(data.name), kind: str(data.kind) }
+  return {
+    id: str(data.id),
+    name: str(data.name),
+    kind: str(data.kind),
+    defaultClass: strOrNull(data.defaultClass),
+  }
 }
 
 function parseActivity(value: unknown): Activity {
@@ -151,6 +172,7 @@ function parseActivity(value: unknown): Activity {
     description: strOrNull(data.description),
     categoryId: strOrNull(data.categoryId),
     categoryName: strOrNull(data.categoryName),
+    classification: strOrNull(data.classification),
     enteredByMemberId: strOrNull(data.enteredByMemberId),
     reason: strOrNull(data.reason),
     movementId: strOrNull(data.movementId),
@@ -233,6 +255,14 @@ function parseSummary(value: unknown): SpendingSummary {
     month: str(data.month),
     total: str(data.total),
     note: strOrNull(data.note),
+    classes:
+      data.classes == null
+        ? null
+        : {
+            essential: str(record(data.classes).essential),
+            discretionary: str(record(data.classes).discretionary),
+            unclassified: str(record(data.classes).unclassified),
+          },
     categories: list(data.categories, (entry) => {
       const row = record(entry)
       if (typeof row.count !== 'number') throw bad()
@@ -265,6 +295,16 @@ function parseHistory(value: unknown): SpendingHistory {
 export const listCategories = (kind: 'spending' | 'income') =>
   request(`/categories?kind=${kind}`, { parse: (value) => list(value, parseCategory) })
 
+export const createCategory = (category: NewCategory) =>
+  request('/categories', { method: 'POST', body: category, parse: parseCategory })
+
+/** An empty category or class is left out, so the server applies its rules (none, or the default). */
+const entryBody = <T extends { categoryId: string; classification?: string }>(entry: T) => ({
+  ...entry,
+  categoryId: entry.categoryId || undefined,
+  classification: entry.classification || undefined,
+})
+
 export const listActivity = (accountId: string) =>
   request(`/accounts/${accountId}/activity`, { parse: (value) => list(value, parseActivity) })
 
@@ -277,7 +317,7 @@ export const recordEntry = (accountId: string, kind: EntryKind, key: string, ent
   request(`/accounts/${accountId}/${ENTRY_PATH[kind]}`, {
     method: 'POST',
     headers: { 'Idempotency-Key': key },
-    body: entry,
+    body: entryBody(entry),
     parse: parseActivity,
   })
 
@@ -291,7 +331,7 @@ export const replaceEntry = (
   request(`/accounts/${accountId}/activity/${activityId}/replacement`, {
     method: 'POST',
     headers: { 'Idempotency-Key': key },
-    body: entry,
+    body: entryBody(entry),
     parse: parseActivity,
   })
 
@@ -491,13 +531,19 @@ export const getMonthReview = (month: string, accountId: string | null = null) =
     },
   })
 
+/** The row of expenses saved with no category: `listSpendingEntries` takes this in place of a category id. */
+export const UNCATEGORIZED = 'uncategorized'
+
 export const listSpendingEntries = (
   month: string,
   categoryId: string,
   accountId: string | null = null,
 ) =>
-  request(`/spending/entries?month=${month}&categoryId=${categoryId}${forAccount(accountId)}`, {
-    parse: (value) => list(value, parseActivity),
-  })
+  request(
+    `/spending/entries?month=${month}&${
+      categoryId === UNCATEGORIZED ? 'uncategorized=true' : `categoryId=${categoryId}`
+    }${forAccount(accountId)}`,
+    { parse: (value) => list(value, parseActivity) },
+  )
 
 export const getSpendingHistory = () => request('/spending/history', { parse: parseHistory })

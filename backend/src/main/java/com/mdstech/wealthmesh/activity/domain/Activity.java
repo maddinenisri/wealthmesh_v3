@@ -24,5 +24,6 @@ public record Activity(
         String reason,
         UUID replacesId,
         Instant removedAt,
-        BigDecimal requestedBalance) {
+        BigDecimal requestedBalance,
+        String classification) {
 }

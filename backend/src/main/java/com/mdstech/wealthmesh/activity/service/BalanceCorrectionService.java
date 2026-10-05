@@ -107,7 +107,7 @@ public class BalanceCorrectionService {
                         return Mono.error(EntryValidator.bad("The Balance already matches this amount"));
                     }
                     Activity row = new Activity(null, account.id(), "correction", f.difference(), request.asOn(),
-                            null, null, memberId, key, now, reason, request.replacesId(), null, f.requested());
+                            null, null, memberId, key, now, reason, request.replacesId(), null, f.requested(), null);
                     return f.replaced() == null ? insert(row)
                             : store.markRemoved(f.replaced().id(), memberId, now)
                                     .filter(updated -> updated > 0)

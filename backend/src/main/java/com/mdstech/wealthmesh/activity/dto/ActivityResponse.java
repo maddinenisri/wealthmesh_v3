@@ -19,5 +19,6 @@ public record ActivityResponse(
         String reason,
         UUID movementId,
         UUID counterAccountId,
-        String counterAccountName) {
+        String counterAccountName,
+        String classification) {
 }

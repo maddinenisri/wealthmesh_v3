@@ -6,6 +6,7 @@ import { HouseholdPage } from './features/household/HouseholdPage'
 import { AppLayout } from './layout/AppLayout'
 import type { RouteHandle } from './layout/navigation'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { CategoriesPage } from './features/categories/CategoriesPage'
 import { SpendingPage } from './features/spending/SpendingPage'
 import { Showcase } from './Showcase'
 
@@ -22,6 +23,7 @@ export const routes: RouteObject[] = [
       { path: 'accounts/:id', Component: AccountDetailPage, handle: handle('Account') },
       { path: 'accounts/:id/edit', Component: EditAccountPage, handle: handle('Edit account') },
       { path: 'spending', Component: SpendingPage, handle: handle('Spending') },
+      { path: 'categories', Component: CategoriesPage, handle: handle('Categories') },
       { path: 'design', Component: Showcase, handle: handle('Design system') },
       { path: '*', Component: NotFoundPage, handle: handle('Page not found') },
     ],

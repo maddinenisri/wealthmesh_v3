@@ -23,7 +23,8 @@ import {
 import { ownerNames } from '../accounts/ownerNames'
 import { accountChoice } from '../transfers/accountChoice'
 import { useAccountContext } from '../accounts/useAccountContext'
-import type { Activity } from '../../api/activity'
+import { UNCATEGORIZED, type Activity } from '../../api/activity'
+import { classText } from '../activity/classes'
 
 /** "October" or "September 2026" from "2026-10". */
 function monthName(month: string, withYear = false): string {
@@ -199,25 +200,45 @@ function MonthSection({
               <span className="block text-caption text-ink-muted">{totals.data.note}</span>
             )}
           </p>
-          <ul aria-label={words.list} className="mt-3 flex flex-col gap-1">
-            {totals.data.categories.map((category) => (
-              <li key={category.categoryId ?? category.name}>
-                <Button
-                  variant={category.categoryId === categoryId ? 'primary' : 'secondary'}
-                  size="sm"
-                  aria-pressed={category.categoryId === categoryId}
-                  disabled={category.categoryId === null}
-                  onClick={() => setCategoryId(category.categoryId)}
-                >
-                  {category.name}
-                </Button>{' '}
-                <Amount value={Number(category.total)} /> (
-                {plural(category.count, words.noun, words.nouns)})
-                {category.note && (
-                  <span className="block text-caption text-ink-muted">{category.note}</span>
-                )}
+          {totals.data.classes && (
+            <ul aria-label="Spending by class" className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
+              <li>
+                Essential <Amount value={Number(totals.data.classes.essential)} />
               </li>
-            ))}
+              <li>
+                Discretionary <Amount value={Number(totals.data.classes.discretionary)} />
+              </li>
+              <li>
+                Unclassified <Amount value={Number(totals.data.classes.unclassified)} />
+              </li>
+            </ul>
+          )}
+          <ul aria-label={words.list} className="mt-3 flex flex-col gap-1">
+            {totals.data.categories.map((category) => {
+              const id = category.categoryId ?? UNCATEGORIZED
+              return (
+                <li key={id}>
+                  <Button
+                    variant={id === categoryId ? 'primary' : 'secondary'}
+                    size="sm"
+                    aria-pressed={id === categoryId}
+                    onClick={() => setCategoryId(id)}
+                  >
+                    {category.name}
+                  </Button>{' '}
+                  <Amount value={Number(category.total)} /> (
+                  {plural(category.count, words.noun, words.nouns)})
+                  {category.categoryId === null && kind === 'expense' && (
+                    <span className="block text-caption text-ink-muted">
+                      Needs a category: open an entry and choose one.
+                    </span>
+                  )}
+                  {category.note && (
+                    <span className="block text-caption text-ink-muted">{category.note}</span>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </>
       )}
@@ -281,6 +302,9 @@ function Entries({
             {open.kind === 'refund' && ' (refund)'}
           </Detail>
           <Detail label="Category">{open.categoryName ?? 'Uncategorized'}</Detail>
+          {open.kind !== 'income' && (
+            <Detail label="Class">{classText(open.classification)}</Detail>
+          )}
           <Detail label="Entered by">
             {open.enteredByMemberId ? ownerNames([open.enteredByMemberId], members) : ''}
           </Detail>

@@ -23,6 +23,7 @@ export type HistoricalDraft = {
   amount: string
   occurredOn: string
   categoryId: string
+  classification?: string
   categoryName: string
 }
 
@@ -76,6 +77,7 @@ export function HistoricalSetup({
             amount: entry.amount,
             occurredOn: entry.occurredOn,
             categoryId: entry.categoryId,
+            classification: entry.classification,
             enteredByMemberId: member.id,
           },
           startRevision: {
@@ -106,8 +108,9 @@ export function HistoricalSetup({
           <>
             <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
               <Item label={kind === 'income' ? 'Money in' : 'Money out'}>
-                {entry.description || entry.categoryName} ({entry.categoryName}){' '}
-                {formatMoney(Number(entry.amount))} on {entry.occurredOn}
+                {entry.description || entry.categoryName || 'No category'} (
+                {entry.categoryName || 'No category'}) {formatMoney(Number(entry.amount))} on{' '}
+                {entry.occurredOn}
               </Item>
               <Item label="New tracking start">
                 {formatMoney(Number(figures.openingAmount))} on {figures.openedOn}

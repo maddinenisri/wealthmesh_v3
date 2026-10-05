@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -58,6 +59,12 @@ public class SpendingService {
         return entries("expense", month, categoryId, accountId);
     }
 
+    /** The expenses saved with no category: the ones flagged for review (CATEGORIES_006). */
+    public Flux<ActivityResponse> uncategorizedEntries(String month, UUID accountId) {
+        return Mono.fromCallable(() -> parse(month)).flatMapMany(ym -> known(accountId).thenMany(store
+                .monthEntries("expense", ym.atDay(1), ym.plusMonths(1).atDay(1), null, true, accountId)));
+    }
+
     public Flux<ActivityResponse> incomeEntries(String month, UUID categoryId, UUID accountId) {
         return entries("income", month, categoryId, accountId);
     }
@@ -80,11 +87,16 @@ public class SpendingService {
     private Mono<SpendingSummary> summary(String kind, String month, UUID accountId) {
         return Mono.fromCallable(() -> parse(month)).flatMap(ym -> known(accountId).then(store
                 .totalsByCategory(kind, ym.atDay(1), ym.plusMonths(1).atDay(1), accountId).collectList())
-                .map(rows -> {
+                .zipWith("income".equals(kind) ? Mono.just(Optional.<ActivityStore.ClassTotals>empty())
+                        : store.classTotals(ym.atDay(1), ym.plusMonths(1).atDay(1), accountId).map(Optional::of))
+                .map(both -> {
+                    var rows = both.getT1();
                     BigDecimal total = rows.stream().map(r -> r.total()).reduce(BigDecimal.ZERO, BigDecimal::add);
                     return new SpendingSummary(ym.toString(), Money.format(total), refundNote(total),
                             rows.stream().map(r -> new SpendingSummary.CategorySpending(r.categoryId(), r.name(),
-                                    Money.format(r.total()), r.count(), refundNote(r.total()))).toList());
+                                    Money.format(r.total()), r.count(), refundNote(r.total()))).toList(),
+                            both.getT2().map(c -> new SpendingSummary.ClassSpending(Money.format(c.essential()),
+                                    Money.format(c.discretionary()), Money.format(c.unclassified()))).orElse(null));
                 }));
     }
 
@@ -95,7 +107,7 @@ public class SpendingService {
 
     private Flux<ActivityResponse> entries(String kind, String month, UUID categoryId, UUID accountId) {
         return Mono.fromCallable(() -> parse(month)).flatMapMany(ym -> known(accountId).thenMany(
-                store.monthEntries(kind, ym.atDay(1), ym.plusMonths(1).atDay(1), categoryId, accountId)));
+                store.monthEntries(kind, ym.atDay(1), ym.plusMonths(1).atDay(1), categoryId, false, accountId)));
     }
 
     /** A filter on an account that does not exist is a 404, not an empty month. */

@@ -31,7 +31,8 @@ public class ActivityStore {
     private static final String ENTRY_COLUMNS = """
             SELECT a.id, a.account_id, ac.name AS account_name, a.kind, a.amount, a.occurred_on, a.description,
                    a.category_id, c.name AS category_name, a.entered_by_member_id, a.created_at, a.reason,
-                   a.movement_id, cp.account_id AS counter_account_id, cpa.name AS counter_account_name
+                   a.movement_id, cp.account_id AS counter_account_id, cpa.name AS counter_account_name,
+                   a.classification
             FROM activity a JOIN account ac ON ac.id = a.account_id
             LEFT JOIN category c ON c.id = a.category_id
             LEFT JOIN activity cp ON cp.movement_id = a.movement_id AND cp.id <> a.id
@@ -126,12 +127,13 @@ public class ActivityStore {
         }
     }
 
-    /** Entries of one kind (expense or income) in a month, optionally one category. */
+    /** Entries of one kind (expense or income) in a month, optionally one category or only those with none. */
     public Flux<ActivityResponse> monthEntries(String kind, LocalDate from, LocalDate to, UUID categoryId,
-            UUID accountId) {
+            boolean uncategorized, UUID accountId) {
         String sql = ENTRY_COLUMNS + " AND " + Counted.of(kind, "a.").filter()
                 + " AND a.occurred_on >= :from AND a.occurred_on < :to"
                 + (categoryId == null ? "" : " AND a.category_id = :category")
+                + (uncategorized ? " AND a.category_id IS NULL" : "")
                 + (accountId == null ? "" : " AND a.account_id = :account")
                 + " ORDER BY a.occurred_on, a.created_at";
         DatabaseClient.GenericExecuteSpec spec = client.sql(sql).bind("from", from).bind("to", to);
@@ -175,6 +177,27 @@ public class ActivityStore {
                 .map((row, meta) -> new CategoryTotal(row.get("category_id", UUID.class), row.get("name", String.class),
                         row.get("total", BigDecimal.class), row.get("n", Long.class)))
                 .all();
+    }
+
+    /** A month's spending split by the class each entry was saved with; entries with no class are unclassified. */
+    public record ClassTotals(BigDecimal essential, BigDecimal discretionary, BigDecimal unclassified) {
+    }
+
+    public Mono<ClassTotals> classTotals(LocalDate from, LocalDate to, UUID accountId) {
+        Counted counted = Counted.of("expense", "a.");
+        DatabaseClient.GenericExecuteSpec spec = client.sql("SELECT "
+                + "COALESCE(SUM(" + counted.value() + ") FILTER (WHERE a.classification = 'essential'), 0) AS e, "
+                + "COALESCE(SUM(" + counted.value() + ") FILTER (WHERE a.classification = 'discretionary'), 0) AS d, "
+                + "COALESCE(SUM(" + counted.value() + ") FILTER (WHERE a.classification IS NULL), 0) AS u "
+                + "FROM activity a WHERE a.removed_at IS NULL AND " + counted.filter()
+                + " AND a.occurred_on >= :from AND a.occurred_on < :to"
+                + (accountId == null ? "" : " AND a.account_id = :account"))
+                .bind("from", from).bind("to", to);
+        if (accountId != null) {
+            spec = spec.bind("account", accountId);
+        }
+        return spec.map((row, meta) -> new ClassTotals(row.get("e", BigDecimal.class), row.get("d", BigDecimal.class),
+                row.get("u", BigDecimal.class))).one();
     }
 
     public record MonthTotal(String month, BigDecimal total) {
@@ -303,6 +326,6 @@ public class ActivityStore {
                 row.get("category_name", String.class), row.get("entered_by_member_id", UUID.class),
                 row.get("created_at", java.time.OffsetDateTime.class).toInstant(), row.get("reason", String.class),
                 row.get("movement_id", UUID.class), row.get("counter_account_id", UUID.class),
-                row.get("counter_account_name", String.class));
+                row.get("counter_account_name", String.class), row.get("classification", String.class));
     }
 }

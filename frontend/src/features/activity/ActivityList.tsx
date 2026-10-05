@@ -6,6 +6,7 @@ import { Amount, Button, Table, Td, Th } from '../../design-system'
 import { useAccountActivity } from '../../hooks/useActivity'
 import { ownerNames } from '../accounts/ownerNames'
 import { EntryHistory } from './EntryHistory'
+import { classText } from './classes'
 import { shownAmount } from './signedAmount'
 import { givesMoney, isMovement, movementWord, rowName } from './transferRows'
 
@@ -74,7 +75,18 @@ export function ActivityList({
                         : ''}
                     </span>
                   </Td>
-                  <Td>{entry.categoryName ?? ''}</Td>
+                  <Td>
+                    {entry.categoryName ??
+                      (entry.kind === 'expense' || entry.kind === 'refund' ? 'Uncategorized' : '')}
+                    {entry.kind === 'expense' && !entry.categoryId && (
+                      <span className="block text-caption text-ink-muted">Needs a category</span>
+                    )}
+                    {(entry.kind === 'expense' || entry.kind === 'refund') && (
+                      <span className="block text-caption text-ink-muted">
+                        {classText(entry.classification)}
+                      </span>
+                    )}
+                  </Td>
                   <Td className="hidden lg:table-cell">
                     {entry.enteredByMemberId ? ownerNames([entry.enteredByMemberId], members) : ''}
                   </Td>
