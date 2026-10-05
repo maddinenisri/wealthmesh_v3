@@ -18,13 +18,16 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
       `LedgerApiTestBase`. The test fails when the lock is removed (random timing proves nothing).
 - [ ] A keyed save has a concurrent same-key test (second request replays the first) and a retry-after-the-ledger-
       changed test.
-- [ ] Every test cites its scenario ID.
+- [ ] A race test for a row lock (account, member) holds only that row. Holding the account lock too hides whether the
+      member row is read `FOR SHARE`; the test must fail when the lock or the `FOR SHARE` is removed.
+- [ ] Every test cites its scenario ID, including race, guard and replay tests (grep the titles of each new test class).
 
 ## UI
 
 - [ ] A form or review that opens above a long table uses `Panel`, and returns focus to its opener with
       `useReturnFocus`. A panel whose content swaps in place (form to review) scrolls and focuses the new content.
-- [ ] Playwright, at 710px and 1280px: the panel's top is in view, focus is inside it, nothing scrolls sideways.
+- [ ] Playwright, at 710px and 1280px: the panel's top is in view, focus is inside it, nothing scrolls sideways. After a
+      save, the new row is in view; seed a long list first, because a short table hides a page left scrolled down.
 - [ ] Playwright: a form's first error is in view and focused; a save finishes before the test leaves the page.
 - [ ] Edit forms start from the current values and show the original. A long name and label wrap at 710px.
 - [ ] Anything new that distinguishes accounts or entries (type, status, owner) shows in the lists, not only on the
