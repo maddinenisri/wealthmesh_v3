@@ -108,13 +108,14 @@ public class CategoryLifecycleService {
 
     /** Merges the sources into an existing target or a new one; the sources are archived and point at it. */
     public Mono<MergeResult> merge(CategoryMerge request) {
+        UUID mergeId = UUID.randomUUID();
         return Mono.fromCallable(() -> sources(request))
                 .flatMap(sources -> transactions.transactional(categories.member(request.enteredByMemberId())
                         // Every row this merge touches is locked in one statement, lowest id first, so two merges
                         // in opposite directions cannot wait on each other.
                         .then(Mono.defer(() -> store.lock(allIds(request, sources)).then()))
-                        .then(Mono.defer(() -> target(request, sources)))
-                        .flatMap(target -> mergeLocked(request, sources, target))));
+                        .then(Mono.defer(() -> target(request, sources, mergeId)))
+                        .flatMap(target -> mergeLocked(request, sources, target, mergeId))));
     }
 
     private static List<UUID> allIds(CategoryMerge request, List<UUID> sources) {
@@ -123,13 +124,13 @@ public class CategoryLifecycleService {
                         .distinct().sorted().toList();
     }
 
-    private Mono<MergeResult> mergeLocked(CategoryMerge request, List<UUID> sources, Category target) {
+    private Mono<MergeResult> mergeLocked(CategoryMerge request, List<UUID> sources, Category target,
+            UUID mergeId) {
         return store.lock(sources).collectList().flatMap(rows -> {
             if (rows.size() != sources.size()) {
                 return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
             }
             return Flux.fromIterable(rows).concatMap(source -> checkSource(source, target)).then(Mono.defer(() -> {
-                UUID mergeId = UUID.randomUUID();
                 Instant now = clock.instant();
                 return store.merge(sources, target.id(), mergeId, now)
                         .thenMany(Flux.fromIterable(rows).concatMap(source -> store.recordEvent(source.id(),
@@ -155,7 +156,7 @@ public class CategoryLifecycleService {
                 : Mono.empty());
     }
 
-    private Mono<Category> target(CategoryMerge request, List<UUID> sources) {
+    private Mono<Category> target(CategoryMerge request, List<UUID> sources, UUID mergeId) {
         if (request.targetId() != null) {
             if (sources.contains(request.targetId())) {
                 return Mono.error(CategoryService.bad("Choose a different category to merge into"));
@@ -173,8 +174,9 @@ public class CategoryLifecycleService {
                 .flatMap(first -> store.findDuplicate(first.kind(), name, null)
                         .flatMap(existing -> Mono.<Category>error(CategoryService.duplicate(existing)))
                         .switchIfEmpty(Mono.defer(() -> store.insert(name, first.kind(), first.defaultClass())))
-                        .flatMap(created -> store.recordEvent(created.id(), "created", null, name, null,
-                                request.enteredByMemberId(), clock.instant()).thenReturn(created)));
+                        .flatMap(created -> store.recordEvent(created.id(), "created", null, name,
+                                CategoryStore.CREATED_BY_MERGE + mergeId, request.enteredByMemberId(),
+                                clock.instant()).thenReturn(created)));
     }
 
     private static List<UUID> sources(CategoryMerge request) {
@@ -200,6 +202,7 @@ public class CategoryLifecycleService {
                     }
                     Instant now = clock.instant();
                     return store.undoMerge(mergeId)
+                            .then(Mono.defer(() -> archiveEmptyTarget(mergeId, change.enteredByMemberId(), now)))
                             .thenMany(Flux.fromIterable(rows).concatMap(source -> store.recordEvent(source.id(),
                                     "merge_undone", source.name(), null, "Merge undone",
                                     change.enteredByMemberId(), now)))
@@ -209,6 +212,19 @@ public class CategoryLifecycleService {
                                     new Category(c.id(), c.name(), c.kind(), c.sortOrder(), c.defaultClass(), null,
                                             null, null))).toList());
                 }));
+    }
+
+    /**
+     * A category made only to receive a merge is archived again when Undo leaves it empty, so Undo does not leave an
+     * empty active category behind. One that has entries of its own (saved since the merge) stays.
+     */
+    private Mono<Void> archiveEmptyTarget(UUID mergeId, UUID memberId, Instant now) {
+        return store.createdByMerge(mergeId).flatMap(id -> store.lock(List.of(id)).next())
+                .flatMap(target -> store.usage(target).filter(usage -> usage.entries() == 0)
+                        .flatMap(usage -> store.setArchived(target.id(), now)
+                                .then(store.recordEvent(target.id(), "archived", null, null,
+                                        "Empty after the merge was undone", memberId, now))))
+                .then();
     }
 
     public Mono<CategoryUsage> usage(UUID id) {

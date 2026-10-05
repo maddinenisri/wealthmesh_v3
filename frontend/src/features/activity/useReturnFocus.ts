@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
  * Brings focus back to the button that opened a panel once the panel closes (Cancel or Confirm), as the member
  * screens do. Call the returned function from the click that opens the panel, while the button still has focus.
  */
-export function useReturnFocus(open: boolean): () => void {
+export function useReturnFocus(open: boolean): { (): void; cancel: () => void } {
   const trigger = useRef<HTMLElement | null>(null)
   const wasOpen = useRef(false)
   useEffect(() => {
@@ -14,7 +14,12 @@ export function useReturnFocus(open: boolean): () => void {
       trigger.current.focus({ preventScroll: true })
     wasOpen.current = open
   }, [open])
-  return () => {
+  const remember = () => {
     trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
   }
+  // A screen that moves focus itself after a save (to the row that changed) cancels the return to the opener.
+  remember.cancel = () => {
+    trigger.current = null
+  }
+  return remember
 }

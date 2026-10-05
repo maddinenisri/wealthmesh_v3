@@ -406,6 +406,7 @@ export function mockApi(
         total: row.total.toFixed(2),
         count: row.count,
         note: refundNote(row.total),
+        archived: CATEGORIES.find((c) => c.id === categoryId)?.archived ?? false,
       })),
       classes:
         kind === 'expense'

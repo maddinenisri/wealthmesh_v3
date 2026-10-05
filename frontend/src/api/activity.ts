@@ -117,6 +117,8 @@ export type CategorySpending = {
   count: number
   /** "Refunds exceed purchases" when the total is below zero. */
   note: string | null
+  /** The category is archived (its entries stay and still count). */
+  archived: boolean
 }
 export type SpendingSummary = {
   month: string
@@ -288,6 +290,7 @@ function parseSummary(value: unknown): SpendingSummary {
         total: str(row.total),
         count: row.count,
         note: strOrNull(row.note),
+        archived: row.archived === true,
       }
     }),
   }

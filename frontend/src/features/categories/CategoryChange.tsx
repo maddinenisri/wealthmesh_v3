@@ -73,10 +73,11 @@ function ReviewActions({
   )
 }
 
-/** What a category holds today, in a sentence for a review. */
+/** What a category holds today, as a phrase for a review: "3 entries totalling $210.00" or "no entries yet". */
 function Holds({ id }: { id: string }) {
   const usage = useCategoryUsage(id)
-  if (!usage.data) return <>entries</>
+  if (!usage.data) return <>its entries</>
+  if (usage.data.entries === 0) return <>no entries yet</>
   return (
     <>
       {entriesText(usage.data.entries)} totalling {formatMoney(Number(usage.data.total))}
@@ -94,7 +95,7 @@ export function EditCategory({
   mode: 'rename' | 'default-class'
   category: Category
   members: Member[]
-  onDone: () => void
+  onDone: (changed?: { id: string }) => void
 }) {
   const rename = mode === 'rename'
   const change = useChangeCategory(category.id, mode)
@@ -112,16 +113,19 @@ export function EditCategory({
         tabIndex={-1}
         className="scroll-mt-10 text-lg outline-none"
       >
-        {reviewing ? `Review: ${heading.toLowerCase()}` : heading}
+        {reviewing
+          ? `Review: ${rename ? 'rename' : 'change default of'} ${category.name}`
+          : heading}
       </CardTitle>
       {reviewing ? (
         <div className="mt-3 max-w-md">
           <FormAlert message={change.error?.message} />
           {rename ? (
             <p>
-              Rename <strong>{category.name}</strong> to <strong>{reviewing.name}</strong>. The{' '}
-              <Holds id={category.id} /> follow the new name. Account balances and total spending do
-              not change, and the earlier name stays in the category&apos;s history.
+              Rename <strong>{category.name}</strong> to <strong>{reviewing.name}</strong>. It holds{' '}
+              <Holds id={category.id} />; any entries follow the new name. Account balances and
+              total spending do not change, and the earlier name stays in the category&apos;s
+              history.
             </p>
           ) : (
             <p>
@@ -138,13 +142,13 @@ export function EditCategory({
             pending={change.isPending}
             confirmLabel="Confirm change"
             onBack={() => setReviewing(null)}
-            onCancel={onDone}
+            onCancel={() => onDone()}
             onConfirm={(memberId) =>
               change.mutate(
                 rename
                   ? { name: reviewing.name, enteredByMemberId: memberId }
                   : { defaultClass: reviewing.defaultClass, enteredByMemberId: memberId },
-                { onSuccess: onDone },
+                { onSuccess: (changed) => onDone(changed) },
               )
             }
           />
@@ -173,7 +177,7 @@ export function EditCategory({
           )}
           <div className="flex gap-2">
             <Button type="submit">Review</Button>
-            <Button variant="ghost" onClick={onDone}>
+            <Button variant="ghost" onClick={() => onDone()}>
               Cancel
             </Button>
           </div>
@@ -193,7 +197,7 @@ export function ArchiveCategory({
   mode: 'archive' | 'restore'
   category: Category
   members: Member[]
-  onDone: () => void
+  onDone: (changed?: { id: string }) => void
 }) {
   const change = useChangeCategory(category.id, mode)
   return (
@@ -207,9 +211,9 @@ export function ArchiveCategory({
         <FormAlert message={change.error?.message} />
         {mode === 'archive' ? (
           <p>
-            <strong>{category.name}</strong> will no longer be offered for new entries. The{' '}
-            <Holds id={category.id} /> stay in place, labelled archived, with their links. Spending
-            and account balances do not change.
+            <strong>{category.name}</strong> will no longer be offered for new entries. It holds{' '}
+            <Holds id={category.id} />; they stay in place, labelled archived. Spending and account
+            balances do not change.
           </p>
         ) : (
           <p>
@@ -221,9 +225,12 @@ export function ArchiveCategory({
           members={members}
           pending={change.isPending}
           confirmLabel={mode === 'archive' ? 'Confirm archive' : 'Confirm restore'}
-          onCancel={onDone}
+          onCancel={() => onDone()}
           onConfirm={(memberId) =>
-            change.mutate({ enteredByMemberId: memberId }, { onSuccess: onDone })
+            change.mutate(
+              { enteredByMemberId: memberId },
+              { onSuccess: (changed) => onDone(changed) },
+            )
           }
         />
       </div>
@@ -234,7 +241,13 @@ export function ArchiveCategory({
 type MergeValues = { target: string; newName: string }
 
 /** Choose categories and where they go, review the entries that move, then Confirm. */
-export function MergeCategories({ members, onDone }: { members: Member[]; onDone: () => void }) {
+export function MergeCategories({
+  members,
+  onDone,
+}: {
+  members: Member[]
+  onDone: (changed?: { id: string }) => void
+}) {
   const merge = useMergeCategories()
   const spending = useCategories('expense')
   const income = useCategories('income')
@@ -274,17 +287,20 @@ export function MergeCategories({ members, onDone }: { members: Member[]; onDone
         <div className="mt-3 max-w-md">
           <FormAlert message={merge.error?.message} />
           <p>
-            Merge {named(sources).join(' and ')} into <strong>{targetName}</strong>. The review
-            shows {entriesText(entries)} totalling {formatMoney(total)}. {targetName} will show them
-            and open the same entries; their classes and account balances do not change. You can
-            undo the merge.
+            Merge {named(sources).join(' and ')} into <strong>{targetName}</strong>. Together they
+            hold{' '}
+            {entries === 0
+              ? 'no entries yet'
+              : `${entriesText(entries)} totalling ${formatMoney(total)}`}
+            . {targetName} will show them and open the same entries; their classes and account
+            balances do not change. You can undo the merge.
           </p>
           <ReviewActions
             members={members}
             pending={merge.isPending}
             confirmLabel="Confirm merge"
             onBack={() => setReviewing(null)}
-            onCancel={onDone}
+            onCancel={() => onDone()}
             onConfirm={(memberId) =>
               merge.mutate(
                 {
@@ -294,7 +310,7 @@ export function MergeCategories({ members, onDone }: { members: Member[]; onDone
                     ? { targetId: reviewing.target }
                     : { newName: reviewing.newName.trim() }),
                 },
-                { onSuccess: onDone },
+                { onSuccess: (result) => onDone(result.target) },
               )
             }
           />
@@ -360,7 +376,7 @@ export function MergeCategories({ members, onDone }: { members: Member[]; onDone
           )}
           <div className="flex gap-2">
             <Button type="submit">Review</Button>
-            <Button variant="ghost" onClick={onDone}>
+            <Button variant="ghost" onClick={() => onDone()}>
               Cancel
             </Button>
           </div>
@@ -375,14 +391,17 @@ export function UndoMerge({
   mergeId,
   names,
   targetName,
+  targetId,
   members,
   onDone,
 }: {
   mergeId: string
   names: string[]
   targetName: string
+  /** The category the sources were merged into: it is focused after the Undo. */
+  targetId: string
   members: Member[]
-  onDone: () => void
+  onDone: (changed?: { id: string }) => void
 }) {
   const undo = useUndoMerge(mergeId)
   return (
@@ -401,8 +420,10 @@ export function UndoMerge({
           members={members}
           pending={undo.isPending}
           confirmLabel="Confirm undo"
-          onCancel={onDone}
-          onConfirm={(memberId) => undo.mutate(memberId, { onSuccess: onDone })}
+          onCancel={() => onDone()}
+          onConfirm={(memberId) =>
+            undo.mutate(memberId, { onSuccess: () => onDone({ id: targetId }) })
+          }
         />
       </div>
     </Card>

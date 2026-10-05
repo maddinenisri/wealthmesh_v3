@@ -67,7 +67,7 @@ export function ActivityList({
                     ) : isMovement(entry) ? (
                       <TransferLabel entry={entry} />
                     ) : (
-                      (entry.description ?? '')
+                      (entry.description ?? <span className="text-ink-muted">No description</span>)
                     )}
                     <span className="block text-caption text-ink-muted lg:hidden">
                       {entry.enteredByMemberId

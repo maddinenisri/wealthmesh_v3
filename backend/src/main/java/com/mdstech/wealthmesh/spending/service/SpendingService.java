@@ -94,7 +94,7 @@ public class SpendingService {
                     BigDecimal total = rows.stream().map(r -> r.total()).reduce(BigDecimal.ZERO, BigDecimal::add);
                     return new SpendingSummary(ym.toString(), Money.format(total), refundNote(total),
                             rows.stream().map(r -> new SpendingSummary.CategorySpending(r.categoryId(), r.name(),
-                                    Money.format(r.total()), r.count(), refundNote(r.total()))).toList(),
+                                    Money.format(r.total()), r.count(), refundNote(r.total()), r.archived())).toList(),
                             both.getT2().map(c -> new SpendingSummary.ClassSpending(Money.format(c.essential()),
                                     Money.format(c.discretionary()), Money.format(c.unclassified()))).orElse(null));
                 }));

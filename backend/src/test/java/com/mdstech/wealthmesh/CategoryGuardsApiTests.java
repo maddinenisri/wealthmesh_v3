@@ -149,6 +149,54 @@ class CategoryGuardsApiTests extends LedgerApiTestBase {
         assertThat(statuses).containsExactlyInAnyOrder(201, 409);
     }
 
+    @Order(6)
+    @Test
+    @DisplayName("V2_CATEGORIES_004 undoing a merge into a new category archives it when empty, keeps it when "
+            + "it holds entries; Spending marks an archived category")
+    void undoArchivesEmptyTarget() {
+        create("Cw A", "spending");
+        create("Cw B", "spending");
+        create("Cw C", "spending");
+        String a = id("spending", "Cw A");
+        String b = id("spending", "Cw B");
+        String c = id("spending", "Cw C");
+        AtomicReference<String> mergeEmpty = new AtomicReference<>();
+        newMerge("[\"%s\", \"%s\"]".formatted(a, b), "Cw Empty").expectStatus().isCreated().expectBody()
+                .jsonPath("$.mergeId").value(String.class, mergeEmpty::set);
+        undo(mergeEmpty.get()).expectStatus().isOk();
+        webTestClient.get().uri("/api/v1/categories?kind=spending").exchange().expectBody()
+                .jsonPath("$[?(@.name=='Cw Empty')]").isEmpty().jsonPath("$[?(@.name=='Cw A')]").isNotEmpty();
+        webTestClient.get().uri("/api/v1/categories?kind=spending&includeArchived=true").exchange().expectBody()
+                .jsonPath("$[?(@.name=='Cw Empty')].archived").isEqualTo(true);
+
+        AtomicReference<String> mergeUsed = new AtomicReference<>();
+        newMerge("[\"%s\", \"%s\"]".formatted(a, c), "Cw Used").expectStatus().isCreated().expectBody()
+                .jsonPath("$.mergeId").value(String.class, mergeUsed::set);
+        post(account, "expenses", "cw-used", entry(mayaId, "x", "7.00", "2026-09-10", "Cw Used")).expectStatus()
+                .isCreated();
+        undo(mergeUsed.get()).expectStatus().isOk();
+        webTestClient.get().uri("/api/v1/categories?kind=spending").exchange().expectBody()
+                .jsonPath("$[?(@.name=='Cw Used')]").isNotEmpty();
+
+        // An archived category with entries is marked in the Spending list.
+        change(id("spending", "Cw Used"), "archive", "{\"enteredByMemberId\": \"%s\"}".formatted(mayaId))
+                .expectStatus().isOk();
+        webTestClient.get().uri("/api/v1/spending?month=2026-09&accountId=" + account).exchange().expectBody()
+                .jsonPath("$.categories[?(@.name=='Cw Used')].archived").isEqualTo(true);
+    }
+
+    private WebTestClient.ResponseSpec newMerge(String sourceIds, String newName) {
+        return webTestClient.post().uri("/api/v1/categories/merges").contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"sourceIds\": %s, \"newName\": \"%s\", \"enteredByMemberId\": \"%s\"}"
+                        .formatted(sourceIds, newName, mayaId)).exchange();
+    }
+
+    private WebTestClient.ResponseSpec undo(String mergeId) {
+        return webTestClient.post().uri("/api/v1/categories/merges/{id}/undo", mergeId)
+                .contentType(MediaType.APPLICATION_JSON).bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId))
+                .exchange();
+    }
+
     private static int status(WebTestClient.ResponseSpec spec) {
         return spec.returnResult(String.class).getStatus().value();
     }

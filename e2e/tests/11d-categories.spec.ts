@@ -101,6 +101,107 @@ test.describe.serial('categories and classes', () => {
       .filter({ has: page.locator('span.font-medium', { hasText: new RegExp(`^${name}$`) }) })
 
   for (const width of [710, 1280]) {
+    test(`Cowork findings 1 to 8 at ${width}px: history dates, focus after a change, the duplicate message at the field, review wording, an emptied merge target, archived in Spending, entries with no description`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 800 })
+      const member = await ownerId(request)
+      const make = async (name: string) => {
+        const r = await request.post('/api/v1/categories', {
+          data: { name, kind: 'spending', defaultClass: 'essential', enteredByMemberId: member },
+        })
+        expect(r.status()).toBe(201)
+      }
+      const pets = `Cw Pets ${width}`
+      const sports = `Cw Sports ${width}`
+      const eating = `Cw Eating ${width}`
+      await make(pets)
+      await make(sports)
+      const id = await checking(request, `Cowork Checking ${width}`)
+      await request.post(`/api/v1/accounts/${id}/expenses`, {
+        headers: { 'Idempotency-Key': `cw-${width}` },
+        data: {
+          amount: '30.00',
+          occurredOn: '2026-09-10',
+          category: sports,
+          enteredByMemberId: member,
+        },
+      })
+      await page.goto('/categories')
+
+      // 3: the duplicate message is at the Name field and the field has focus.
+      const { panel } = await openAdd(page)
+      await panel.getByLabel('Name').fill('groceries')
+      await panel.getByLabel('Entered by').selectOption({ label: OWNER })
+      await panel.getByRole('button', { name: 'Save category' }).click()
+      const field = panel.getByLabel('Name')
+      await expect(field).toBeFocused()
+      await expect(field).toHaveAccessibleDescription(/already exists/)
+      await panel.getByRole('button', { name: 'Cancel' }).click()
+
+      // 5 and 4: a review of an empty category says so, and keeps the category's capital letters.
+      await page.getByRole('button', { name: `Rename ${pets}` }).click()
+      await page.getByLabel('New name').fill(`Cw Cats ${width}`)
+      await page.getByRole('button', { name: 'Review' }).click()
+      const review = page.getByRole('region', { name: `Review: rename ${pets}` })
+      await expect(review).toContainText('no entries')
+      await expect(review).not.toContainText('The 0 entries')
+      // 2: after confirming, focus is on the changed category's row, in view.
+      await confirm(page, `Review: rename ${pets}`, 'Confirm change')
+      const cats = categoryRow(page, `Cw Cats ${width}`)
+      await expect(cats).toBeFocused()
+      await expect(cats).toBeInViewport()
+      // 1: the history says when.
+      await cats.getByRole('button', { name: `History of Cw Cats ${width}` }).click()
+      await expect(page.getByRole('list', { name: `History of Cw Cats ${width}` })).toContainText(
+        /Renamed from .* by Alex Doe on \d{4}-\d{2}-\d{2}/,
+      )
+
+      // 7: Spending marks an archived category.
+      await page.getByRole('button', { name: `Archive ${sports}` }).click()
+      await confirm(page, `Review: archive ${sports}`, 'Confirm archive')
+      await expect(categoryRow(page, sports)).toBeFocused()
+
+      // 6: undoing a merge into a new category leaves no empty active category behind.
+      await make(`Cw Dogs ${width}`)
+      await page.reload()
+      await page.getByRole('button', { name: 'Merge categories' }).click()
+      const merge = page.getByRole('region', { name: 'Merge categories' })
+      await merge.getByRole('checkbox', { name: `Cw Cats ${width}` }).check()
+      await merge.getByRole('checkbox', { name: `Cw Dogs ${width}` }).check()
+      await merge.getByLabel('New category name').fill(eating)
+      await merge.getByRole('button', { name: 'Review' }).click()
+      await expect(page.getByRole('region', { name: 'Review merge' })).toContainText(
+        'Together they hold',
+      )
+      await confirm(page, 'Review merge', 'Confirm merge')
+      await expect(categoryRow(page, eating)).toBeFocused()
+      await page
+        .getByRole('button', { name: `Undo merge of Cw Cats ${width} and Cw Dogs ${width}` })
+        .click()
+      await confirm(page, `Review: undo merge into ${eating}`, 'Confirm undo')
+      await expect(categoryRow(page, eating)).toContainText('Archived')
+
+      await page.getByRole('link', { name: 'Spending' }).click()
+      await page.getByLabel('Month', { exact: true }).fill('2026-09')
+      await page
+        .getByLabel('Account', { exact: true })
+        .selectOption({ label: `Cowork Checking ${width} (Checking)` })
+      await expect(
+        page
+          .getByRole('region', { name: /September 2026/ })
+          .getByRole('list', { name: 'Spending by category' }),
+      ).toContainText(`${sports} (archived)`)
+
+      // 8: an entry with no description says so.
+      await page.goto(`/accounts/${id}`)
+      await expect(page.getByRole('row').filter({ hasText: '2026-09-10' })).toContainText(
+        'No description',
+      )
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+    })
+
     test(`V2_CATEGORIES_001 a long category name wraps at ${width}px and the new row is brought into view at the end of a long list`, async ({
       page,
     }) => {

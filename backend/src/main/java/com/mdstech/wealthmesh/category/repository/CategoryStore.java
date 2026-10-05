@@ -102,6 +102,16 @@ public class CategoryStore {
                 .bind("merge", mergeId).map((row, meta) -> category(row)).all();
     }
 
+    /** The category a merge created (it was merged into a new name), if any. */
+    public Mono<UUID> createdByMerge(UUID mergeId) {
+        return client.sql("SELECT category_id FROM category_event WHERE action = 'created' AND detail = :detail")
+                .bind("detail", CREATED_BY_MERGE + mergeId)
+                .map((row, meta) -> row.get("category_id", UUID.class)).one();
+    }
+
+    /** The note on the `created` event of a category made by a merge, followed by the merge id. */
+    public static final String CREATED_BY_MERGE = "Created by merge ";
+
     public Mono<Long> undoMerge(UUID mergeId) {
         return client.sql("UPDATE category SET archived_at = NULL, merged_into_id = NULL, merge_id = NULL "
                         + "WHERE merge_id = :merge")

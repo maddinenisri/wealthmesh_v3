@@ -15,6 +15,7 @@ public record SpendingSummary(String month, String total, String note, List<Cate
     public record ClassSpending(String essential, String discretionary, String unclassified) {
     }
 
-    public record CategorySpending(UUID categoryId, String name, String total, long count, String note) {
+    public record CategorySpending(UUID categoryId, String name, String total, long count, String note,
+            boolean archived) {
     }
 }

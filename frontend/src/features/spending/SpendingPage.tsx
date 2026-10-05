@@ -225,6 +225,7 @@ function MonthSection({
                     onClick={() => setCategoryId(id)}
                   >
                     {category.name}
+                    {category.archived && ' (archived)'}
                   </Button>{' '}
                   <Amount value={Number(category.total)} /> (
                   {plural(category.count, words.noun, words.nouns)})

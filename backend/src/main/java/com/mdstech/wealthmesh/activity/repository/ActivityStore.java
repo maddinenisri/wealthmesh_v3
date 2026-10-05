@@ -158,27 +158,29 @@ public class ActivityStore {
                 .map((row, meta) -> row.get("total", BigDecimal.class)).one();
     }
 
-    public record CategoryTotal(UUID categoryId, String name, BigDecimal total, long count) {
+    public record CategoryTotal(UUID categoryId, String name, BigDecimal total, long count, boolean archived) {
     }
 
     /** Totals of one kind (expense or income) in a month, one row per category. */
     public Flux<CategoryTotal> totalsByCategory(String kind, LocalDate from, LocalDate to, UUID accountId) {
         Counted counted = Counted.of(kind, "a.");
         DatabaseClient.GenericExecuteSpec spec = client.sql("SELECT c.id AS category_id, "
-                + "COALESCE(c.name, 'Uncategorized') AS name, SUM(" + counted.value() + ") AS total, COUNT(*) AS n "
+                + "COALESCE(c.name, 'Uncategorized') AS name, (c.archived_at IS NOT NULL) AS archived, SUM("
+                + counted.value() + ") AS total, COUNT(*) AS n "
                 + "FROM activity a LEFT JOIN category oc ON oc.id = a.category_id "
                 + "LEFT JOIN category c ON c.id = COALESCE(oc.merged_into_id, oc.id) "
                 + "WHERE a.removed_at IS NULL AND " + counted.filter()
                 + " AND a.occurred_on >= :from AND a.occurred_on < :to"
                 + (accountId == null ? "" : " AND a.account_id = :account")
-                + " GROUP BY c.id, c.name ORDER BY SUM(" + counted.value() + ") DESC, name")
+                + " GROUP BY c.id, c.name, c.archived_at ORDER BY SUM(" + counted.value() + ") DESC, name")
                 .bind("from", from).bind("to", to);
         if (accountId != null) {
             spec = spec.bind("account", accountId);
         }
         return spec
                 .map((row, meta) -> new CategoryTotal(row.get("category_id", UUID.class), row.get("name", String.class),
-                        row.get("total", BigDecimal.class), row.get("n", Long.class)))
+                        row.get("total", BigDecimal.class), row.get("n", Long.class),
+                        Boolean.TRUE.equals(row.get("archived", Boolean.class))))
                 .all();
     }
 

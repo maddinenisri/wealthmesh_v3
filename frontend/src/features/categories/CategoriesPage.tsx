@@ -26,41 +26,36 @@ type PanelState =
   | { kind: 'add' }
   | { kind: 'rename' | 'default-class' | 'archive' | 'restore'; category: Category }
   | { kind: 'merge' }
-  | { kind: 'undo'; mergeId: string; names: string[]; targetName: string }
+  | { kind: 'undo'; mergeId: string; names: string[]; targetName: string; targetId: string }
 
 /** The household's categories: add, change a default, rename, merge with Undo, archive and restore. */
 export function CategoriesPage() {
   const { members } = useAccountContext()
   const [panel, setPanel] = useState<PanelState | null>(null)
-  const [focusId, setFocusId] = useState<string | null>(null)
   const remember = useReturnFocus(panel !== null)
-  const open = (next: PanelState, id?: string) => {
+  const open = (next: PanelState) => {
     remember()
-    setFocusId(id ?? null)
     setPanel(next)
   }
   // The button that opened a panel can be replaced by the change (Archive becomes Restore): fall back to the row.
-  const close = (created?: Category) => {
+  // After a change the row that changed (or was added at the end of a long list) is scrolled into view and focused
+  // once the list has refreshed; the opener may be gone (Archive becomes Restore). Cancel leaves focus to
+  // `useReturnFocus`, which puts it back on the opener.
+  const close = (changed?: { id: string }) => {
+    if (changed) remember.cancel()
     setPanel(null)
-    if (created) {
-      // A new category lands at the end of a long list: scroll to it and focus it once the list has refreshed.
-      let attempts = 0
-      const reveal = () => {
-        const row = document.getElementById(`category-${created.id}`)
-        if (row) {
-          row.scrollIntoView?.({ block: 'center' })
-          row.focus({ preventScroll: true })
-        } else if (attempts++ < 20) {
-          setTimeout(reveal, 50)
-        }
+    if (!changed) return
+    let attempts = 0
+    const reveal = () => {
+      const row = document.getElementById(`category-${changed.id}`)
+      if (row) {
+        row.scrollIntoView?.({ block: 'center' })
+        row.focus({ preventScroll: true })
+      } else if (attempts++ < 20) {
+        setTimeout(reveal, 50)
       }
-      setTimeout(reveal, 0)
-    } else if (focusId) {
-      requestAnimationFrame(() => {
-        if (document.activeElement === document.body || !document.activeElement?.isConnected)
-          document.getElementById(`category-${focusId}`)?.focus()
-      })
     }
+    setTimeout(reveal, 0)
   }
   const key = panel ? JSON.stringify(panel) : 'none'
 
@@ -87,13 +82,13 @@ export function CategoriesPage() {
       {panel && members && (
         <Panel key={key}>
           {panel.kind === 'add' && <AddCategory members={members} onDone={close} />}
-          {panel.kind === 'merge' && <MergeCategories members={members} onDone={() => close()} />}
+          {panel.kind === 'merge' && <MergeCategories members={members} onDone={close} />}
           {(panel.kind === 'rename' || panel.kind === 'default-class') && (
             <EditCategory
               mode={panel.kind}
               category={panel.category}
               members={members}
-              onDone={() => close()}
+              onDone={close}
             />
           )}
           {(panel.kind === 'archive' || panel.kind === 'restore') && (
@@ -101,7 +96,7 @@ export function CategoriesPage() {
               mode={panel.kind}
               category={panel.category}
               members={members}
-              onDone={() => close()}
+              onDone={close}
             />
           )}
           {panel.kind === 'undo' && (
@@ -109,8 +104,9 @@ export function CategoriesPage() {
               mergeId={panel.mergeId}
               names={panel.names}
               targetName={panel.targetName}
+              targetId={panel.targetId}
               members={members}
-              onDone={() => close()}
+              onDone={close}
             />
           )}
         </Panel>
@@ -129,7 +125,7 @@ function CategoryList({
 }: {
   kind: 'expense' | 'income'
   title: string
-  open: (panel: PanelState, id?: string) => void
+  open: (panel: PanelState) => void
   busy: boolean
 }) {
   const categories = useCategories(kind, true)
@@ -184,7 +180,7 @@ function CategoryRow({
   kind: 'expense' | 'income'
   target: Category | undefined
   merges: [string, Category[]][]
-  open: (panel: PanelState, id?: string) => void
+  open: (panel: PanelState) => void
   busy: boolean
 }) {
   const [showHistory, setShowHistory] = useState(false)
@@ -219,7 +215,7 @@ function CategoryRow({
             size="sm"
             aria-label={`Rename ${category.name}`}
             disabled={busy}
-            onClick={() => open({ kind: 'rename', category }, category.id)}
+            onClick={() => open({ kind: 'rename', category })}
           >
             Rename
           </Button>
@@ -230,7 +226,7 @@ function CategoryRow({
             size="sm"
             aria-label={`Change default of ${category.name}`}
             disabled={busy}
-            onClick={() => open({ kind: 'default-class', category }, category.id)}
+            onClick={() => open({ kind: 'default-class', category })}
           >
             Change default
           </Button>
@@ -241,7 +237,7 @@ function CategoryRow({
             size="sm"
             aria-label={`Archive ${category.name}`}
             disabled={busy}
-            onClick={() => open({ kind: 'archive', category }, category.id)}
+            onClick={() => open({ kind: 'archive', category })}
           >
             Archive
           </Button>
@@ -252,7 +248,7 @@ function CategoryRow({
             size="sm"
             aria-label={`Restore ${category.name}`}
             disabled={busy}
-            onClick={() => open({ kind: 'restore', category }, category.id)}
+            onClick={() => open({ kind: 'restore', category })}
           >
             Restore
           </Button>
@@ -265,15 +261,13 @@ function CategoryRow({
             aria-label={`Undo merge of ${sources.map((c) => c.name).join(' and ')}`}
             disabled={busy}
             onClick={() =>
-              open(
-                {
-                  kind: 'undo',
-                  mergeId,
-                  names: sources.map((c) => c.name),
-                  targetName: category.name,
-                },
-                category.id,
-              )
+              open({
+                kind: 'undo',
+                mergeId,
+                names: sources.map((c) => c.name),
+                targetName: category.name,
+                targetId: category.id,
+              })
             }
           >
             Undo merge of {sources.map((c) => c.name).join(' and ')}
@@ -295,7 +289,7 @@ function CategoryRow({
           {history.data?.length === 0 && <li>No changes yet.</li>}
           {history.data?.map((event, index) => (
             <li key={index} className="[overflow-wrap:anywhere]">
-              {eventText(event)} by {event.byName}
+              {eventText(event)} by {event.byName} on {event.at.slice(0, 10)}
             </li>
           ))}
         </ul>
@@ -325,13 +319,13 @@ function AddCategory({
   onDone,
 }: {
   members: Member[]
-  onDone: (created?: Category) => void
+  onDone: (created?: { id: string }) => void
 }) {
   const create = useCreateCategory()
   const spending = useCategories('expense')
   const income = useCategories('income')
   const { member, setMemberId } = useEnteringAs(members)
-  const { control, handleSubmit } = useForm<Values>({
+  const { control, handleSubmit, setError } = useForm<Values>({
     defaultValues: { name: '', kind: 'spending', defaultClass: '' },
   })
   const kind = useWatch({ control, name: 'kind' })
@@ -364,11 +358,28 @@ function AddCategory({
                 : {}),
               enteredByMemberId: member.id,
             },
-            { onSuccess: (created) => onDone(created) },
+            {
+              onSuccess: (created) => onDone(created),
+              // A duplicate name is explained at the Name field, which takes focus (CATEGORIES_008).
+              onError: (error) => {
+                if (error instanceof ApiError && error.status === 409)
+                  setError(
+                    'name',
+                    { type: 'server', message: error.message },
+                    { shouldFocus: true },
+                  )
+              },
+            },
           )
         })}
       >
-        <FormAlert message={create.error?.message} />
+        <FormAlert
+          message={
+            create.error instanceof ApiError && create.error.status === 409
+              ? undefined
+              : create.error?.message
+          }
+        />
         {existing && (
           <Button
             variant="secondary"

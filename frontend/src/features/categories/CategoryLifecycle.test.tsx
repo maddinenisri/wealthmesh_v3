@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CATEGORIES, mockApi, type MockActivity, type MockAccount } from '../../test/mockApi'
 import { renderRoute } from '../../test/render'
@@ -121,6 +121,7 @@ describe('rename a category', () => {
     await within(screen.getByRole('list', { name: 'Spending categories' })).findByText(
       'Food shopping',
     )
+    await waitFor(() => expect(row('Food shopping')).toHaveFocus())
     await user.click(screen.getByRole('button', { name: 'History of Food shopping' }))
     const history = await screen.findByRole('list', { name: 'History of Food shopping' })
     expect(
