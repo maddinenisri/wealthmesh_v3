@@ -110,8 +110,17 @@ public class CategoryLifecycleService {
     public Mono<MergeResult> merge(CategoryMerge request) {
         return Mono.fromCallable(() -> sources(request))
                 .flatMap(sources -> transactions.transactional(categories.member(request.enteredByMemberId())
+                        // Every row this merge touches is locked in one statement, lowest id first, so two merges
+                        // in opposite directions cannot wait on each other.
+                        .then(Mono.defer(() -> store.lock(allIds(request, sources)).then()))
                         .then(Mono.defer(() -> target(request, sources)))
                         .flatMap(target -> mergeLocked(request, sources, target))));
+    }
+
+    private static List<UUID> allIds(CategoryMerge request, List<UUID> sources) {
+        return request.targetId() == null ? sources
+                : java.util.stream.Stream.concat(sources.stream(), java.util.stream.Stream.of(request.targetId()))
+                        .distinct().sorted().toList();
     }
 
     private Mono<MergeResult> mergeLocked(CategoryMerge request, List<UUID> sources, Category target) {

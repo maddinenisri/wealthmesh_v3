@@ -101,6 +101,22 @@ test.describe.serial('categories and classes', () => {
       .filter({ has: page.locator('span.font-medium', { hasText: new RegExp(`^${name}$`) }) })
 
   for (const width of [710, 1280]) {
+    test(`V2_CATEGORIES_001 a long category name wraps at ${width}px and the new row is brought into view at the end of a long list`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 700 })
+      await page.goto('/categories')
+      const name = `Long name ${width} ${'very '.repeat(8)}household category`
+      await save(page, name, 'Spending', 'Discretionary')
+      const row = categoryRow(page, name)
+      await expect(row).toBeVisible()
+      await expect(row).toBeInViewport()
+      await expect(row).toBeFocused()
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+      const box = await row.boundingBox()
+      expect(box!.width).toBeLessThanOrEqual(width)
+    })
+
     test(`V2_CATEGORIES_008 refuses a blank and a duplicate name at ${width}px, explains each in view, and Cancel returns focus`, async ({
       page,
     }) => {

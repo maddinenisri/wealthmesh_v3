@@ -22,8 +22,9 @@ public interface CategoryRepository extends ReactiveCrudRepository<Category, UUI
     @Query("SELECT * FROM category WHERE kind = :kind AND archived_at IS NULL ORDER BY sort_order")
     Flux<Category> findActiveByKind(String kind);
 
-    /** A category chosen by name: archived and merged ones are not offered (CATEGORIES_004, 005). */
-    @Query("SELECT * FROM category WHERE kind = :kind AND name = :name AND archived_at IS NULL")
+    /** A category chosen by name: archived and merged ones are not offered (CATEGORIES_004, 005). Read under a share
+     * lock like the lookup by id, so an archive or merge cannot slip in before the save commits. */
+    @Query("SELECT * FROM category WHERE kind = :kind AND name = :name AND archived_at IS NULL FOR SHARE")
     Mono<Category> findActiveByKindAndName(String kind, String name);
 
     /** Reads one category and blocks a concurrent archive, rename or merge until the transaction ends. */

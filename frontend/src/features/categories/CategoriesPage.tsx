@@ -40,9 +40,22 @@ export function CategoriesPage() {
     setPanel(next)
   }
   // The button that opened a panel can be replaced by the change (Archive becomes Restore): fall back to the row.
-  const close = () => {
+  const close = (created?: Category) => {
     setPanel(null)
-    if (focusId) {
+    if (created) {
+      // A new category lands at the end of a long list: scroll to it and focus it once the list has refreshed.
+      let attempts = 0
+      const reveal = () => {
+        const row = document.getElementById(`category-${created.id}`)
+        if (row) {
+          row.scrollIntoView?.({ block: 'center' })
+          row.focus({ preventScroll: true })
+        } else if (attempts++ < 20) {
+          setTimeout(reveal, 50)
+        }
+      }
+      setTimeout(reveal, 0)
+    } else if (focusId) {
       requestAnimationFrame(() => {
         if (document.activeElement === document.body || !document.activeElement?.isConnected)
           document.getElementById(`category-${focusId}`)?.focus()
@@ -74,13 +87,13 @@ export function CategoriesPage() {
       {panel && members && (
         <Panel key={key}>
           {panel.kind === 'add' && <AddCategory members={members} onDone={close} />}
-          {panel.kind === 'merge' && <MergeCategories members={members} onDone={close} />}
+          {panel.kind === 'merge' && <MergeCategories members={members} onDone={() => close()} />}
           {(panel.kind === 'rename' || panel.kind === 'default-class') && (
             <EditCategory
               mode={panel.kind}
               category={panel.category}
               members={members}
-              onDone={close}
+              onDone={() => close()}
             />
           )}
           {(panel.kind === 'archive' || panel.kind === 'restore') && (
@@ -88,7 +101,7 @@ export function CategoriesPage() {
               mode={panel.kind}
               category={panel.category}
               members={members}
-              onDone={close}
+              onDone={() => close()}
             />
           )}
           {panel.kind === 'undo' && (
@@ -97,7 +110,7 @@ export function CategoriesPage() {
               names={panel.names}
               targetName={panel.targetName}
               members={members}
-              onDone={close}
+              onDone={() => close()}
             />
           )}
         </Panel>
@@ -307,7 +320,13 @@ function eventText(event: CategoryEvent): string {
 
 type Values = { name: string; kind: 'spending' | 'income'; defaultClass: string }
 
-function AddCategory({ members, onDone }: { members: Member[]; onDone: () => void }) {
+function AddCategory({
+  members,
+  onDone,
+}: {
+  members: Member[]
+  onDone: (created?: Category) => void
+}) {
   const create = useCreateCategory()
   const spending = useCategories('expense')
   const income = useCategories('income')
@@ -345,7 +364,7 @@ function AddCategory({ members, onDone }: { members: Member[]; onDone: () => voi
                 : {}),
               enteredByMemberId: member.id,
             },
-            { onSuccess: onDone },
+            { onSuccess: (created) => onDone(created) },
           )
         })}
       >
@@ -385,7 +404,7 @@ function AddCategory({ members, onDone }: { members: Member[]; onDone: () => voi
           <Button type="submit" disabled={create.isPending || !member}>
             {create.isPending ? 'Saving' : 'Save category'}
           </Button>
-          <Button variant="ghost" onClick={onDone} disabled={create.isPending}>
+          <Button variant="ghost" onClick={() => onDone()} disabled={create.isPending}>
             Cancel
           </Button>
         </div>

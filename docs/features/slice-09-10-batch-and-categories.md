@@ -1,7 +1,7 @@
 # Slices 09 and 10: Batch entry, category management and classes
 
 - Slice: 09 and 10 in `docs/features/INDEX.md`, merged by the merge rule (12 IDs, 3 capabilities: L7, S2, S3; IDs in `slices.txt`); feature files touched: `docs/requirements/v2/spending/expenses/record-expenses.feature`, `spending/categories/manage-categories.feature`
-- Status: in-progress (mirror of the INDEX rows)
+- Status: in-progress, at Checkpoint 2 (mirror of the INDEX rows)
 - Started: 2026-10-05 16:03 (ET, session clock)  Finished:  Commit:
 
 ## Prompts and directions
@@ -107,6 +107,22 @@ This slice mutates (tests): Groceries (rename, default class), Dining (default c
 - Group 3 done and committed locally (2026-10-05): `POST /accounts/{id}/expense-batches` (`BatchEntryService`, one batch key stored as `<key>:i` per row, read under the account lock, member read FOR SHARE), the Add several form with review and Cancel, and Save and add another on the single form. Deviation from decision 9: no server preview endpoint; the review is computed in the browser from the entered rows and the account Balance, and the server validates every row on save (a bad row answers 400 `Row N: ...`). Race mutations (no account lock, no member share lock) fail the batch tests. Backend, frontend (166) and e2e (108, `11e-batch.spec.ts`) green.
 - Group 4 done and committed locally (2026-10-05): "Pay a card" on checking and savings (`TransferForm` `fromBank`: the bank is fixed, a card is chosen; disabled with a note when no card exists), same `/api/v1/card-payments` path, no server change. UI tests (`PayCard.test.tsx`) and e2e `11f-pay-card.spec.ts` at 710px and 1280px.
 - Next: Prove (coverage, validator, checklist), Checkpoint 2, Land.
+
+### Validator report (2026-10-05, HEAD b99d3e9) and what was done
+
+Commands all passed (coverage 4/4 and 8/8, backend 304, frontend 170, e2e 113, lint, typecheck, check). Planted defects (no `FOR SHARE` by id, no batch account lock, no batch member lock, no `FOR UPDATE` on category rows) each turned a test red. Findings and the fix:
+
+| # | Finding | Fix |
+| --- | --- | --- |
+| 1 | An expense naming its category by name read it without `FOR SHARE`, so it could be saved on a category being archived | `findActiveByKindAndName` is `FOR SHARE`; `CategoryGuardsApiTests.byNameWaitsForArchive` (red without it) |
+| 2 | `ReminderService.save` had no transaction and read its key with no account lock | transaction, `lockAccount`, member `FOR SHARE`, key read after the lock; same-key-at-once test (red without the lock) |
+| 3 | `ReminderStore` showed the raw category, not the merge target | joins the effective category; test that a merged category's reminders show the target |
+| 4 | Merge locked the target before the sources, against its own javadoc | one statement locks sources and target, lowest id first; two opposite merges at once give 201 and 409, no deadlock |
+| 5 | `EntryService.record` (slice 01) uses `validator.member`, not `memberLocked` | **not changed** (older code outside this slice): recorded for the next session |
+| 6 | Missing tests: replacement, batch and reminder with an archived category; rename race; a long list and a long name at 710px | added (`CategoryGuardsApiTests`, e2e long-name test); a new category is scrolled into view and focused after save |
+
+Known untested guard: the `checkCategoryLocked` re-check inside the replacement swap (the validator's plant stayed green). The first read already waits on an uncommitted archive; the re-check covers an archive that commits between that read and the swap. Left as defence in depth; a deterministic test would need a hook between the two. A historical entry (start move) with an archived category has no test of its own (same validator path as a plain save).
+
 
 ## Coverage
 

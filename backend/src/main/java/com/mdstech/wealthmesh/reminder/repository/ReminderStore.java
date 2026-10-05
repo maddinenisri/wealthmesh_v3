@@ -21,10 +21,11 @@ public class ReminderStore {
 
     private static final String COLUMNS = """
             SELECT r.id, r.account_id, ac.name AS account_name, r.kind, r.amount, r.due_on, r.description,
-                   r.category_id, c.name AS category_name, r.entered_by_member_id, m.name AS entered_by_name,
+                   c.id AS category_id, c.name AS category_name, r.entered_by_member_id, m.name AS entered_by_name,
                    r.created_at
             FROM reminder r JOIN account ac ON ac.id = r.account_id
-            JOIN category c ON c.id = r.category_id
+            JOIN category c0 ON c0.id = r.category_id
+            JOIN category c ON c.id = COALESCE(c0.merged_into_id, c0.id)
             JOIN household_member m ON m.id = r.entered_by_member_id""";
 
     private final DatabaseClient client;

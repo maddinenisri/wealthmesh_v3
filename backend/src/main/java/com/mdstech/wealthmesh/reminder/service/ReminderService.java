@@ -9,9 +9,11 @@ import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
+import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.activity.service.EntryValidator;
 import com.mdstech.wealthmesh.reminder.domain.Reminder;
 import com.mdstech.wealthmesh.reminder.dto.ReminderRequest;
@@ -37,9 +39,13 @@ public class ReminderService {
     private final ReminderRepository reminders;
     private final ReminderStore store;
     private final Clock clock;
+    private final ActivityStore activityStore;
+    private final TransactionalOperator transactions;
 
     public ReminderService(AccountRepository accounts, EntryValidator validator, ReminderRepository reminders,
-            ReminderStore store, Clock clock) {
+            ReminderStore store, Clock clock, ActivityStore activityStore, TransactionalOperator transactions) {
+        this.activityStore = activityStore;
+        this.transactions = transactions;
         this.accounts = accounts;
         this.validator = validator;
         this.reminders = reminders;
@@ -58,16 +64,25 @@ public class ReminderService {
                 .then(Mono.defer(() -> accounts.findById(accountId)))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Account not found: " + accountId)))
-                .flatMap(account -> validator.parseReminder(account, request.kind(), request.asEntry()))
-                .flatMap(entry -> store.expireKey(key, cutoff)
+                // The account row is locked first, then the category and member are read and the key looked up, all in
+                // one transaction (checklist: a keyed save reads its key under the lock; D-034).
+                .flatMap(account -> transactions.transactional(activityStore.lockAccount(account.id())
+                        .then(Mono.defer(() -> validator.parseReminder(account, request.kind(), request.asEntry())))
+                        .flatMap(entry -> validator.memberLocked(account, entry.memberId()).thenReturn(entry))
+                        .flatMap(entry -> saveLocked(key, entry, now, cutoff))))
+                .onErrorMap(DuplicateKeyException.class, e -> new ResponseStatusException(HttpStatus.CONFLICT,
+                        "This save was already used. Start a new entry."));
+    }
+
+    private Mono<Saved> saveLocked(String key, EntryValidator.Entry entry, Instant now, Instant cutoff) {
+        return Mono.just(entry)
+                .flatMap(e -> store.expireKey(key, cutoff)
                         .then(reminders.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
                                 .flatMap(existing -> replay(existing, entry))
                                 .switchIfEmpty(Mono.defer(() -> reminders.save(new Reminder(null, entry.accountId(),
                                         entry.kind(), entry.amount(), entry.occurredOn(), entry.description(),
                                         entry.categoryId(), entry.memberId(), key, now))
-                                        .flatMap(saved -> store.byId(saved.id())).map(r -> new Saved(r, true))))))
-                .onErrorMap(DuplicateKeyException.class, e -> new ResponseStatusException(HttpStatus.CONFLICT,
-                        "This save was already used. Start a new entry."));
+                                        .flatMap(saved -> store.byId(saved.id())).map(r -> new Saved(r, true))))));
     }
 
     private Mono<Saved> replay(Reminder existing, EntryValidator.Entry entry) {
