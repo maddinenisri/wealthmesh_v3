@@ -207,10 +207,13 @@ user can do now, what changed, how the main path works, decisions and open items
 
 ## Handoff
 
-What the next session must know that is not in the code: what is half-built, what to watch for, what v1 showed.
+- Built: a card account with one Balance stored with the asset sign (owed negative) and a `balanceSide` on setup, Update balance and statements (`AccountService.signed`); refunds with the one spending definition `ActivityStore.Counted`; card payments as a second `MovementKind` (`card_payment` / `card_payment_in`, V13) at `/api/v1/card-payments`; Update balance and statements on a card; card figures shown as owed or Card credit everywhere through `cardBalance.ts` and `BalanceFigure.tsx`; V12 seeds Interest charged and Annual fee.
+- Watch for: the `SpendingSummary` JSON gained `note` fields; a refund is accepted by the server on any account that holds activity but only a card's page offers it; `MovementService` beans are per kind, so a new movement kind (loan principal, slice 16) adds a `MovementKind` and a bean in `MovementConfiguration`; the card-only categories are hidden in the UI only; `createWaitsForBothAccounts` does not fail without the account lock (foreign-key lock), same as slice 07.
+- Left open: Q-034 (pay a card from checking or savings), Q-004 (tool upgrades), Q-033 answered yes in slice 07, 1280px click-through by the owner (rests on e2e), Cowork found nothing at 1280px except that clicks missed; slice 07 checks 4 to 6 are still not walked.
+- Next: slice 09 (batch entry), which needs a card: its Givens are now met.
 
 ## Retro (3 lines, also appended to `docs/process/retro.md`)
 
-- What slowed this session:
-- What went well:
-- Process change to try:
+- What slowed this session: the validator found a keyed-save race in slice 03 code that cards reached, four rules with no refusal test and missing same-key tests; Cowork found 8 faults (long tables at 710px again, card amounts and labels, refunds counted as expenses, card-only categories on checking).
+- What went well: the inventory named every writer and one shared spending definition meant a refund needed no hunt through eight readers; the transfer mechanism took a second kind with no change to its locks; the e2e at both widths found a fault the API and MSW tests missed.
+- Process change to try: grep every keyed save for a key read before the lock; when a type changes how a Balance reads, grep every place it is formatted and every chooser before building; narrow-width table columns once.
