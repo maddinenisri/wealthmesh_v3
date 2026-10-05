@@ -15,7 +15,7 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
-import com.mdstech.wealthmesh.account.domain.AccountType;
+import com.mdstech.wealthmesh.account.service.AccountService;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.activity.service.EntryValidator;
@@ -129,7 +129,9 @@ public class StatementService {
             if (revision && reason == null) {
                 throw EntryValidator.bad("Enter a reason for the corrected statement");
             }
-            return new Object[] { Money.parse(text).orElseThrow(), text(request.note(), 200, "Note"), reason };
+            BigDecimal shown = AccountService.signed(account.type(), Money.parse(text).orElseThrow(),
+                    request.balanceSide());
+            return new Object[] { shown, text(request.note(), 200, "Note"), reason };
         }).flatMap(parts -> validator.member(account, request.enteredByMemberId())
                 .map(memberId -> new Parsed(request.statementOn(), (BigDecimal) parts[0], (String) parts[1],
                         (String) parts[2], memberId)));
@@ -144,9 +146,7 @@ public class StatementService {
     }
 
     private Mono<Account> account(UUID accountId) {
-        return accounts.findById(accountId).switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)))
-                .filter(account -> !AccountType.isCard(account.type()))
-                .switchIfEmpty(Mono.error(EntryValidator.bad("Statements for a card cannot be added yet")));
+        return accounts.findById(accountId).switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)));
     }
 
     private static String requireKey(String key) {

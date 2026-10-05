@@ -368,6 +368,17 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             >
               Record payment
             </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setCorrecting({})
+              }}
+              disabled={!ready}
+            >
+              Update balance
+            </Button>
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
@@ -420,14 +431,13 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
       </Card>
       {today.data && <BalanceOnDate account={account} today={today.data} />}
       <RemindersCard accountId={account.id} />
-      {!isCard(account.type) && (
-        <StatementsCard
-          accountId={account.id}
-          balance={account.balance.amount}
-          members={members}
-          today={today.data}
-        />
-      )}
+      <StatementsCard
+        accountId={account.id}
+        accountType={account.type}
+        balance={account.balance.amount}
+        members={members}
+        today={today.data}
+      />
     </>
   )
 }

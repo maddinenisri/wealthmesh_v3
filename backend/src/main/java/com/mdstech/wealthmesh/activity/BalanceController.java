@@ -43,8 +43,8 @@ public class BalanceController {
     @GetMapping("/balance-corrections/preview")
     public Mono<CorrectionPreview> preview(@PathVariable UUID accountId, @RequestParam String requested,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOn,
-            @RequestParam(required = false) UUID replaces) {
-        return service.preview(accountId, requested, asOn, replaces);
+            @RequestParam(required = false) UUID replaces, @RequestParam(required = false) String side) {
+        return service.preview(accountId, requested, side, asOn, replaces);
     }
 
     /** 201 when created, 200 for a repeated save key (D-024). */

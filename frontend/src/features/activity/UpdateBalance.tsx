@@ -3,6 +3,7 @@ import type { Account } from '../../api/accounts'
 import type { Activity } from '../../api/activity'
 import type { Member } from '../../api/household'
 import { BalanceCorrection } from './BalanceCorrection'
+import { isCard } from '../accounts/cardBalance'
 import { StartingBalanceCorrection } from './StartingBalanceCorrection'
 
 /**
@@ -27,7 +28,7 @@ export function UpdateBalance({
   const [carried, setCarried] = useState<{ amount: string; on: string } | undefined>()
   return (
     <>
-      {!editing && (
+      {!editing && !isCard(account.type) && (
         <fieldset className="mb-3 flex flex-wrap gap-x-6 gap-y-2 text-sm">
           <legend className="sr-only">What do you want to update?</legend>
           <label className="flex items-center gap-2">
@@ -70,7 +71,7 @@ export function UpdateBalance({
           editing={editing}
           onReviewing={setLocked}
           onBeforeStart={
-            editing
+            editing || isCard(account.type)
               ? undefined
               : (draft) => {
                   setCarried(draft)

@@ -137,10 +137,11 @@ export function useCorrectionPreview(
   requested: string,
   asOn: string,
   replaces?: string,
+  side?: 'owed' | 'credit',
 ) {
   return useQuery({
-    queryKey: ['correction-preview', accountId, requested, asOn, replaces ?? null],
-    queryFn: () => previewCorrection(accountId, requested, asOn, replaces),
+    queryKey: ['correction-preview', accountId, requested, asOn, replaces ?? null, side ?? null],
+    queryFn: () => previewCorrection(accountId, requested, asOn, replaces, side),
     enabled: requested !== '' && asOn !== '',
     gcTime: 0,
   })

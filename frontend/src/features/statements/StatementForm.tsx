@@ -2,13 +2,20 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import type { Member } from '../../api/household'
 import type { Statement } from '../../api/statements'
-import { Button, Card, CardTitle, FormAlert, TextField } from '../../design-system'
+import { Button, Card, CardTitle, FormAlert, SelectField, TextField } from '../../design-system'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useAttachStatement, useReviseStatement } from '../../hooks/useStatements'
-import { formatMoney, parseAmount } from '../../lib/money'
+import { parseAmount } from '../../lib/money'
+import { balanceText, isCard } from '../accounts/cardBalance'
 import { EnteredBy } from '../activity/EnteredBy'
 
-type Values = { statementOn: string; balance: string; note: string; reason: string }
+type Values = {
+  statementOn: string
+  balance: string
+  balanceSide: 'owed' | 'credit'
+  note: string
+  reason: string
+}
 
 /** One id per form instance: a repeat of the same save carries the same id (D-024). */
 const newKey = () => globalThis.crypto.randomUUID()
@@ -19,6 +26,7 @@ const newKey = () => globalThis.crypto.randomUUID()
  */
 export function StatementForm({
   accountId,
+  accountType,
   balance,
   members,
   today,
@@ -26,6 +34,8 @@ export function StatementForm({
   onDone,
 }: {
   accountId: string
+  /** A card's statement shows what is owed or Card credit, so the form asks which. */
+  accountType: string
   balance: string
   members: Member[]
   today: string
@@ -33,6 +43,8 @@ export function StatementForm({
   replacing?: Statement
   onDone: () => void
 }) {
+  const card = isCard(accountType)
+  const money = (value: string | number) => balanceText(accountType, String(value))
   const { member, setMemberId } = useEnteringAs(members)
   const [reviewing, setReviewing] = useState<Values | null>(null)
   const [key] = useState(newKey)
@@ -42,7 +54,13 @@ export function StatementForm({
   const { control, handleSubmit } = useForm<Values>({
     defaultValues: {
       statementOn: replacing?.statementOn ?? '',
-      balance: replacing?.balance ?? '',
+      // A card's statement is stored with the asset sign; the form shows the size and the side apart.
+      balance: replacing
+        ? card
+          ? Math.abs(Number(replacing.balance)).toFixed(2)
+          : replacing.balance
+        : '',
+      balanceSide: replacing && Number(replacing.balance) > 0 ? 'credit' : 'owed',
       note: replacing?.note ?? '',
       reason: '',
     },
@@ -53,6 +71,7 @@ export function StatementForm({
     const statement = {
       statementOn: values.statementOn,
       balance: parseAmount(values.balance)!,
+      ...(card ? { balanceSide: values.balanceSide } : {}),
       note: values.note.trim(),
       enteredByMemberId: member.id,
     }
@@ -76,17 +95,19 @@ export function StatementForm({
         <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
           <Item label="Original statement">
             {replacing.note || 'Statement'} dated {replacing.statementOn},{' '}
-            {formatMoney(Number(replacing.balance))}
+            {money(replacing.balance)}
           </Item>
           <Item label="Corrected statement">
             {reviewing.note.trim() || 'Statement'} dated {reviewing.statementOn},{' '}
-            {formatMoney(Number(parseAmount(reviewing.balance)))}
+            {card
+              ? `${money(Number(parseAmount(reviewing.balance)) * (reviewing.balanceSide === 'owed' ? -1 : 1))}`
+              : money(Number(parseAmount(reviewing.balance)))}
           </Item>
           <Item label="Reason">{reviewing.reason.trim()}</Item>
         </dl>
         <p className="mt-3 max-w-md text-sm text-ink-muted">
-          The original stays available and linked. Your Balance stays {formatMoney(Number(balance))}
-          ; a statement never changes it. No entry or Balance correction is saved.
+          The original stays available and linked. Your Balance stays {money(balance)}; a statement
+          never changes it. No entry or Balance correction is saved.
         </p>
         <EnteredBy members={members} member={member} setMemberId={setMemberId} />
         <div className="mt-3 flex gap-2">
@@ -131,8 +152,21 @@ export function StatementForm({
           label="Statement balance"
           inputMode="decimal"
           placeholder="0.00"
-          rules={{ validate: (value) => parseAmount(value) !== null || 'Enter a valid amount' }}
+          rules={{
+            validate: (value) => {
+              const amount = parseAmount(value)
+              return (
+                (amount !== null && !(card && amount.startsWith('-'))) || 'Enter a valid amount'
+              )
+            },
+          }}
         />
+        {card && (
+          <SelectField control={control} name="balanceSide" label="Statement shows">
+            <option value="owed">Owed</option>
+            <option value="credit">Card credit</option>
+          </SelectField>
+        )}
         <TextField control={control} name="note" label="Note" />
         {replacing && (
           <TextField

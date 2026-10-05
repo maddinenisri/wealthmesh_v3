@@ -3,7 +3,7 @@ import type { Statement } from '../../api/statements'
 import type { Member } from '../../api/household'
 import { Button, Card, CardTitle } from '../../design-system'
 import { useStatements } from '../../hooks/useStatements'
-import { formatMoney } from '../../lib/money'
+import { balanceText } from '../accounts/cardBalance'
 import { Panel } from '../activity/Panel'
 import { StatementForm } from './StatementForm'
 
@@ -20,11 +20,13 @@ function stamp(iso: string): string {
  */
 export function StatementsCard({
   accountId,
+  accountType,
   balance,
   members,
   today,
 }: {
   accountId: string
+  accountType: string
   /** The calculated Balance, shown in the review so it is clear it will not move. */
   balance: string
   members: Member[] | undefined
@@ -40,6 +42,7 @@ export function StatementsCard({
         <Panel key={form.replacing?.id ?? 'attach'}>
           <StatementForm
             accountId={accountId}
+            accountType={accountType}
             balance={balance}
             members={members}
             today={today}
@@ -67,7 +70,7 @@ export function StatementsCard({
               <li key={statement.id} className="flex flex-col gap-1">
                 <span>
                   <strong>{statement.note || 'Statement'}</strong> dated {statement.statementOn},{' '}
-                  {formatMoney(Number(statement.balance))}
+                  {balanceText(accountType, statement.balance)}
                 </span>
                 <span className="text-ink-muted">
                   <strong>{statement.latest ? 'Active version' : 'Replaced'}</strong> · attached by{' '}

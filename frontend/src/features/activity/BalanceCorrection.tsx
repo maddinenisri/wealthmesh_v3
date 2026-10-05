@@ -3,17 +3,36 @@ import { useForm } from 'react-hook-form'
 import type { Account } from '../../api/accounts'
 import type { Activity } from '../../api/activity'
 import type { Member } from '../../api/household'
-import { Button, Card, CardTitle, FormAlert, TextField } from '../../design-system'
+import { Button, Card, CardTitle, FormAlert, SelectField, TextField } from '../../design-system'
 import { useBalanceAsOf, useCorrectionPreview, useSaveCorrection } from '../../hooks/useActivity'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney, parseAmount } from '../../lib/money'
+import { balanceText, isCard } from '../accounts/cardBalance'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { EnteredBy } from './EnteredBy'
 
-type Values = { requested: string; asOn: string; reason: string }
+type Values = { requested: string; asOn: string; reason: string; balanceSide: 'owed' | 'credit' }
 
 /** One id per form instance: a repeat of the same save carries the same id (D-024). */
 const newKey = () => globalThis.crypto.randomUUID()
+
+/** A card's amount is typed positive; Owed or Card credit says what it means. */
+const cardRules = {
+  validate: (value: string) => {
+    const amount = parseAmount(value)
+    return (amount !== null && !amount.startsWith('-')) || 'Enter a valid amount'
+  },
+}
+
+/** The words for a change: money in a bank account rises or falls; a card's debt grows or shrinks. */
+const changeWord = (card: boolean, difference: number) =>
+  card
+    ? difference < 0
+      ? 'increase in debt'
+      : 'decrease in debt'
+    : difference > 0
+      ? 'increase'
+      : 'decrease'
 
 const requestedRules = {
   validate: (value: string) => parseAmount(value) !== null || 'Enter a valid amount',
@@ -45,26 +64,43 @@ export function BalanceCorrection({
   onDone: () => void
 }) {
   const { member, setMemberId } = useEnteringAs(members)
-  const [reviewing, setReviewing] = useState<{ requested: string; asOn: string } | null>(null)
+  const card = isCard(account.type)
+  const [reviewing, setReviewing] = useState<{
+    requested: string
+    asOn: string
+    side?: 'owed' | 'credit'
+  } | null>(null)
+  const money = (value: string | number) => balanceText(account.type, String(value))
   const [key] = useState(newKey)
   useEffect(() => onReviewing?.(reviewing !== null), [reviewing, onReviewing])
   const save = useSaveCorrection(account.id)
   const { control, handleSubmit, setValue, getFieldState, formState } = useForm<Values>({
-    defaultValues: { requested: '', asOn: editing?.occurredOn ?? today, reason: '' },
+    defaultValues: {
+      requested: '',
+      asOn: editing?.occurredOn ?? today,
+      reason: '',
+      balanceSide: 'owed',
+    },
   })
   const preview = useCorrectionPreview(
     account.id,
     reviewing?.requested ?? '',
     reviewing?.asOn ?? '',
     editing?.id,
+    reviewing?.side,
   )
   // Editing starts from the Balance the correction made, so it is not retyped from memory.
   const current = useBalanceAsOf(account.id, editing?.occurredOn ?? '')
   useEffect(() => {
     if (editing && current.data?.amount && !getFieldState('requested', formState).isDirty) {
-      setValue('requested', current.data.amount)
+      // A card is typed positive with a side, so its stored (asset-signed) Balance is split back into both.
+      setValue(
+        'requested',
+        card ? Math.abs(Number(current.data.amount)).toFixed(2) : current.data.amount,
+      )
+      if (card) setValue('balanceSide', Number(current.data.amount) > 0 ? 'credit' : 'owed')
     }
-  }, [editing, current.data, setValue, getFieldState, formState])
+  }, [editing, card, current.data, setValue, getFieldState, formState])
   const title = editing ? 'Edit balance correction' : 'Update balance'
 
   // A missing reason is reported at the field; bring the review back into view so the message is seen.
@@ -83,6 +119,7 @@ export function BalanceCorrection({
           reason: values.reason.trim(),
           enteredByMemberId: member.id,
           replacesId: editing?.id,
+          ...(reviewing.side ? { balanceSide: reviewing.side } : {}),
         },
       },
       { onSuccess: onDone },
@@ -110,7 +147,7 @@ export function BalanceCorrection({
             <>
               <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
                 <Item label="Date">{figures.asOn}</Item>
-                {editing && <Item label="Original Balance">{formatMoney(original)}</Item>}
+                {editing && <Item label="Original Balance">{money(original)}</Item>}
                 {editing?.reason && <Item label="Original reason">{editing.reason}</Item>}
                 <Item
                   label={
@@ -119,18 +156,18 @@ export function BalanceCorrection({
                       : `Current Balance on ${figures.asOn}`
                   }
                 >
-                  {formatMoney(Number(figures.balanceOnDate))}
+                  {money(figures.balanceOnDate)}
                 </Item>
                 <Item label={editing ? 'Corrected Balance' : 'Requested Balance'}>
-                  {formatMoney(Number(figures.requested))}
+                  {money(figures.requested)}
                 </Item>
                 <Item label="Difference">
                   {difference === 0
                     ? formatMoney(0)
-                    : `${formatMoney(Math.abs(difference))} ${difference > 0 ? 'increase' : 'decrease'}`}
+                    : `${formatMoney(Math.abs(difference))} ${changeWord(card, difference)}`}
                 </Item>
                 <Item label={`${account.name} Balance after`}>
-                  {formatMoney(Number(figures.currentBalanceAfter))}
+                  {money(figures.currentBalanceAfter)}
                 </Item>
               </dl>
               <p className="mt-3 max-w-md text-sm text-ink-muted">
@@ -188,7 +225,11 @@ export function BalanceCorrection({
         onSubmit={handleSubmit((values) =>
           onBeforeStart && values.asOn < account.openedOn
             ? onBeforeStart({ amount: parseAmount(values.requested)!, on: values.asOn })
-            : setReviewing({ requested: parseAmount(values.requested)!, asOn: values.asOn }),
+            : setReviewing({
+                requested: parseAmount(values.requested)!,
+                asOn: values.asOn,
+                ...(card ? { side: values.balanceSide } : {}),
+              }),
         )}
       >
         <TextField
@@ -197,8 +238,14 @@ export function BalanceCorrection({
           label="Balance"
           inputMode="decimal"
           placeholder="0.00"
-          rules={requestedRules}
+          rules={card ? cardRules : requestedRules}
         />
+        {card && (
+          <SelectField control={control} name="balanceSide" label="Balance means">
+            <option value="owed">Owed</option>
+            <option value="credit">Card credit</option>
+          </SelectField>
+        )}
         <TextField
           control={control}
           name="asOn"

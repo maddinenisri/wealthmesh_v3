@@ -18,6 +18,8 @@ export type Statement = {
 export type NewStatement = {
   statementOn: string
   balance: string
+  /** A card's amount is positive; this says if it is owed or Card credit. Left out for other accounts. */
+  balanceSide?: 'owed' | 'credit'
   note: string
   enteredByMemberId: string
 }

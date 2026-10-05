@@ -115,7 +115,7 @@ public class AccountService {
      * A card's amount is entered as a positive figure with a side; it is stored with the asset sign (owed negative,
      * Card credit positive) so Balance sums and wealth need no card branch. A zero card amount needs no side.
      */
-    static BigDecimal signed(AccountType type, BigDecimal amount, String side) {
+    public static BigDecimal signed(AccountType type, BigDecimal amount, String side) {
         if (type != AccountType.CREDIT_CARD) {
             if (side != null) {
                 throw bad("Owed or Card credit applies to a card only");
@@ -133,6 +133,11 @@ public class AccountService {
             case "credit" -> amount;
             default -> throw bad("Choose Owed or Card credit");
         };
+    }
+
+    /** The same rule for an account read from the database: its type is the wire name. */
+    public static BigDecimal signed(String typeWire, BigDecimal amount, String side) {
+        return signed(AccountType.fromWire(typeWire).orElseThrow(), amount, side);
     }
 
     static String requireDetailsOnly(AccountUpdateRequest request) {

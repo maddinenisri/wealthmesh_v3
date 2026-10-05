@@ -413,6 +413,8 @@ export type NewCorrection = {
   reason: string
   enteredByMemberId: string
   replacesId?: string
+  /** A card's amount is positive; this says if it is owed or Card credit. Left out for other accounts. */
+  balanceSide?: 'owed' | 'credit'
 }
 
 export const getBalanceAsOf = (accountId: string, asOf: string) =>
@@ -428,9 +430,10 @@ export const previewCorrection = (
   requested: string,
   asOn: string,
   replaces?: string,
+  side?: 'owed' | 'credit',
 ) =>
   request(
-    `/accounts/${accountId}/balance-corrections/preview?requested=${encodeURIComponent(requested)}&asOn=${asOn}${replaces ? `&replaces=${replaces}` : ''}`,
+    `/accounts/${accountId}/balance-corrections/preview?requested=${encodeURIComponent(requested)}&asOn=${asOn}${replaces ? `&replaces=${replaces}` : ''}${side ? `&side=${side}` : ''}`,
     {
       parse: (value): CorrectionPreview => {
         const data = record(value)

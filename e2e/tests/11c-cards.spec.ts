@@ -395,4 +395,99 @@ test.describe.serial('credit cards', () => {
     await expect(table).not.toContainText('2026-08-31')
     await expect(table).not.toContainText('2026-09-20')
   })
+  for (const width of [710, 1280]) {
+    test(`V2_CARD_010 V2_SUPPORTING_RECORD_001 reviews a card statement against its Balance and keeps both statement versions at ${width}px`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      const bank = `Statement Checking ${width}`
+      const name = `Statement Card ${width}`
+      const bankId = await makeAccount(request, {
+        type: 'checking',
+        name: bank,
+        openingBalance: '5000.00',
+      })
+      const cardId = await makeAccount(request, {
+        type: 'credit_card',
+        name,
+        institution: 'Harbor Cards',
+        openingBalance: '1000.00',
+        balanceSide: 'owed',
+      })
+      const member = await ownerId(request)
+      const send = async (path: string, key: string, data: Record<string, unknown>) => {
+        const response = await request.post(path, {
+          headers: { 'Idempotency-Key': `e2e-stmt-${width}-${key}` },
+          data: { enteredByMemberId: member, ...data },
+        })
+        expect(response.status()).toBe(201)
+      }
+      await send(`/api/v1/accounts/${cardId}/expenses`, 'buy', {
+        description: 'Groceries',
+        amount: '100.00',
+        occurredOn: '2026-09-10',
+        category: 'Groceries',
+      })
+      await send(`/api/v1/accounts/${cardId}/refunds`, 'refund', {
+        description: 'Returned',
+        amount: '20.00',
+        occurredOn: '2026-09-12',
+        category: 'Groceries',
+      })
+      await send('/api/v1/card-payments', 'pay', {
+        fromAccountId: bankId,
+        toAccountId: cardId,
+        amount: '500.00',
+        occurredOn: '2026-09-20',
+      })
+      await send(`/api/v1/accounts/${cardId}/statements`, 'statement', {
+        statementOn: '2026-09-30',
+        balance: '600.00',
+        balanceSide: 'owed',
+        note: 'September statement',
+      })
+      await page.goto(`/accounts/${cardId}`)
+      await page.getByLabel('Entering as').selectOption({ label: OWNER })
+      await expect(page.getByRole('main')).toContainText('$580.00 owed')
+      const statements = page.getByRole('region', { name: 'Supporting statements' })
+      await expect(statements).toContainText('September statement dated 2026-09-30, $600.00 owed')
+
+      // V2_CARD_010: the statement is information; the review shows the difference as a change in debt.
+      await page.getByRole('button', { name: 'Update balance' }).click()
+      await page.getByLabel('Balance', { exact: true }).fill('600.00')
+      await page.getByLabel('Balance means').selectOption('owed')
+      await page.getByLabel('Date', { exact: true }).fill('2026-09-30')
+      await page.getByRole('button', { name: 'Review' }).click()
+      const review = page.getByRole('region', { name: 'Review balance update' })
+      await expect(review).toBeVisible()
+      await expect(review).toBeInViewport()
+      await expect(review).toContainText('Current Balance on 2026-09-30$580.00 owed')
+      await expect(review).toContainText('Requested Balance$600.00 owed')
+      await expect(review).toContainText('Difference$20.00 increase in debt')
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+      await review.getByLabel('Reason').fill('Correct to reviewed amount')
+      await review.getByRole('button', { name: 'Confirm correction' }).click()
+      await expect(page.getByRole('main')).toContainText('$600.00 owed')
+      await expect(page.getByText('Balance correction: Correct to reviewed amount')).toBeVisible()
+      // Spending is still the $80.00 of purchases less the refund: the correction is no fee.
+      const spending = await request.get(`/api/v1/spending?month=2026-09&accountId=${cardId}`)
+      expect(((await spending.json()) as { total: string }).total).toBe('80.00')
+
+      // V2_SUPPORTING_RECORD_001: a corrected statement is the latest; the original stays.
+      await statements.getByRole('button', { name: 'Replace with corrected version' }).click()
+      await expect(page.getByLabel('Statement balance')).toHaveValue('600.00')
+      await page.getByLabel('Reason', { exact: true }).fill('Issuer supplied a corrected statement')
+      await page.getByRole('button', { name: 'Review' }).click()
+      const replacement = page.getByRole('region', { name: 'Review statement replacement' })
+      await expect(replacement).toBeInViewport()
+      await expect(replacement).toContainText('Your Balance stays $600.00 owed')
+      await page.getByRole('button', { name: 'Confirm replacement' }).click()
+      await expect(statements).toContainText('Active version')
+      await expect(statements).toContainText('Replaced')
+      await expect(statements).toContainText('Reason: Issuer supplied a corrected statement')
+      await expect(page.getByRole('main')).toContainText('$600.00 owed')
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+    })
+  }
 })

@@ -15,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.mdstech.wealthmesh.account.domain.Account;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
+import com.mdstech.wealthmesh.account.service.AccountService;
 import com.mdstech.wealthmesh.activity.domain.Activity;
 import com.mdstech.wealthmesh.activity.dto.BalanceView;
 import com.mdstech.wealthmesh.activity.dto.CorrectionPreview;
@@ -56,13 +57,14 @@ public class BalanceCorrectionService {
                         : balanceOn(account, asOn, null).map(b -> new BalanceView(Money.format(b), asOn)));
     }
 
-    public Mono<CorrectionPreview> preview(UUID accountId, Object requested, LocalDate asOn, UUID replacesId) {
-        return load(accountId).flatMap(account -> figures(account, requested, asOn, replacesId).map(f -> {
+    public Mono<CorrectionPreview> preview(UUID accountId, Object requested, String side, LocalDate asOn,
+            UUID replacesId) {
+        return load(accountId).flatMap(account -> figures(account, requested, side, asOn, replacesId).map(f -> {
             BigDecimal replaced = f.replaced() == null ? BigDecimal.ZERO : f.replaced().amount();
             BigDecimal after = f.current().subtract(replaced).add(f.difference());
             return new CorrectionPreview(asOn, Money.format(f.onDate()), Money.format(f.requested()),
                     Money.format(f.difference()), Money.format(f.current()), Money.format(after),
-                    after.signum() < 0);
+                    after.signum() < 0 && !AccountType.isCard(account.type()));
         }));
     }
 
@@ -88,7 +90,8 @@ public class BalanceCorrectionService {
         // correction (or replacement) of this account in between.
         // The account is read again under the lock: a starting-balance correction may have changed its opening.
         Mono<EntryService.Saved> locked = store.lockAccount(account.id()).then(Mono.defer(() -> load(account.id())))
-                .flatMap(fresh -> figures(fresh, request.requestedBalance(), request.asOn(), request.replacesId()))
+                .flatMap(fresh -> figures(fresh, request.requestedBalance(), request.balanceSide(), request.asOn(),
+                        request.replacesId()))
                 .flatMap(f -> {
                     if (f.replaced() == null && f.difference().signum() == 0) {
                         return Mono.error(EntryValidator.bad("The Balance already matches this amount"));
@@ -119,8 +122,9 @@ public class BalanceCorrectionService {
                 && java.util.Objects.equals(existing.replacesId(), request.replacesId())
                 && java.util.Objects.equals(existing.reason(), reason(request.reason()))
                 && request.requestedBalance() instanceof String text
-                && Money.parse(text).filter(r -> existing.requestedBalance() != null
-                        && r.compareTo(existing.requestedBalance()) == 0).isPresent();
+                && Money.parse(text).map(r -> AccountService.signed(account.type(), r, request.balanceSide()))
+                        .filter(r -> existing.requestedBalance() != null
+                                && r.compareTo(existing.requestedBalance()) == 0).isPresent();
         return same ? store.byId(existing.id()).map(a -> new EntryService.Saved(a, false))
                 : Mono.error(conflict("This save was already used with different details. Start a new entry."));
     }
@@ -129,7 +133,8 @@ public class BalanceCorrectionService {
             Activity replaced) {
     }
 
-    private Mono<Figures> figures(Account account, Object requestedText, LocalDate asOn, UUID replacesId) {
+    private Mono<Figures> figures(Account account, Object requestedText, String side, LocalDate asOn,
+            UUID replacesId) {
         return Mono.fromCallable(() -> {
             requireDate(asOn);
             if (asOn.isBefore(account.openedOn())) {
@@ -138,7 +143,8 @@ public class BalanceCorrectionService {
             if (!(requestedText instanceof String text) || Money.parse(text).isEmpty()) {
                 throw EntryValidator.bad("Enter a valid amount");
             }
-            return Money.parse(text).orElseThrow();
+            // A card's amount is typed positive with a side and stored with the asset sign (owed negative).
+            return AccountService.signed(account.type(), Money.parse(text).orElseThrow(), side);
         }).flatMap(requested -> replaced(account, replacesId).map(java.util.Optional::of)
                 .defaultIfEmpty(java.util.Optional.empty())
                 .flatMap(replaced -> balanceOn(account, asOn, replaced.map(Activity::id).orElse(null))
@@ -194,7 +200,7 @@ public class BalanceCorrectionService {
     private Mono<Account> load(UUID id) {
         return accounts.findById(id).switchIfEmpty(Mono.error(
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
-                .filter(account -> AccountType.holdsActivity(account.type()) && !AccountType.isCard(account.type()))
+                .filter(account -> AccountType.holdsActivity(account.type()))
                 .switchIfEmpty(Mono.error(EntryValidator.bad(
                         "The Balance of this type of account cannot be corrected yet")));
     }

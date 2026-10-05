@@ -229,9 +229,13 @@ export function mockApi(
       balance: string
       note: string
       reason?: string
+      balanceSide?: string
       enteredByMemberId: string
     }
     if (!/^-?\d+(\.\d{1,2})?$/.test(body.balance)) return problem(400, 'Enter a valid amount')
+    const owner = state.accounts.find((a) => a.id === accountId)
+    const shown = owner ? signedFor(owner, body.balance, body.balanceSide) : Number(body.balance)
+    if (typeof shown !== 'number') return shown
     if (replaces && !body.reason?.trim())
       return problem(400, 'Enter a reason for the corrected statement')
     const existing = state.statements.find((s) => s.key === key)
@@ -244,7 +248,7 @@ export function mockApi(
       accountId,
       key,
       statementOn: body.statementOn,
-      balance: Number(body.balance).toFixed(2),
+      balance: shown.toFixed(2),
       note: body.note?.trim() || null,
       reason: body.reason?.trim() || null,
       replacesId: replaces,
@@ -363,6 +367,17 @@ export function mockApi(
       Number(body.amount),
     )
     return movementId
+  }
+  /** A card's typed amount is positive with a side and is held with the asset sign; others take no side. */
+  const signedFor = (account: MockAccount, amount: string, side: string | null | undefined) => {
+    const value = Number(amount)
+    if (account.type !== 'credit_card') {
+      return side ? problem(400, 'Owed or Card credit applies to a card only') : value
+    }
+    if (!(value >= 0)) return problem(400, 'Enter a valid amount')
+    if (value === 0) return 0
+    if (side !== 'owed' && side !== 'credit') return problem(400, 'Choose Owed or Card credit')
+    return side === 'owed' ? -value : value
   }
   /** A transfer takes no card; a payment goes from checking or savings to a card (the server's rule). */
   const pairRefusal = (path: string, fromId: string, toId: string) => {
@@ -753,9 +768,11 @@ export function mockApi(
       log(request)
       const account = state.accounts.find((a) => a.id === params.id)
       const query = new URL(request.url).searchParams
-      const requested = Number(query.get('requested'))
       const asOn = query.get('asOn') ?? ''
       if (!account) return problem(404, 'Account not found')
+      const typed = signedFor(account, query.get('requested') ?? '', query.get('side'))
+      if (typeof typed !== 'number') return typed
+      const requested = typed
       const replaces = query.get('replaces') ?? undefined
       const onDate = balanceOn(account, asOn, replaces)
       const replaced = state.activity.find((a) => a.id === replaces)
@@ -768,7 +785,7 @@ export function mockApi(
         difference: (requested - onDate).toFixed(2),
         currentBalance: current.toFixed(2),
         currentBalanceAfter: after.toFixed(2),
-        overdraft: after < 0,
+        overdraft: after < 0 && account.type !== 'credit_card',
       })
     }),
     http.post('*/api/v1/accounts/:id/balance-corrections', async ({ request, params }) => {
@@ -780,14 +797,17 @@ export function mockApi(
         reason: string
         enteredByMemberId: string
         replacesId?: string
+        balanceSide?: string
       }
       const account = state.accounts.find((a) => a.id === params.id)
       if (!account) return problem(404, 'Account not found')
       if (!body.reason?.trim()) return problem(400, 'Enter a reason')
+      const typed = signedFor(account, body.requestedBalance, body.balanceSide)
+      if (typeof typed !== 'number') return typed
       const existing = state.activity.find((a) => a.key === key)
       if (existing) return HttpResponse.json(decorate(existing, state.accounts), { status: 200 })
       const replaced = state.activity.find((a) => a.id === body.replacesId)
-      const difference = Number(body.requestedBalance) - balanceOn(account, body.asOn, replaced?.id)
+      const difference = typed - balanceOn(account, body.asOn, replaced?.id)
       if (replaced) {
         replaced.removedAt = '2026-10-03T09:00:00Z'
         replaced.events = [
