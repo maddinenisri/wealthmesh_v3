@@ -1,7 +1,7 @@
 # Slice 07: Linked transfers and card-ready movements
 
 - Slice: 07 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/checking/transfers.feature`, `accounts/checking/activity.feature`, `accounts/savings/activity.feature`, `accounts/savings/setup.feature`, `spending/expenses/record-expenses.feature`, `household/journeys/manage-household-finances.feature`
-- Status: built and committed, not pushed (row turns done when the owner pushes, D-002). Cowork checks 4 to 6 and the whole 1280px pass were not reached (connection lost)
+- Status: built and committed, not pushed (row turns done when the owner pushes, D-002). Cowork checks 4 to 6 and the whole 1280px pass were not reached (connection lost; owner confirmed no further pass)
 - Started: 2026-10-05  Finished: 2026-10-05  Commit: `c0f4ea0` (five commits from `b2c7cf6`)
 
 ## Prompts and directions
@@ -23,7 +23,7 @@ Repository facts supersede this prompt. Stop at the task-list approval and again
 ```
 
 - 2026-10-05 Checkpoint 1 answer: approved (task list, decisions 1 to 12, defer SAVINGS_005). Q-033: owner asked for yes/no; my answer yes, relayed by owner later.
-- 2026-10-05 Checkpoint 2 answer: Cowork pass at 710px reached checks 1, 2 and most of 3 (Undo review shown, not confirmed); everything reached passed. Findings: (1) page stays scrolled down after confirming a transfer, new row out of view; (2) edit accepted a blank Reason; (3) history tables scroll inside their card at 710px. Not checked: change an expense to a transfer, Spending account filter, account type on Accounts list and Household card, all of 1280px.
+- 2026-10-05 Checkpoint 2 answer: Cowork pass at 710px reached checks 1, 2 and most of 3 (Undo review shown, not confirmed); everything reached passed. Findings: (1) page stays scrolled down after confirming a transfer, new row out of view; (2) edit accepted a blank Reason; (3) history tables scroll inside their card at 710px. Not checked: change an expense to a transfer, Spending account filter, account type on Accounts list and Household card, all of 1280px. Owner confirmed this is the whole Cowork response: no further pass will come, so those items rest on the e2e tests at 710px and 1280px only.
 
 ## Scope
 
