@@ -12,6 +12,7 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.domain.Activity;
 import com.mdstech.wealthmesh.activity.dto.ActivityResponse;
@@ -102,8 +103,8 @@ public class EntryService {
     private Mono<Account> load(UUID id) {
         return accounts.findById(id).switchIfEmpty(Mono.error(
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
-                .flatMap(account -> "checking".equals(account.type()) ? Mono.just(account)
-                        : Mono.error(bad("Money in and out can only be recorded on a checking account for now")));
+                .flatMap(account -> AccountType.holdsActivity(account.type()) ? Mono.just(account)
+                        : Mono.error(bad("Money in and out cannot be recorded on this type of account yet")));
     }
 
     private static ResponseStatusException bad(String message) {

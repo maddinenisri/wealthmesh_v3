@@ -13,6 +13,7 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.domain.Activity;
 import com.mdstech.wealthmesh.activity.dto.BalanceView;
@@ -193,9 +194,9 @@ public class BalanceCorrectionService {
     private Mono<Account> load(UUID id) {
         return accounts.findById(id).switchIfEmpty(Mono.error(
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
-                .filter(account -> "checking".equals(account.type()))
+                .filter(account -> AccountType.holdsActivity(account.type()))
                 .switchIfEmpty(Mono.error(EntryValidator.bad(
-                        "Balances can only be corrected on a checking account for now")));
+                        "The Balance of this type of account cannot be corrected yet")));
     }
 
     private static ResponseStatusException conflict(String message) {
