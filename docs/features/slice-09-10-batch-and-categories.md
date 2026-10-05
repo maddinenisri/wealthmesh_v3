@@ -126,7 +126,15 @@ Known untested guard: the `checkCategoryLocked` re-check inside the replacement 
 
 ## Coverage
 
-Filled from `npm run coverage -- --slice 09` and `--slice 10` at Prove.
+`npm run coverage -- --require --slice 09`: 4/4. `--slice 10`: 8/8. `--require spending/categories/manage-categories.feature`: 8/8; `--require spending/expenses/record-expenses.feature`: 11/11. Deferred: none.
+
+| ID | Tests |
+| --- | --- |
+| `V2_EXPENSE_002` | `BatchEntryApiTests`, `BatchEntry.test.tsx` (save and add another), `11e-batch.spec.ts` |
+| `V2_EXPENSE_003` to `005` | `BatchEntryApiTests` (all or none, replay, races), `BatchEntry.test.tsx`, `11e-batch.spec.ts` |
+| `V2_CATEGORIES_001`, `006`, `007`, `008` | `CategoryApiTests`, `Categories.test.tsx`, `11d-categories.spec.ts` |
+| `V2_CATEGORIES_002` to `005` | `CategoryLifecycleApiTests`, `CategoryGuardsApiTests`, `CategoryLifecycle.test.tsx`, `11d-categories.spec.ts` |
+| Q-034 | `PayCard.test.tsx`, `11f-pay-card.spec.ts` |
 
 ## Open questions
 
@@ -170,7 +178,23 @@ At 710px and 1280px each: the panel's top in view and focus inside; Cancel retur
 
 ## How it works
 
-Written after Land by a read-only agent and checked against the code.
+Written by a read-only agent (Explore) over `ec0c99d..HEAD` from the notes, scenarios IDs and decisions; the builder checked the endpoint prefix (`/api/v1/accounts/{id}/expense-batches`), the migrations V14 and V15, the guards in `BatchEntryService` and `CategoryLifecycleService` and the final counts against the code, and corrected the agent's stale test counts.
+
+**What the user can do now**
+
+1. Categories (new nav item): add a category (blank name refused, a duplicate shows the message at the Name field and "Go to Groceries"); a spending category has a default class (Essential or Discretionary), an income one none.
+2. Add money out: the class starts as the category default and can be overridden; no category saves as Uncategorized with "Needs a category"; Spending shows class totals and an Uncategorized row.
+3. Change default, Rename (History keeps earlier names, with date and who), Merge with Undo, Archive and Restore: each shows a review with Cancel first. An archived category is hidden from new choices and kept, labelled, on old entries and in Spending.
+4. Add several purchases (card) or expenses (checking): fill rows, Review (dates, account, total, Balance after), Cancel or Confirm saving all; a bad row shows its message and nothing is saved. Save and add another keeps the account and category and blanks date and amount.
+5. Pay a card (Q-034) on checking and savings: the bank is fixed and a card is chosen; disabled with a note when no card exists.
+
+**What changed:** `V14__category_classes.sql` (default class, class on each entry, unique names per kind, `category_event`), `V15__category_lifecycle.sql` (archive and merge pointer); API `/api/v1/categories` (create, `/{id}/rename`, `/default-class`, `/archive`, `/restore`, `/usage`, `/history`, `/merges`, `/merges/{id}/undo`) and `POST /api/v1/accounts/{id}/expense-batches` (`CategoryLifecycleService`, `BatchEntryService`, `EntryValidator`, `ActivityStore`); UI `features/categories/`, `BatchEntry.tsx`, `AddEntry.tsx`, `SpendingPage.tsx`, `TransferForm.tsx`; tests `CategoryApiTests`, `CategoryLifecycleApiTests`, `CategoryGuardsApiTests`, `BatchEntryApiTests`, `Categories`, `CategoryLifecycle`, `BatchEntry`, `PayCard` tests, e2e `11d`, `11e`, `11f`.
+
+**How a batch save works:** the browser builds the review (no server preview); Confirm sends one request with one key; the server locks the account once and reads the key after the lock (a replay returns the first result), reads the member `FOR SHARE`, validates every row (categories read `FOR SHARE`, archived or merged refused) and answers `Row N: ...` for the first bad row with nothing saved; otherwise all rows save in one transaction. A merge is a pointer: ledger rows are never touched, readers resolve `COALESCE(merged_into_id, id)`, Undo clears it.
+
+**Decisions and deferred:** D-041 (seeded names are ordinary categories, adapted tests cite their IDs), D-042; no server batch preview; Q-035 (`EntryService.record` member lock); the `checkCategoryLocked` re-check and a historical entry with an archived category have no test of their own.
+
+**How to verify:** `npm run coverage -- --require --slice 09` and `--slice 10`, `npm test`, `npm run e2e` (117 at the last run), `npm run lint`, `npm run check`; click "What to click" at 710px and 1280px.
 
 ## Handoff
 
