@@ -26,11 +26,13 @@ export function EnteredBy({
           }}
         >
           <option value="">Choose who is entering this</option>
-          {members.map((candidate) => (
-            <option key={candidate.id} value={candidate.id}>
-              {memberLabel(candidate)}
-            </option>
-          ))}
+          {members
+            .filter((candidate) => candidate.active)
+            .map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {memberLabel(candidate)}
+              </option>
+            ))}
         </Select>
       ) : (
         <p>

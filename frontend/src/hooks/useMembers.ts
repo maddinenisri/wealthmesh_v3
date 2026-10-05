@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { addMember, listMembers, updateMember } from '../api/household'
+import {
+  addMember,
+  deactivateMember,
+  listMembers,
+  restoreMember,
+  updateMember,
+} from '../api/household'
 
 const membersKey = (householdId: string | undefined) => ['members', householdId] as const
 
@@ -25,6 +31,16 @@ export function useUpdateMember(householdId: string, memberId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ name, label }: MemberValues) => updateMember(memberId, name, label),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: membersKey(householdId) }),
+  })
+}
+
+/** Removing a member deactivates them; restoring brings them back to new choices. */
+export function useSetMemberActive(householdId: string, memberId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (active: boolean) =>
+      active ? restoreMember(memberId) : deactivateMember(memberId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: membersKey(householdId) }),
   })
 }

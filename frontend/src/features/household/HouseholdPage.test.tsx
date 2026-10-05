@@ -145,11 +145,12 @@ describe('with a household', () => {
     const name = within(row).getByLabelText('Member name')
     await user.clear(name)
     await user.type(name, 'Alexandra Doe')
-    await user.click(within(row).getByRole('button', { name: 'Save member' }))
+    await user.click(within(row).getByRole('button', { name: 'Review rename' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm rename' }))
 
     expect(await screen.findByText('Alexandra Doe')).toBeInTheDocument()
     expect(api.members[0]).toMatchObject({ name: 'Alexandra Doe', label: 'Parent' })
-    expect(screen.queryByRole('button', { name: 'Save member' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirm rename' })).not.toBeInTheDocument()
   })
 })
 

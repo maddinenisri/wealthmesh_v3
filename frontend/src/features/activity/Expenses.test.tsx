@@ -225,12 +225,12 @@ describe('two people in one workspace', () => {
     mockApi({ household, members: [maya, sam] })
     renderRoute('/accounts/new')
 
-    const owner = await screen.findByLabelText('Owner')
+    const owners = await screen.findByRole('group', { name: 'Owners' })
     expect(
-      within(owner)
-        .getAllByRole('option')
-        .map((o) => o.textContent),
-    ).toEqual(['Choose an owner', 'Maya', 'Sam'])
+      within(owners)
+        .getAllByRole('checkbox')
+        .map((box) => box.closest('label')?.textContent),
+    ).toEqual(['Maya', 'Sam'])
     const enteringAs = await screen.findByLabelText('Entering as')
     expect(
       within(enteringAs)

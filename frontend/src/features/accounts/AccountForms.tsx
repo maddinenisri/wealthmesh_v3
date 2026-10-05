@@ -1,13 +1,20 @@
-import { useForm } from 'react-hook-form'
+import { useForm, type Control } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
-import { Button, buttonStyles, FormAlert, SelectField, TextField } from '../../design-system'
+import {
+  Button,
+  buttonStyles,
+  CheckboxGroupField,
+  FormAlert,
+  SelectField,
+  TextField,
+} from '../../design-system'
 import { useCreateAccount, useUpdateAccount } from '../../hooks/useAccounts'
 import { parseAmount } from '../../lib/money'
 import { memberLabel } from './ownerNames'
 
-type DetailsValues = { name: string; institution: string; ownerMemberId: string }
+type DetailsValues = { name: string; institution: string; ownerMemberIds: string[] }
 type SetupValues = DetailsValues & { type: string; openedOn: string; balance: string }
 
 const nameRules = {
@@ -15,18 +22,35 @@ const nameRules = {
   maxLength: { value: 120, message: 'Use 120 characters or fewer.' },
 }
 const bankRules = { maxLength: { value: 120, message: 'Use 120 characters or fewer.' } }
-const ownerRules = { required: 'Choose an owner' }
+const ownerRules = {
+  validate: (value: string[]) => value.length > 0 || 'Choose an owner',
+}
 
-function OwnerOptions({ members }: { members: Member[] }) {
+/**
+ * Owner choices: active members, plus any member who already owns the account (so an inactive owner stays
+ * visible and checked). One or more owners makes the account joint.
+ */
+function OwnerChoices<T extends DetailsValues>({
+  members,
+  control,
+  current = [],
+}: {
+  members: Member[]
+  control: Control<T>
+  current?: string[]
+}) {
+  const options = members
+    .filter((member) => member.active || current.includes(member.id))
+    .map((member) => ({ value: member.id, label: memberLabel(member) }))
   return (
-    <>
-      <option value="">Choose an owner</option>
-      {members.map((member) => (
-        <option key={member.id} value={member.id}>
-          {memberLabel(member)}
-        </option>
-      ))}
-    </>
+    <CheckboxGroupField
+      control={control as unknown as Control<DetailsValues>}
+      name="ownerMemberIds"
+      label="Owners"
+      hint="Choose everyone who owns this account. Two or more makes it a joint account."
+      options={options}
+      rules={ownerRules}
+    />
   )
 }
 
@@ -49,7 +73,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       type: 'checking',
       name: '',
       institution: '',
-      ownerMemberId: '',
+      ownerMemberIds: [],
       openedOn: today,
       balance: '',
     },
@@ -61,7 +85,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         type: values.type as 'checking',
         name: values.name.trim(),
         institution: values.institution.trim(),
-        ownerMemberId: values.ownerMemberId,
+        ownerMemberIds: values.ownerMemberIds,
         openedOn: values.openedOn,
         openingBalance: values.balance.trim() === '' ? null : parseAmount(values.balance),
       })
@@ -83,9 +107,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       </SelectField>
       <TextField control={control} name="name" label="Account name" rules={nameRules} />
       <TextField control={control} name="institution" label="Bank" rules={bankRules} />
-      <SelectField control={control} name="ownerMemberId" label="Owner" rules={ownerRules}>
-        <OwnerOptions members={members} />
-      </SelectField>
+      <OwnerChoices members={members} control={control} />
       <TextField
         control={control}
         name="openedOn"
@@ -128,7 +150,7 @@ export function AccountEditForm({ account, members }: { account: Account; member
     defaultValues: {
       name: account.name,
       institution: account.institution ?? '',
-      ownerMemberId: account.ownerMemberIds[0] ?? '',
+      ownerMemberIds: account.ownerMemberIds,
     },
   })
 
@@ -146,9 +168,7 @@ export function AccountEditForm({ account, members }: { account: Account; member
       <FormAlert message={update.error?.message} />
       <TextField control={control} name="name" label="Account name" rules={nameRules} />
       <TextField control={control} name="institution" label="Bank" rules={bankRules} />
-      <SelectField control={control} name="ownerMemberId" label="Owner" rules={ownerRules}>
-        <OwnerOptions members={members} />
-      </SelectField>
+      <OwnerChoices members={members} control={control} current={account.ownerMemberIds} />
       <div className="flex gap-2">
         <Button type="submit" disabled={update.isPending}>
           {update.isPending ? 'Saving' : 'Save details'}

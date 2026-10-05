@@ -7,25 +7,25 @@ import {
 } from 'react-hook-form'
 import { Field, type FieldProps } from '../components/Field'
 
-export type TextFieldProps<T extends FieldValues> = Omit<
+export type TextFieldProps<T extends FieldValues, N extends Path<T> = Path<T>> = Omit<
   FieldProps,
   'name' | 'value' | 'defaultValue' | 'onChange' | 'onBlur' | 'error' | 'ref'
 > & {
   control: Control<T>
-  name: Path<T>
-  rules?: UseControllerProps<T>['rules']
+  name: N
+  rules?: UseControllerProps<T, N>['rules']
 }
 
 /**
  * Text input bound to react-hook-form. Validation messages from `rules` show under the input;
  * the form's server-side errors belong in FormAlert instead.
  */
-export function TextField<T extends FieldValues>({
+export function TextField<T extends FieldValues, N extends Path<T> = Path<T>>({
   control,
   name,
   rules,
   ...props
-}: TextFieldProps<T>) {
+}: TextFieldProps<T, N>) {
   const { field, fieldState } = useController({ control, name, rules })
 
   return (

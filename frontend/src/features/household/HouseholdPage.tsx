@@ -1,10 +1,8 @@
 import { useState } from 'react'
-import type { Household, Member } from '../../api/household'
+import type { Household } from '../../api/household'
 import { Link } from 'react-router'
 import {
   Amount,
-  Avatar,
-  Badge,
   Button,
   Card,
   CardTitle,
@@ -17,7 +15,8 @@ import { useWealth } from '../../hooks/useWealth'
 import { OverdrawnLabel } from '../accounts/Overdrawn'
 import { ownerNames } from '../accounts/ownerNames'
 import { useAccountContext } from '../accounts/useAccountContext'
-import { CreateHouseholdForm, MemberForm, RenameHouseholdForm } from './HouseholdForms'
+import { CreateHouseholdForm, RenameHouseholdForm } from './HouseholdForms'
+import { MembersCard } from './MembersCard'
 import { useHousehold } from '../../hooks/useHousehold'
 import { useMembers } from '../../hooks/useMembers'
 
@@ -59,7 +58,7 @@ export function HouseholdPage() {
               action={<Button onClick={() => void members.refetch()}>Try again</Button>}
             />
           ) : (
-            <Members householdId={household.data.id} members={members.data} />
+            <MembersCard householdId={household.data.id} members={members.data} />
           )}
         </>
       )}
@@ -82,57 +81,6 @@ function HouseholdDetails({ household }: { household: Household }) {
           </Button>
         </div>
       )}
-    </Card>
-  )
-}
-
-/** `members` is undefined while the list is still loading. */
-function Members({ householdId, members }: { householdId: string; members: Member[] | undefined }) {
-  const [editingId, setEditingId] = useState<string>()
-
-  return (
-    <Card aria-labelledby="members-heading">
-      <CardTitle id="members-heading">Members</CardTitle>
-      <p className="mb-4 mt-1 max-w-prose text-sm text-ink-muted">
-        Members are names you attach to account ownership. They do not sign in.
-      </p>
-
-      {members === undefined ? (
-        <p className="mb-6 text-sm text-ink-muted">Loading members</p>
-      ) : members.length === 0 ? (
-        <p className="mb-6 text-sm text-ink-muted">No members yet. Add the first person below.</p>
-      ) : (
-        <ul className="mb-6 divide-y divide-line border-y border-line">
-          {members.map((member) => (
-            <li key={member.id} className="py-3">
-              {editingId === member.id ? (
-                <MemberForm
-                  householdId={householdId}
-                  member={member}
-                  onDone={() => setEditingId(undefined)}
-                />
-              ) : (
-                <div className="flex items-center gap-3">
-                  <Avatar name={member.name} />
-                  <span className="flex-1">{member.name}</span>
-                  {member.label && <Badge>{member.label}</Badge>}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setEditingId(member.id)}
-                    aria-label={`Edit member ${member.name}${member.label ? ` ${member.label}` : ''}`}
-                  >
-                    Edit
-                  </Button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h3 className="mb-3 font-medium">Add member</h3>
-      <MemberForm householdId={householdId} />
     </Card>
   )
 }

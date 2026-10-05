@@ -1,7 +1,17 @@
 import { request } from './client'
 
 export type Household = { id: string; name: string }
-export type Member = { id: string; householdId: string; name: string; label: string | null }
+export type NameChange = { name: string; label: string | null; changedAt: string }
+export type Member = {
+  id: string
+  householdId: string
+  name: string
+  label: string | null
+  /** False once the member was removed: they leave new choices but keep ownership and history. */
+  active: boolean
+  /** Earlier names and labels, newest first. */
+  nameHistory: NameChange[]
+}
 
 function record(value: unknown): Record<string, unknown> {
   if (typeof value !== 'object' || value === null)
@@ -26,6 +36,17 @@ function parseMember(value: unknown): Member {
     householdId: str(data.householdId),
     name: str(data.name),
     label: data.label == null ? null : str(data.label),
+    active: data.active !== false,
+    nameHistory: Array.isArray(data.nameHistory) ? data.nameHistory.map(parseNameChange) : [],
+  }
+}
+
+function parseNameChange(value: unknown): NameChange {
+  const data = record(value)
+  return {
+    name: str(data.name),
+    label: data.label == null ? null : str(data.label),
+    changedAt: str(data.changedAt),
   }
 }
 
@@ -56,3 +77,9 @@ export const addMember = (householdId: string, name: string, label: string) =>
 
 export const updateMember = (id: string, name: string, label: string) =>
   request(`/household-members/${id}`, { method: 'PUT', body: { name, label }, parse: parseMember })
+
+export const deactivateMember = (id: string) =>
+  request(`/household-members/${id}/deactivate`, { method: 'POST', parse: parseMember })
+
+export const restoreMember = (id: string) =>
+  request(`/household-members/${id}/restore`, { method: 'POST', parse: parseMember })

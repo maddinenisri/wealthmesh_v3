@@ -23,7 +23,7 @@ function subscribe(onChange: () => void) {
 
 /**
  * Who is entering records in this browser (D-025). A history note, not a sign-in: it is remembered
- * per browser and sent with each save. Returns the member only while they still exist.
+ * per browser and sent with each save. Returns the member only while they still exist and are active.
  */
 export function useEnteringAs(members: Member[] | undefined) {
   const stored = useSyncExternalStore(subscribe, read, () => '')
@@ -35,6 +35,7 @@ export function useEnteringAs(members: Member[] | undefined) {
     }
     window.dispatchEvent(new Event(CHANGED))
   }, [])
-  const member = members?.find((candidate) => candidate.id === stored)
+  // A removed member is not offered for new entries, so a remembered one counts as nobody chosen.
+  const member = members?.find((candidate) => candidate.id === stored && candidate.active)
   return { member, setMemberId }
 }

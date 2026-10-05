@@ -17,13 +17,13 @@ export type NewAccount = {
   type: 'checking'
   name: string
   institution: string
-  ownerMemberId: string
+  ownerMemberIds: string[]
   openedOn: string
   /** An amount string such as "5000.00", or null to start at 0.00. */
   openingBalance: string | null
 }
 
-export type AccountDetails = { name: string; institution: string; ownerMemberId: string }
+export type AccountDetails = { name: string; institution: string; ownerMemberIds: string[] }
 
 function record(value: unknown): Record<string, unknown> {
   if (typeof value !== 'object' || value === null)
@@ -71,7 +71,7 @@ export const createAccount = (account: NewAccount) =>
       type: account.type,
       name: account.name,
       institution: account.institution,
-      ownerMemberIds: [account.ownerMemberId],
+      ownerMemberIds: account.ownerMemberIds,
       openedOn: account.openedOn,
       openingBalance: account.openingBalance,
     },
@@ -84,7 +84,7 @@ export const updateAccount = (id: string, details: AccountDetails) =>
     body: {
       name: details.name,
       institution: details.institution,
-      ownerMemberIds: [details.ownerMemberId],
+      ownerMemberIds: details.ownerMemberIds,
     },
     parse: parseAccount,
   })

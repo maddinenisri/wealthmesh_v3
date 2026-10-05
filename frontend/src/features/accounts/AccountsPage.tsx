@@ -45,7 +45,7 @@ export function AccountsPage() {
             <thead>
               <tr>
                 <Th>Account</Th>
-                <Th>Owner</Th>
+                <Th>Owners</Th>
                 <Th>Bank</Th>
                 <Th className="text-right">Balance</Th>
               </tr>

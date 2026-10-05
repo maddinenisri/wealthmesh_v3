@@ -78,7 +78,9 @@ function Details({ account, owners }: { account: Account; owners: string }) {
     <Card aria-label="Account details">
       <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
         <div>
-          <dt className="text-caption text-ink-muted">Owner</dt>
+          <dt className="text-caption text-ink-muted">
+            {account.ownerMemberIds.length > 1 ? 'Owners' : 'Owner'}
+          </dt>
           <dd>{owners}</dd>
         </div>
         <div>

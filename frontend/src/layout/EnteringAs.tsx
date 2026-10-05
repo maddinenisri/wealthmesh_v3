@@ -19,11 +19,13 @@ export function EnteringAs() {
         onChange={(event) => setMemberId(event.target.value)}
       >
         <option value="">Choose a name</option>
-        {members.data.map((candidate) => (
-          <option key={candidate.id} value={candidate.id}>
-            {memberLabel(candidate)}
-          </option>
-        ))}
+        {members.data
+          .filter((candidate) => candidate.active)
+          .map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>
+              {memberLabel(candidate)}
+            </option>
+          ))}
       </Select>
     </div>
   )

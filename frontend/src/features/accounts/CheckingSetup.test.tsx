@@ -38,7 +38,7 @@ async function fillSetup(
   const nameField = await screen.findByLabelText('Account name')
   if (name) await user.type(nameField, name)
   await user.type(screen.getByLabelText('Bank'), 'Harbor Bank')
-  await user.selectOptions(screen.getByLabelText('Owner'), 'Maya')
+  await user.click(screen.getByRole('checkbox', { name: 'Maya' }))
   fireEvent.change(screen.getByLabelText('Opened on'), { target: { value: '2026-09-01' } })
   if (balance) await user.type(screen.getByLabelText('Balance'), balance)
 }
@@ -171,7 +171,8 @@ describe('editing a checking account', () => {
     const name = await screen.findByLabelText('Account name')
     await user.clear(name)
     await user.type(name, 'Household Checking')
-    await user.selectOptions(screen.getByLabelText('Owner'), 'Maya')
+    await user.click(screen.getByRole('checkbox', { name: 'Sam' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Maya' }))
     const bank = screen.getByLabelText('Bank')
     await user.clear(bank)
     await user.type(bank, 'Harbor Credit Union')
@@ -204,7 +205,7 @@ describe('editing a checking account', () => {
     const name = await screen.findByLabelText('Account name')
     await user.clear(name)
     await user.type(name, 'Household Checking')
-    await user.selectOptions(screen.getByLabelText('Owner'), 'Sam')
+    await user.click(screen.getByRole('checkbox', { name: 'Sam' }))
     await user.click(screen.getByRole('link', { name: 'Cancel' }))
 
     expect(await screen.findByRole('heading', { name: 'Everyday Checking' })).toBeInTheDocument()
@@ -223,7 +224,7 @@ describe('editing a checking account', () => {
     mockApi({ ...seed, accounts: [{ ...everyday }] })
     const { user } = renderRoute(`/accounts/${everyday.id}/edit`)
 
-    await user.selectOptions(await screen.findByLabelText('Owner'), 'Maya')
+    await user.click(await screen.findByRole('checkbox', { name: 'Maya' }))
     await user.clear(screen.getByLabelText('Account name'))
     await user.type(screen.getByLabelText('Account name'), '   ')
     await user.click(screen.getByRole('button', { name: 'Save details' }))

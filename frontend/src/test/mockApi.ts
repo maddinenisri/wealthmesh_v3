@@ -2,7 +2,15 @@ import { http, HttpResponse } from 'msw'
 import { server } from './server'
 
 type MockHousehold = { id: string; name: string }
-type MockMember = { id: string; householdId: string; name: string; label: string | null }
+type MockMember = {
+  id: string
+  householdId: string
+  name: string
+  label: string | null
+  /** Defaults to true. */
+  active?: boolean
+  nameHistory?: { name: string; label: string | null; changedAt: string }[]
+}
 export type MockAccount = {
   id: string
   type: string
@@ -273,7 +281,9 @@ export function mockApi(
     http.get('*/api/v1/household-members', ({ request }) => {
       log(request)
       const householdId = new URL(request.url).searchParams.get('householdId')
-      return HttpResponse.json(state.members.filter((m) => m.householdId === householdId))
+      return HttpResponse.json(
+        state.members.filter((m) => m.householdId === householdId).map(memberBody),
+      )
     }),
     http.post('*/api/v1/household-members', async ({ request }) => {
       log(request)
@@ -287,7 +297,7 @@ export function mockApi(
         label: body.label.trim() || null,
       }
       state.members.push(member)
-      return HttpResponse.json(member, { status: 201 })
+      return HttpResponse.json(memberBody(member), { status: 201 })
     }),
     http.put('*/api/v1/household-members/:id', async ({ request, params }) => {
       log(request)
@@ -300,9 +310,31 @@ export function mockApi(
         body.label,
       )
       if (failure) return failure
-      existing.name = body.name.trim()
-      existing.label = body.label.trim() || null
-      return HttpResponse.json(existing)
+      const name = body.name.trim()
+      const label = body.label.trim() || null
+      if (name !== existing.name || label !== existing.label) {
+        existing.nameHistory = [
+          { name: existing.name, label: existing.label, changedAt: '2026-10-03T12:00:00Z' },
+          ...(existing.nameHistory ?? []),
+        ]
+      }
+      existing.name = name
+      existing.label = label
+      return HttpResponse.json(memberBody(existing))
+    }),
+    http.post('*/api/v1/household-members/:id/deactivate', ({ request, params }) => {
+      log(request)
+      const existing = state.members.find((m) => m.id === params.id)
+      if (!existing) return problem(404, `Household member not found: ${String(params.id)}`)
+      existing.active = false
+      return HttpResponse.json(memberBody(existing))
+    }),
+    http.post('*/api/v1/household-members/:id/restore', ({ request, params }) => {
+      log(request)
+      const existing = state.members.find((m) => m.id === params.id)
+      if (!existing) return problem(404, `Household member not found: ${String(params.id)}`)
+      existing.active = true
+      return HttpResponse.json(memberBody(existing))
     }),
     http.get('*/api/v1/today', ({ request }) => {
       log(request)
@@ -838,7 +870,9 @@ export function mockApi(
       log(request)
       const body = (await request.json()) as NewAccountBody
       const failure =
-        validateAccount(body.name, body.ownerMemberIds) ?? validateOpening(body, today)
+        validateAccount(body.name, body.ownerMemberIds) ??
+        validateOwners(state.members, body.ownerMemberIds, []) ??
+        validateOpening(body, today)
       if (failure) return failure
       const opening = amountOrZero(body.openingBalance) as string
       const account: MockAccount = {
@@ -865,7 +899,9 @@ export function mockApi(
       ) {
         return problem(400, 'Edit account changes details only, not the balance or date')
       }
-      const failure = validateAccount(body.name as string, body.ownerMemberIds as string[])
+      const failure =
+        validateAccount(body.name as string, body.ownerMemberIds as string[]) ??
+        validateOwners(state.members, body.ownerMemberIds as string[], account.ownerMemberIds)
       if (failure) return failure
       account.name = (body.name as string).trim()
       account.institution = (body.institution as string | undefined)?.trim() || null
@@ -875,6 +911,19 @@ export function mockApi(
   )
 
   return state
+}
+
+/** The member as the API returns it: `active` and `nameHistory` always present. */
+function memberBody(member: MockMember) {
+  return { ...member, active: member.active !== false, nameHistory: member.nameHistory ?? [] }
+}
+
+/** An inactive member cannot become a new owner but may stay on an account they already own. */
+function validateOwners(members: MockMember[], owners: string[], current: string[]) {
+  const added = owners.filter((id) => !current.includes(id))
+  return members.some((m) => added.includes(m.id) && m.active === false)
+    ? problem(400, 'Choose an active member')
+    : null
 }
 
 function validateMember(others: MockMember[], name: string, label: string) {

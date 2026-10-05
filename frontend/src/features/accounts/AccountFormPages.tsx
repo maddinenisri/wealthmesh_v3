@@ -38,14 +38,14 @@ export function NewAccountPage() {
           action={<GoToHousehold />}
         />
       )}
-      {context.members?.length === 0 && (
+      {context.members && !context.members.some((member) => member.active) && (
         <EmptyState
           title="Add a household member first"
-          description="An account needs an owner. Add the people in your household, then come back."
+          description="An account needs an active owner. Add the people in your household or restore a removed member, then come back."
           action={<GoToHousehold />}
         />
       )}
-      {context.members && context.members.length > 0 && today.data && (
+      {context.members?.some((member) => member.active) && today.data && (
         <Card>
           <AccountSetupForm members={context.members} today={today.data} />
         </Card>

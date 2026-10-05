@@ -28,7 +28,7 @@ describe('the household overview', () => {
     expect(type).toHaveDisplayValue('Checking')
     expect(within(type).getByRole('option', { name: /Savings.*coming soon/ })).toBeDisabled()
     await user.type(screen.getByLabelText('Account name'), 'Everyday Checking')
-    await user.selectOptions(screen.getByLabelText('Owner'), 'Maya')
+    await user.click(screen.getByRole('checkbox', { name: 'Maya' }))
     fireEvent.change(screen.getByLabelText('Opened on'), { target: { value: '2026-09-01' } })
     await user.click(screen.getByRole('button', { name: 'Save account' }))
 
