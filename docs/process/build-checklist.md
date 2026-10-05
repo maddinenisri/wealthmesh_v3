@@ -21,6 +21,9 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
 - [ ] Every keyed save reads its key under the lock: grep each service for `findByIdempotencyKey` and check it
       comes after `lockAccount` (or in the same transaction as the lock), including services the slice did not write but
       a new type now reaches (slice 08: Update balance read it before the lock).
+- [ ] A row that is read by id, by name and through a join (a category, a member) is locked on every read path of a
+      save, and each path has its own race test (slices 09 and 10: a by-name lookup was unlocked while every test used
+      the id). Grep the repository for each way the row is fetched.
 - [ ] A race test for a row lock (account, member) holds only that row. Holding the account lock too hides whether the
       member row is read `FOR SHARE`; the test must fail when the lock or the `FOR SHARE` is removed.
 - [ ] Every test cites its scenario ID, including race, guard and replay tests (grep the titles of each new test class).
@@ -34,6 +37,8 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
 - [ ] Playwright: a form's first error is in view and focused; a save finishes before the test leaves the page.
 - [ ] A new type that changes how a Balance or amount reads: grep every `formatMoney(` of a Balance, every list that
       shows a signed amount, and every category or account chooser, and decide each (slice 08 Cowork findings 4 to 8).
+- [ ] After Confirm, focus and scroll go somewhere stated: the row that changed, or the opener when the row is gone;
+      a review sentence reads right for 0 and 1 entries.
 - [ ] Edit forms start from the current values and show the original. A long name and label wrap at 710px.
 - [ ] Anything new that distinguishes accounts or entries (type, status, owner) shows in the lists, not only on the
       detail page.

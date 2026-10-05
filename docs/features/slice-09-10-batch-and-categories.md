@@ -1,8 +1,8 @@
 # Slices 09 and 10: Batch entry, category management and classes
 
 - Slice: 09 and 10 in `docs/features/INDEX.md`, merged by the merge rule (12 IDs, 3 capabilities: L7, S2, S3; IDs in `slices.txt`); feature files touched: `docs/requirements/v2/spending/expenses/record-expenses.feature`, `spending/categories/manage-categories.feature`
-- Status: in-progress, at Checkpoint 2 (mirror of the INDEX rows)
-- Started: 2026-10-05 16:03 (ET, session clock)  Finished:  Commit:
+- Status: done, local and not pushed (mirror of the INDEX rows; the owner said no push)
+- Started: 2026-10-05 16:03 (ET, session clock)  Finished: 2026-10-05  Commit: `48b87bc` (commits from `cdc3485`)
 
 ## Prompts and directions
 
@@ -18,7 +18,7 @@ Stop at the task-list approval and again when the app is ready to look at.
 
 - 2026-10-05 Owner answer: Q-034 yes (a "Pay a card" button on checking and savings, reusing the card-payment path). Recorded in `questions.md`.
 - 2026-10-05 Checkpoint 1 answer: approved the task list, decisions 1 to 4 (seeded-name reading, default classes as proposed, refunds carry a class, batch cap 20) and all design choices. Conditions: record the seeded-name deviation as a decision with the exact test mapping (recorded as **D-041**; the owner wrote D-010, which already exists as the Requirements rule) and cite the scenario IDs on the adapted tests; build in the order given, one commit per group, local only, no push, no AI trailer; report the Cowork finding count at checkpoint 2; run the walkthrough at Land.
-- Checkpoint 2 answer:
+- 2026-10-05 Checkpoint 2 answer: Cowork pass at 710px with Maya: all nine steps passed, 8 findings, none a wrong figure (table below). 1280px: the Categories page passed; panel position on account pages could not be verified by clicking (rests on e2e). Dev data left: categories Pet care, Restaurants, Eating out, Freelance; Everyday Checking and Summit Rewards Card with the entries listed in the pass.
 
 ## Scope
 
@@ -153,8 +153,20 @@ At 710px and 1280px each: the panel's top in view and focus inside; Cancel retur
 
 ## Cowork findings
 
-| # | Check | Result | Fault seen | Test added |
+**8 findings** (slice 08 had 8). None was a wrong figure. Each is covered by `Cowork findings 1 to 8` in `11d-categories.spec.ts` (710px and 1280px), which failed at the first finding before the fixes (the rest of it was written to fail until each fix landed), plus unit tests where noted.
+
+| # | Check | Result | Fault seen | Fix and test |
 | --- | --- | --- | --- | --- |
+| 1 | 8 | Fixed | Category history said who but not when | History lines end "on 2026-10-05"; e2e matches the date |
+| 2 | 1 | Fixed | After confirming a rename, merge or archive focus fell to the page body, and a merge did not scroll to the category | `close` focuses and scrolls to the row that changed (`useReturnFocus.cancel` stops the return to the opener); e2e `toBeFocused` and in view; `CategoryLifecycle.test.tsx` rename |
+| 3 | 3 | Fixed | The duplicate-name message sat at the top of the form, not by the Name field, and focus was lost | the 409 is set as the Name field's error and focuses it; e2e checks focus and the accessible description |
+| 4 | n/a | Fixed | Reviews lower-cased the category name ("rename groceries") | heading keeps the name's capitals; e2e finds the region by exact name |
+| 5 | n/a | Fixed | "The 0 entries totalling $0.00 follow", "The 1 entry totalling -$30.00 stay in place... with their links", "The review shows 3 entries" | "It holds no entries yet" / "It holds N entries totalling $X"; merge says "Together they hold"; e2e |
+| 6 | n/a | Fixed | Undo of a merge into a new category left it behind, empty and active | a category created by the merge is archived when Undo leaves it empty (kept if it holds entries); `CategoryGuardsApiTests.undoArchivesEmptyTarget`, e2e |
+| 7 | 7 | Fixed | Spending did not mark an archived category | `categories[].archived`, shown "(archived)"; API and e2e |
+| 8 | 4 | Fixed | Entries with no description showed only "by Maya" | "No description" in the Description cell; e2e |
+
+1280px: Categories page confirmed by the owner; account-page panel positions rest on the e2e at 1280px (`11d`, `11e`, `11f`).
 
 ## How it works
 
@@ -162,8 +174,14 @@ Written after Land by a read-only agent and checked against the code.
 
 ## Handoff
 
+- Built: categories you can add, rename, give a default class, merge (with Undo), archive and restore, each reviewed with Cancel and logged (`category_event`); a class on every expense and refund, stored at save; uncategorized expenses with a derived review flag; class totals and an Uncategorized row on Spending; batch entry (`POST /accounts/{id}/expense-batches`, up to 20 rows, one key stored as `<key>:i`, all or none) with Add several purchases/expenses; Save and add another; Pay a card on bank accounts. V14 and V15.
+- Watch for: anything that reads a category must resolve the merge pointer (`COALESCE(merged_into_id, id)`) and a new category lookup must lock like the existing ones (by id and by name, `FOR SHARE`); a batch row key is `<batch key>:i`; `useReturnFocus` no longer scrolls and has `cancel()`; there is no server preview for a batch (the review is computed in the browser); `findByName` no longer exists (kind-aware `findActiveByKindAndName`).
+- Left open: Q-035 (`EntryService.record` uses the unlocked member read); the `checkCategoryLocked` re-check in the replacement swap and a historical entry with an archived category have no test of their own; the 1280px click-through of account-page panels rests on e2e; e2e leaves created categories (Pets, Side work, Restaurants, Eating out, Cw ...) in its own database only; slice 11 splits and 13 budgets read the category rows (renaming Groceries and archiving Travel are safe because lookups follow the active name).
+- v1 showed: nothing consulted.
+- Next: slice 11 (split expenses), which reads categories and the effective-category expression.
+
 ## Retro (3 lines, also appended to `docs/process/retro.md`)
 
-- What slowed this session:
-- What went well:
-- Process change to try:
+- What slowed this session: the validator again found gaps after the build (a by-name lookup with no lock, reminder save unlocked and unmerged, a merge lock order); the owner's Cowork pass found 8 faults after 170 UI and 117 e2e tests (focus after a change, a message away from its field, wording for 0 and 1, an empty merge target); one e2e flaked until focus return stopped scrolling.
+- What went well: the pointer design made merge and Undo cheap and race tests could be written first; planting each lock defect proved every race test; the e2e caught a swap-in-place focus fault at 710px before the owner did.
+- Process change to try: list every way a row is read before locking it and race-test each; say where focus goes after Confirm; write review sentences for 0 and 1 (checklist and improvements log updated).
