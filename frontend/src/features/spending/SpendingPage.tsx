@@ -94,8 +94,7 @@ function Review({ month }: { month: string }) {
             Spending <Amount value={Number(review.data.spending)} />
           </p>
           <p>
-            Income minus spending{' '}
-            <Amount value={Number(review.data.incomeMinusSpending)} size="lg" />
+            Income minus spending <Amount value={Number(review.data.incomeMinusSpending)} />
           </p>
         </div>
       )}
@@ -156,8 +155,7 @@ function MonthSection({ kind, month }: { kind: 'expense' | 'income'; month: stri
       {totals.data && totals.data.categories.length > 0 && (
         <>
           <p className="mt-4">
-            {kind === 'income' ? 'Income' : 'Spending'}{' '}
-            <Amount value={Number(totals.data.total)} size="lg" />
+            {kind === 'income' ? 'Income' : 'Spending'} <Amount value={Number(totals.data.total)} />
           </p>
           <ul aria-label={words.list} className="mt-3 flex flex-col gap-1">
             {totals.data.categories.map((category) => (

@@ -107,10 +107,10 @@ function AccountsAndWealth() {
       {wealth.data && (
         <div className="mt-3 flex flex-col gap-1">
           <p>
-            Financial assets <Amount value={Number(wealth.data.financialAssets)} size="lg" />
+            Financial assets <Amount value={Number(wealth.data.financialAssets)} />
           </p>
           <p>
-            Debts <Amount value={Number(wealth.data.debts)} size="lg" />
+            Debts <Amount value={Number(wealth.data.debts)} />
           </p>
         </div>
       )}
