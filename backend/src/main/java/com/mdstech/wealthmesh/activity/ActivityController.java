@@ -90,6 +90,14 @@ public class ActivityController {
                 .status(saved.created() ? HttpStatus.CREATED : HttpStatus.OK).body(saved.activity()));
     }
 
+    /** Money back from a purchase: it raises the Balance and lowers spending in its category (CARD_008). */
+    @PostMapping("/refunds")
+    public Mono<ResponseEntity<ActivityResponse>> recordRefund(@PathVariable UUID accountId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String key,
+            @RequestBody ExpenseRequest request) {
+        return save(accountId, key, "refund", request);
+    }
+
     @PostMapping("/income")
     public Mono<ResponseEntity<ActivityResponse>> recordIncome(@PathVariable UUID accountId,
             @RequestHeader(name = "Idempotency-Key", required = false) String key,

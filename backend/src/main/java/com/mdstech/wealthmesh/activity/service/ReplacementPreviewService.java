@@ -43,7 +43,8 @@ public class ReplacementPreviewService {
                 return Mono.error(EntryValidator.bad("Enter a date"));
             }
             return activities.findById(activityId).filter(a -> accountId.equals(a.accountId())
-                            && a.removedAt() == null && ("expense".equals(a.kind()) || "income".equals(a.kind())))
+                            && a.removedAt() == null && ("expense".equals(a.kind()) || "income".equals(a.kind())
+                                    || "refund".equals(a.kind())))
                     .switchIfEmpty(Mono.error(new org.springframework.web.server.ResponseStatusException(
                             org.springframework.http.HttpStatus.NOT_FOUND, "Entry not found: " + activityId)))
                     .flatMap(original -> moveTarget.resolve(accountId, targetId)
@@ -79,13 +80,17 @@ public class ReplacementPreviewService {
     /** A month's total now and after: the old entry leaves its month, the new one joins its own. */
     private Mono<MonthFigure> month(String kind, YearMonth month, YearMonth oldMonth, YearMonth newMonth,
             BigDecimal oldAmount, BigDecimal newAmount) {
-        return store.monthTotal(kind, month.atDay(1), month.plusMonths(1).atDay(1)).map(before -> {
+        // A refund lowers spending, so its effect on the month figure is the opposite of an expense's.
+        BigDecimal direction = "refund".equals(kind) ? BigDecimal.ONE.negate() : BigDecimal.ONE;
+        String counted = "income".equals(kind) ? kind : "expense";
+        Mono<BigDecimal> total = store.monthTotal(counted, month.atDay(1), month.plusMonths(1).atDay(1));
+        return total.map(before -> {
             BigDecimal after = before;
             if (month.equals(oldMonth)) {
-                after = after.subtract(oldAmount);
+                after = after.subtract(oldAmount.multiply(direction));
             }
             if (month.equals(newMonth)) {
-                after = after.add(newAmount);
+                after = after.add(newAmount.multiply(direction));
             }
             return new MonthFigure(month.toString(), "income".equals(kind) ? "income" : "spending",
                     Money.format(before), Money.format(after));

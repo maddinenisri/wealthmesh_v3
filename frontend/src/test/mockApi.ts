@@ -99,6 +99,8 @@ export const CATEGORIES = [
   { id: 'c0000000-0000-4000-8000-000000000006', name: 'Bank fees', kind: 'spending' },
   { id: 'c0000000-0000-4000-8000-000000000007', name: 'Interest', kind: 'income' },
   { id: 'c0000000-0000-4000-8000-000000000008', name: 'Bonus', kind: 'income' },
+  { id: 'c0000000-0000-4000-8000-000000000009', name: 'Interest charged', kind: 'spending' },
+  { id: 'c0000000-0000-4000-8000-00000000000a', name: 'Annual fee', kind: 'spending' },
 ]
 
 function decorate(a: MockActivity, accounts: MockAccount[], all: MockActivity[] = []) {
@@ -250,26 +252,34 @@ export function mockApi(
     return HttpResponse.json(statementView(statement), { status: 201 })
   }
   const currentBalance = (account: MockAccount) => balanceOn(account, '9999-12-31')
+  /** What counts toward a month figure: spending is expenses minus refunds (the server defines it once). */
+  const counted = (a: MockActivity, kind: string) =>
+    kind === 'expense' ? a.kind === 'expense' || a.kind === 'refund' : a.kind === kind
+  const effect = (a: MockActivity) => (a.kind === 'refund' ? -Number(a.amount) : Number(a.amount))
+  const refundNote = (total: number) => (total < 0 ? 'Refunds exceed purchases' : null)
   const monthTotals = (month: string, kind: string, accountId?: string | null) => {
     const rows = live().filter(
       (a) =>
-        a.kind === kind &&
+        counted(a, kind) &&
         a.occurredOn.startsWith(month) &&
         (!accountId || a.accountId === accountId),
     )
     const byCategory = new Map<string, { total: number; count: number }>()
     rows.forEach((a) => {
       const row = byCategory.get(a.categoryId) ?? { total: 0, count: 0 }
-      byCategory.set(a.categoryId, { total: row.total + Number(a.amount), count: row.count + 1 })
+      byCategory.set(a.categoryId, { total: row.total + effect(a), count: row.count + 1 })
     })
+    const total = rows.reduce((sum, a) => sum + effect(a), 0)
     return {
       month,
-      total: rows.reduce((sum, a) => sum + Number(a.amount), 0).toFixed(2),
+      total: total.toFixed(2),
+      note: refundNote(total),
       categories: [...byCategory].map(([categoryId, row]) => ({
         categoryId,
         name: CATEGORIES.find((c) => c.id === categoryId)?.name,
         total: row.total.toFixed(2),
         count: row.count,
+        note: refundNote(row.total),
       })),
     }
   }
@@ -1071,9 +1081,9 @@ export function mockApi(
         return HttpResponse.json(decorate(entry, state.accounts), { status: 201 })
       },
     ),
-    ...(['expenses', 'income'] as const).map((path) =>
+    ...(['expenses', 'income', 'refunds'] as const).map((path) =>
       http.post(`*/api/v1/accounts/:id/${path}`, async ({ request, params }) => {
-        const kind = path === 'income' ? 'income' : 'expense'
+        const kind = path === 'income' ? 'income' : path === 'refunds' ? 'refund' : 'expense'
         log(request)
         const key = request.headers.get('Idempotency-Key') ?? ''
         state.keys.push(key)
@@ -1099,9 +1109,9 @@ export function mockApi(
         }
         state.activity.push(entry)
         account.balance = {
-          amount: (Number(account.balance.amount) + (kind === 'income' ? amount : -amount)).toFixed(
-            2,
-          ),
+          amount: (
+            Number(account.balance.amount) + (kind === 'expense' ? -amount : amount)
+          ).toFixed(2),
           asOf: entry.occurredOn > account.balance.asOf ? entry.occurredOn : account.balance.asOf,
         }
         if (state.loseNextExpenseResponse) {
@@ -1131,7 +1141,7 @@ export function mockApi(
           live()
             .filter(
               (a) =>
-                a.kind === kind &&
+                counted(a, kind) &&
                 a.occurredOn.startsWith(query.get('month') ?? '') &&
                 a.categoryId === query.get('categoryId') &&
                 (!query.get('accountId') || a.accountId === query.get('accountId')),
@@ -1171,10 +1181,10 @@ export function mockApi(
       log(request)
       const totals = new Map<string, number>()
       live()
-        .filter((a) => a.kind === 'expense')
+        .filter((a) => counted(a, 'expense'))
         .forEach((a) => {
           const month = a.occurredOn.slice(0, 7)
-          totals.set(month, (totals.get(month) ?? 0) + Number(a.amount))
+          totals.set(month, (totals.get(month) ?? 0) + effect(a))
         })
       const recorded = [...totals.keys()].sort()
       const sum = [...totals.values()].reduce((a, b) => a + b, 0)

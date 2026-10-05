@@ -190,7 +190,7 @@ public class EntryChangeService {
         return accounts.findById(accountId).switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)))
                 .then(Mono.defer(() -> activities.findById(activityId)))
                 .filter(a -> accountId.equals(a.accountId()))
-                .filter(a -> "expense".equals(a.kind()) || "income".equals(a.kind())
+                .filter(a -> "expense".equals(a.kind()) || "income".equals(a.kind()) || "refund".equals(a.kind())
                         || allowCorrection && "correction".equals(a.kind()))
                 .switchIfEmpty(Mono.error(notFound("Entry not found: " + activityId)));
     }

@@ -39,7 +39,7 @@ export function HistoricalSetup({
   onBack,
   onDone,
 }: {
-  kind: EntryKind
+  kind: Exclude<EntryKind, 'refund'>
   account: Account
   members: Member[]
   entry: HistoricalDraft

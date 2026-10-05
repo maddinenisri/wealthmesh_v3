@@ -80,10 +80,17 @@ public class SpendingService {
     private Mono<SpendingSummary> summary(String kind, String month, UUID accountId) {
         return Mono.fromCallable(() -> parse(month)).flatMap(ym -> known(accountId).then(store
                 .totalsByCategory(kind, ym.atDay(1), ym.plusMonths(1).atDay(1), accountId).collectList())
-                .map(rows -> new SpendingSummary(ym.toString(),
-                        Money.format(rows.stream().map(r -> r.total()).reduce(BigDecimal.ZERO, BigDecimal::add)),
-                        rows.stream().map(r -> new SpendingSummary.CategorySpending(r.categoryId(), r.name(),
-                                Money.format(r.total()), r.count())).toList())));
+                .map(rows -> {
+                    BigDecimal total = rows.stream().map(r -> r.total()).reduce(BigDecimal.ZERO, BigDecimal::add);
+                    return new SpendingSummary(ym.toString(), Money.format(total), refundNote(total),
+                            rows.stream().map(r -> new SpendingSummary.CategorySpending(r.categoryId(), r.name(),
+                                    Money.format(r.total()), r.count(), refundNote(r.total()))).toList());
+                }));
+    }
+
+    /** Spending below zero is not hidden as $0.00: it is explained (CARD_008). Income never goes below zero. */
+    private static String refundNote(BigDecimal total) {
+        return total.signum() < 0 ? "Refunds exceed purchases" : null;
     }
 
     private Flux<ActivityResponse> entries(String kind, String month, UUID categoryId, UUID accountId) {

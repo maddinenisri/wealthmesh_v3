@@ -55,11 +55,15 @@ const amountRules = {
   },
 }
 
+const editNoun = (kind: EntryKind, onCard: boolean) =>
+  kind === 'income' ? 'money in' : kind === 'refund' ? 'refund' : onCard ? 'purchase' : 'money out'
+
 /** Wording that differs between money out (expense) and money in (income). */
 const WORDS = {
   expense: { add: 'Add money out', review: 'Review money out', place: 'Paid from' },
   income: { add: 'Add money in', review: 'Review money in', place: 'Received into' },
   purchase: { add: 'Record purchase', review: 'Review purchase', place: 'Charged to' },
+  refund: { add: 'Record refund', review: 'Review refund', place: 'Refunded to' },
 } as const
 
 /**
@@ -181,7 +185,7 @@ export function AddEntry({
     }
   }
 
-  if (historical) {
+  if (historical && kind !== 'refund') {
     return (
       <HistoricalSetup
         kind={kind}
@@ -285,15 +289,13 @@ export function AddEntry({
   return (
     <Card aria-labelledby="entry-heading">
       <CardTitle id="entry-heading" className="text-lg">
-        {editing
-          ? `Edit ${kind === 'income' ? 'money in' : onCard ? 'purchase' : 'money out'}`
-          : words.add}
+        {editing ? `Edit ${editNoun(kind, onCard)}` : words.add}
       </CardTitle>
       <form
         noValidate
         className="mt-3 flex max-w-md flex-col gap-4"
         onSubmit={handleSubmit((values) =>
-          !editing && values.occurredOn < account.openedOn
+          !editing && values.occurredOn < account.openedOn && kind !== 'refund' && !onCard
             ? setHistorical(values)
             : setReviewing(values),
         )}

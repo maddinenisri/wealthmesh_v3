@@ -213,7 +213,13 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
       {editing && today.data && members && (
         <Panel key={editing.id}>
           <AddEntry
-            kind={editing.kind === 'income' ? 'income' : 'expense'}
+            kind={
+              editing.kind === 'income'
+                ? 'income'
+                : editing.kind === 'refund'
+                  ? 'refund'
+                  : 'expense'
+            }
             account={account}
             members={members}
             today={today.data}
@@ -339,7 +345,15 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             >
               Record purchase
             </Button>
-            <Button variant="secondary" size="sm" disabled>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setAdding('refund')
+              }}
+              disabled={!ready}
+            >
               Record refund
             </Button>
             <Button variant="secondary" size="sm" disabled>

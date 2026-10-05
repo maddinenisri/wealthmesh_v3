@@ -125,4 +125,110 @@ test.describe.serial('credit cards', () => {
     await expect(main).toContainText('Harbor Credit Union')
     await expect(main).toContainText('$300.00 owed')
   })
+  async function fillEntry(
+    page: Page,
+    fields: { description?: string; amount: string; date: string; category: string },
+  ) {
+    if (fields.description)
+      await page.getByLabel('Description', { exact: true }).fill(fields.description)
+    await page.getByLabel('Amount', { exact: true }).fill(fields.amount)
+    await page.getByLabel('Date', { exact: true }).fill(fields.date)
+    await page.getByLabel('Category', { exact: true }).selectOption({ label: fields.category })
+  }
+
+  async function saveReviewed(page: Page, review: string) {
+    await page.getByRole('button', { name: 'Review' }).click()
+    const panel = page.getByRole('region', { name: review })
+    await expect(panel).toBeVisible()
+    await expect(panel).toBeInViewport()
+    await page.getByRole('button', { name: 'Confirm saving' }).click()
+  }
+
+  for (const width of [710, 1280]) {
+    test(`V2_CARD_002 V2_CARD_008 V2_CARD_009 V2_CARD_011 records a purchase, refund, interest and a fee at ${width}px and every screen agrees`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      const name = `Spending Card ${width}`
+      const response = await request.post('/api/v1/accounts', {
+        data: {
+          type: 'credit_card',
+          name,
+          institution: 'Harbor Cards',
+          ownerMemberIds: [await ownerId(request)],
+          openedOn: '2026-09-01',
+          openingBalance: '1000.00',
+          balanceSide: 'owed',
+        },
+      })
+      expect(response.status()).toBe(201)
+      const id = ((await response.json()) as { id: string }).id
+      await page.goto(`/accounts/${id}`)
+      await page.getByLabel('Entering as').selectOption({ label: OWNER })
+
+      // V2_CARD_009: a negative purchase is explained in view and everything stays selected.
+      await page.getByRole('button', { name: 'Record purchase' }).click()
+      await fillEntry(page, { amount: '-$100.00', date: '2026-09-10', category: 'Groceries' })
+      await page.getByRole('button', { name: 'Review' }).click()
+      const message = page.getByText('Enter an amount greater than zero')
+      await expect(message).toBeVisible()
+      await expect(message).toBeInViewport()
+      await expect(page.getByLabel('Amount', { exact: true })).toBeFocused()
+      await expect(page.getByLabel('Date', { exact: true })).toHaveValue('2026-09-10')
+      await expect(page.getByLabel('Category', { exact: true })).toHaveValue(/.+/)
+      await page.getByLabel('Amount', { exact: true }).fill('$100.00')
+      await saveReviewed(page, 'Review purchase')
+      await expect(page.getByRole('main')).toContainText('$1,100.00 owed')
+
+      await page.getByRole('button', { name: 'Record refund' }).click()
+      await fillEntry(page, { amount: '$20.00', date: '2026-09-12', category: 'Groceries' })
+      await saveReviewed(page, 'Review refund')
+      await expect(page.getByRole('main')).toContainText('$1,080.00 owed')
+
+      await page.getByRole('button', { name: 'Record purchase' }).click()
+      await fillEntry(page, {
+        description: 'Interest charged',
+        amount: '$15.00',
+        date: '2026-09-25',
+        category: 'Interest charged',
+      })
+      await saveReviewed(page, 'Review purchase')
+      await page.getByRole('button', { name: 'Record purchase' }).click()
+      await fillEntry(page, {
+        description: 'Annual fee',
+        amount: '$25.00',
+        date: '2026-09-26',
+        category: 'Annual fee',
+      })
+      await saveReviewed(page, 'Review purchase')
+      await expect(page.getByRole('main')).toContainText('$1,120.00 owed')
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+
+      // The same figures on every screen: Spending, the Month review, the account list and the Household card.
+      await page.getByRole('link', { name: 'Spending' }).click()
+      await page.getByLabel('Month', { exact: true }).fill('2026-09')
+      await page.getByLabel('Account', { exact: true }).selectOption({ label: name })
+      await expect(page.getByRole('region', { name: 'Month review' })).toContainText(
+        'Spending $120.00',
+      )
+      const month = page.getByRole('region', { name: /September 2026/ })
+      await expect(month).toContainText('Spending $120.00')
+      await expect(month.getByRole('list', { name: 'Spending by category' })).toContainText(
+        'Groceries $80.00',
+      )
+      await expect(month.getByRole('list', { name: 'Spending by category' })).toContainText(
+        'Interest charged $15.00',
+      )
+      await expect(month.getByRole('list', { name: 'Spending by category' })).toContainText(
+        'Annual fee $25.00',
+      )
+      await page.getByRole('link', { name: 'Accounts', exact: true }).click()
+      await expect(row(page, name)).toContainText('$1,120.00 owed')
+      await page.goto('/')
+      await expect(page.getByRole('listitem').filter({ hasText: name })).toContainText(
+        '$1,120.00 owed',
+      )
+    })
+  }
 })

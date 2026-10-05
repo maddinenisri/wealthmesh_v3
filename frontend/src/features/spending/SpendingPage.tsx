@@ -194,6 +194,9 @@ function MonthSection({
         <>
           <p className="mt-4">
             {kind === 'income' ? 'Income' : 'Spending'} <Amount value={Number(totals.data.total)} />
+            {totals.data.note && (
+              <span className="block text-caption text-ink-muted">{totals.data.note}</span>
+            )}
           </p>
           <ul aria-label={words.list} className="mt-3 flex flex-col gap-1">
             {totals.data.categories.map((category) => (
@@ -209,6 +212,9 @@ function MonthSection({
                 </Button>{' '}
                 <Amount value={Number(category.total)} /> (
                 {plural(category.count, words.noun, words.nouns)})
+                {category.note && (
+                  <span className="block text-caption text-ink-muted">{category.note}</span>
+                )}
               </li>
             ))}
           </ul>
@@ -254,7 +260,12 @@ function Entries({
               <Td>{entry.occurredOn}</Td>
               <Td>{entry.accountName}</Td>
               <Td className="text-right">
-                <Amount value={Number(entry.amount)} />
+                <Amount
+                  value={entry.kind === 'refund' ? -Number(entry.amount) : Number(entry.amount)}
+                />
+                {entry.kind === 'refund' && (
+                  <span className="block text-caption text-ink-muted">Refund</span>
+                )}
               </Td>
             </tr>
           ))}
@@ -265,7 +276,8 @@ function Entries({
           <Detail label="Account">{open.accountName}</Detail>
           <Detail label="Date">{open.occurredOn}</Detail>
           <Detail label="Amount">
-            <Amount value={Number(open.amount)} />
+            <Amount value={open.kind === 'refund' ? -Number(open.amount) : Number(open.amount)} />
+            {open.kind === 'refund' && ' (refund)'}
           </Detail>
           <Detail label="Category">{open.categoryName ?? 'Uncategorized'}</Detail>
           <Detail label="Entered by">

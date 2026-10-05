@@ -89,8 +89,15 @@ export type CategorySpending = {
   name: string
   total: string
   count: number
+  /** "Refunds exceed purchases" when the total is below zero. */
+  note: string | null
 }
-export type SpendingSummary = { month: string; total: string; categories: CategorySpending[] }
+export type SpendingSummary = {
+  month: string
+  total: string
+  note: string | null
+  categories: CategorySpending[]
+}
 /** Income uses the same shape as spending: a total and one row per category. */
 export type MonthReview = {
   month: string
@@ -225,6 +232,7 @@ function parseSummary(value: unknown): SpendingSummary {
   return {
     month: str(data.month),
     total: str(data.total),
+    note: strOrNull(data.note),
     categories: list(data.categories, (entry) => {
       const row = record(entry)
       if (typeof row.count !== 'number') throw bad()
@@ -233,6 +241,7 @@ function parseSummary(value: unknown): SpendingSummary {
         name: str(row.name),
         total: str(row.total),
         count: row.count,
+        note: strOrNull(row.note),
       }
     }),
   }
@@ -259,11 +268,13 @@ export const listCategories = (kind: 'spending' | 'income') =>
 export const listActivity = (accountId: string) =>
   request(`/accounts/${accountId}/activity`, { parse: (value) => list(value, parseActivity) })
 
-export type EntryKind = 'expense' | 'income'
+export type EntryKind = 'expense' | 'income' | 'refund'
+
+const ENTRY_PATH = { expense: 'expenses', income: 'income', refund: 'refunds' } as const
 
 /** `key` identifies one form instance: a repeat of the same save returns the stored entry (D-024). */
 export const recordEntry = (accountId: string, kind: EntryKind, key: string, entry: NewEntry) =>
-  request(`/accounts/${accountId}/${kind === 'income' ? 'income' : 'expenses'}`, {
+  request(`/accounts/${accountId}/${ENTRY_PATH[kind]}`, {
     method: 'POST',
     headers: { 'Idempotency-Key': key },
     body: entry,

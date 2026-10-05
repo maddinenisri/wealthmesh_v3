@@ -81,7 +81,7 @@ What exists (grep, not memory):
 | Group | Scenario IDs | Test level | Status |
 | --- | --- | --- | --- |
 | A. Card setup: enable `credit_card` (server and `accountTypes.ts` together), Owed / Card credit chooser, signed opening, list, detail and Household labels, edit separately from Balance, name and amount errors keep entries, Cancel adds nothing, wealth shows debt and Card credit separately, no Overdrawn label on a card, per-type kind rules (decision 2) | `V2_CARD_001`, `003`, `004`, `005`, `014` | API + UI (MSW) + e2e at 710px and 1280px | done 2026-10-05 |
-| B. Card spending: purchase, refund, interest and fee entries, refund kind in every spending reader, two seeded categories, negative category with explanation, card in the Spending account filter, repayment and an earlier month excluded | `V2_CARD_002`, `008`, `009`, `011`, `V2_MONTHLY_002` | API + UI + e2e at 710px and 1280px (refund form) | todo |
+| B. Card spending: purchase, refund, interest and fee entries, refund kind in every spending reader (one shared definition, `ActivityStore.Counted`), two seeded categories (V12), negative category with explanation, card in the Spending account filter | `V2_CARD_002`, `008`, `009`, `011` (`V2_MONTHLY_002` moved to C, see deviation) | API + UI + e2e at 710px and 1280px (refund form) | done 2026-10-05 |
 | C. Card payment: `MovementKind.CARD_PAYMENT`, V12, Record payment from the card detail (bank chosen, destination fixed), review and Cancel, overpayment explained, edit, remove and Undo as a pair, plain transfers to a card refused | `V2_CARD_006`, `007`, `012`, `013` | API (race tests) + UI + e2e at 710px and 1280px | todo |
 | D. Card Balance correction and statements: Update balance with Owed / Card credit, increase in debt wording, statement with a meaning, corrected copy keeps the original | `V2_CARD_010`, `V2_SUPPORTING_RECORD_001` | API + UI + e2e at 710px and 1280px (Update balance on a card) | todo |
 
@@ -118,6 +118,14 @@ Covers slices 00b to 08 (the owner asked for how often a Given was the only bloc
 | slice 08 | filled at Prove | | |
 
 Levels: unit, API (Testcontainers), UI (Vitest + MSW), e2e (Playwright). Every test cites its scenario ID.
+
+### Deviations from the approved plan
+
+- `V2_MONTHLY_002` moved from group B to group C: its Given is "checking paid that card $500.00", which needs card payments (group C). Counted as a Given-only blocker inside the slice (see the tally).
+- The card-leg migration is V13 (group C); V12 carries only the two seeded categories (group B).
+- Refunds: the server accepts a refund on any account that holds activity; the UI offers "Record refund" on a card only (no scenario asks for a bank refund).
+- The shared definition of spending is `ActivityStore.Counted.of(kind, prefix)` (filter and per-row value: expenses minus refunds). `monthTotal`, `totalsByCategory`, `monthEntries` and `spendingByMonth` all build their SQL from it; `TransferPreviewService` and `ReplacementPreviewService` read through `monthTotal`.
+- `SpendingSummary` gained `note` (month) and `CategorySpending.note`: "Refunds exceed purchases" when a total is below zero.
 
 ## Coverage
 

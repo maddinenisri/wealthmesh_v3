@@ -49,6 +49,8 @@ export function ChangeEntry({
   onDone: () => void
 }) {
   const income = entry.kind === 'income'
+  // A refund raises the Balance like money in, and lowers the month's spending instead of raising it.
+  const refund = entry.kind === 'refund'
   const month = entry.occurredOn.slice(0, 7)
   const spending = useSpending(income ? '' : month)
   const incomeTotal = useIncome(income ? month : '')
@@ -57,10 +59,11 @@ export function ChangeEntry({
   const { member, setMemberId } = useEnteringAs(members)
 
   // Money in raises the Balance and the month's income; money out lowers the Balance and counts as spending.
-  const effect = (income ? 1 : -1) * Number(entry.amount) * (mode === 'remove' ? -1 : 1)
+  const effect = (income || refund ? 1 : -1) * Number(entry.amount) * (mode === 'remove' ? -1 : 1)
   const balanceAfter = Number(account.balance.amount) + effect
   const monthAfter = monthTotal.data
-    ? Number(monthTotal.data.total) + Number(entry.amount) * (mode === 'remove' ? -1 : 1)
+    ? Number(monthTotal.data.total) +
+      Number(entry.amount) * (mode === 'remove' ? -1 : 1) * (refund ? -1 : 1)
     : null
   const label = `${MONTHS[Number(month.slice(5)) - 1]} ${income ? 'Income' : 'spending'} after ${mode === 'remove' ? 'removal' : 'Undo'}`
   const title = mode === 'remove' ? 'Review removal' : 'Review Undo'

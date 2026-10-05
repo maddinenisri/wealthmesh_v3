@@ -110,14 +110,30 @@ public class ActivityStore {
         return client.sql(ENTRY_COLUMNS + " AND a.id = :id").bind("id", id).map(ActivityStore::entry).one();
     }
 
+    /**
+     * What counts toward one month figure, defined once so every reader agrees (decision 3): spending is expenses
+     * minus refunds, income is income. `filter` selects the rows, `value` is each row's effect on the figure, and
+     * `prefix` is the table alias ("a." or ""). Transfers, payments and corrections are in neither.
+     */
+    public record Counted(String filter, String value) {
+        public static Counted of(String kind, String prefix) {
+            return "income".equals(kind)
+                    ? new Counted(prefix + "kind = 'income'", prefix + "amount")
+                    : new Counted(prefix + "kind IN ('expense', 'refund')",
+                            "CASE WHEN " + prefix + "kind = 'refund' THEN -" + prefix + "amount ELSE " + prefix
+                                    + "amount END");
+        }
+    }
+
     /** Entries of one kind (expense or income) in a month, optionally one category. */
     public Flux<ActivityResponse> monthEntries(String kind, LocalDate from, LocalDate to, UUID categoryId,
             UUID accountId) {
-        String sql = ENTRY_COLUMNS + " AND a.kind = :kind AND a.occurred_on >= :from AND a.occurred_on < :to"
+        String sql = ENTRY_COLUMNS + " AND " + Counted.of(kind, "a.").filter()
+                + " AND a.occurred_on >= :from AND a.occurred_on < :to"
                 + (categoryId == null ? "" : " AND a.category_id = :category")
                 + (accountId == null ? "" : " AND a.account_id = :account")
                 + " ORDER BY a.occurred_on, a.created_at";
-        DatabaseClient.GenericExecuteSpec spec = client.sql(sql).bind("kind", kind).bind("from", from).bind("to", to);
+        DatabaseClient.GenericExecuteSpec spec = client.sql(sql).bind("from", from).bind("to", to);
         if (categoryId != null) {
             spec = spec.bind("category", categoryId);
         }
@@ -129,9 +145,11 @@ public class ActivityStore {
 
     /** Total of one kind (expense or income) in a month; removed rows never count. */
     public Mono<BigDecimal> monthTotal(String kind, LocalDate from, LocalDate to) {
-        return client.sql("SELECT COALESCE(SUM(amount), 0) AS total FROM activity WHERE removed_at IS NULL "
-                        + "AND kind = :kind AND occurred_on >= :from AND occurred_on < :to")
-                .bind("kind", kind).bind("from", from).bind("to", to)
+        Counted counted = Counted.of(kind, "");
+        return client.sql("SELECT COALESCE(SUM(" + counted.value() + "), 0) AS total FROM activity "
+                        + "WHERE removed_at IS NULL AND " + counted.filter()
+                        + " AND occurred_on >= :from AND occurred_on < :to")
+                .bind("from", from).bind("to", to)
                 .map((row, meta) -> row.get("total", BigDecimal.class)).one();
     }
 
@@ -140,13 +158,15 @@ public class ActivityStore {
 
     /** Totals of one kind (expense or income) in a month, one row per category. */
     public Flux<CategoryTotal> totalsByCategory(String kind, LocalDate from, LocalDate to, UUID accountId) {
-        DatabaseClient.GenericExecuteSpec spec = client.sql("""
-                SELECT a.category_id, COALESCE(c.name, 'Uncategorized') AS name, SUM(a.amount) AS total, COUNT(*) AS n
-                FROM activity a LEFT JOIN category c ON c.id = a.category_id
-                WHERE a.removed_at IS NULL AND a.kind = :kind AND a.occurred_on >= :from AND a.occurred_on < :to"""
+        Counted counted = Counted.of(kind, "a.");
+        DatabaseClient.GenericExecuteSpec spec = client.sql("SELECT a.category_id, "
+                + "COALESCE(c.name, 'Uncategorized') AS name, SUM(" + counted.value() + ") AS total, COUNT(*) AS n "
+                + "FROM activity a LEFT JOIN category c ON c.id = a.category_id "
+                + "WHERE a.removed_at IS NULL AND " + counted.filter()
+                + " AND a.occurred_on >= :from AND a.occurred_on < :to"
                 + (accountId == null ? "" : " AND a.account_id = :account")
-                + " GROUP BY a.category_id, c.name ORDER BY SUM(a.amount) DESC, name")
-                .bind("kind", kind).bind("from", from).bind("to", to);
+                + " GROUP BY a.category_id, c.name ORDER BY SUM(" + counted.value() + ") DESC, name")
+                .bind("from", from).bind("to", to);
         if (accountId != null) {
             spec = spec.bind("account", accountId);
         }
@@ -159,12 +179,11 @@ public class ActivityStore {
     public record MonthTotal(String month, BigDecimal total) {
     }
 
-    /** Spending per calendar month that has at least one expense, oldest first. */
+    /** Spending per calendar month that has at least one expense or refund, oldest first. */
     public Flux<MonthTotal> spendingByMonth() {
-        return client.sql("""
-                SELECT to_char(occurred_on, 'YYYY-MM') AS month, SUM(amount) AS total
-                FROM activity WHERE removed_at IS NULL AND kind = 'expense'
-                GROUP BY 1 ORDER BY 1""")
+        Counted counted = Counted.of("expense", "");
+        return client.sql("SELECT to_char(occurred_on, 'YYYY-MM') AS month, SUM(" + counted.value() + ") AS total "
+                + "FROM activity WHERE removed_at IS NULL AND " + counted.filter() + " GROUP BY 1 ORDER BY 1")
                 .map((row, meta) -> new MonthTotal(row.get("month", String.class), row.get("total", BigDecimal.class)))
                 .all();
     }
@@ -238,7 +257,7 @@ public class ActivityStore {
                 LEFT JOIN activity cp ON cp.movement_id = a.movement_id AND cp.id <> a.id
                 LEFT JOIN account cpa ON cpa.id = cp.account_id
                 WHERE a.account_id = :account
-                  AND a.kind IN ('expense', 'income', 'correction', 'transfer_in', 'transfer_out')
+                  AND a.kind IN ('expense', 'income', 'refund', 'correction', 'transfer_in', 'transfer_out')
                 ORDER BY a.created_at DESC, a.occurred_on DESC""")
                 .bind("account", accountId)
                 .map((row, meta) -> new HistoryEntry(row.get("id", UUID.class), row.get("kind", String.class),
