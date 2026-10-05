@@ -6,12 +6,13 @@ import { Amount, Button, Table, Td, Th } from '../../design-system'
 import { useAccountActivity } from '../../hooks/useActivity'
 import { ownerNames } from '../accounts/ownerNames'
 import { EntryHistory } from './EntryHistory'
-import { signedAmount } from './signedAmount'
+import { shownAmount } from './signedAmount'
 import { givesMoney, isMovement, movementWord, rowName } from './transferRows'
 
 /** Saved activity of one account, newest first. Income shows as money in, expenses as money out. */
 export function ActivityList({
   accountId,
+  accountType,
   opening,
   members,
   onEdit,
@@ -20,6 +21,7 @@ export function ActivityList({
   onUndo,
 }: {
   accountId: string
+  accountType?: string
   opening?: { amount: string; on: string; type?: string }
   members: Member[] | undefined
   /** Starts correcting one entry; left out while another form is open. */
@@ -47,7 +49,7 @@ export function ActivityList({
                 <Th>Date</Th>
                 <Th>Description</Th>
                 <Th>Category</Th>
-                <Th>Entered by</Th>
+                <Th className="hidden lg:table-cell">Entered by</Th>
                 <Th className="text-right">Amount</Th>
                 <Th>
                   <span className="sr-only">Actions</span>
@@ -66,13 +68,21 @@ export function ActivityList({
                     ) : (
                       (entry.description ?? '')
                     )}
+                    <span className="block text-caption text-ink-muted lg:hidden">
+                      {entry.enteredByMemberId
+                        ? `by ${ownerNames([entry.enteredByMemberId], members)}`
+                        : ''}
+                    </span>
                   </Td>
                   <Td>{entry.categoryName ?? ''}</Td>
-                  <Td>
+                  <Td className="hidden lg:table-cell">
                     {entry.enteredByMemberId ? ownerNames([entry.enteredByMemberId], members) : ''}
                   </Td>
-                  <Td className="text-right">
-                    <Amount value={signedAmount(entry)} />
+                  <Td className="text-right whitespace-nowrap">
+                    <Amount value={shownAmount(entry, accountType)} />
+                    {entry.kind === 'refund' && (
+                      <span className="block text-caption text-ink-muted">Refund</span>
+                    )}
                   </Td>
                   <Td className="whitespace-nowrap">
                     {entry.kind === 'correction' ? (

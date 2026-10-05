@@ -356,7 +356,7 @@ describe('transfers in the wider picture', () => {
 
     await user.click(screen.getByRole('link', { name: 'Spending' }))
     fireEvent.change(await screen.findByLabelText('Month'), { target: { value: '2026-09' } })
-    await user.selectOptions(await screen.findByLabelText('Account'), 'Emergency Savings')
+    await user.selectOptions(await screen.findByLabelText('Account'), 'Emergency Savings (Savings)')
     const review = await screen.findByRole('region', { name: 'Month review' })
     expect(await within(review).findByText(/Spending/)).toBeInTheDocument()
     expect(review).toHaveTextContent('Spending $0.00')

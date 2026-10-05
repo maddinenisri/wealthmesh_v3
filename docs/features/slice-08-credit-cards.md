@@ -22,7 +22,7 @@ Repository facts supersede this prompt. Stop at the task-list approval and again
 ```
 
 - 2026-10-05 Checkpoint 1 answer: approved the task list and all 11 decisions, no split (fallback after group B only on a stop rule). Q1 yes; Q2 yes, new `card_payment_in` kind with V12; Q3 yes, refuse the starting-balance correction on a card with "Use Update balance". Additions: (1) spending = expenses minus refunds lives in ONE shared query/function used by every spending reader, named in the inventory; (2) one test that Spending, the Month review, the account list and the Household card agree after a refund. Build A, B, C, D, one commit per group, local only, no push, no AI trailer.
-- 2026-10-05 Checkpoint 2 answer: pending
+- 2026-10-05 Checkpoint 2 answer: Cowork pass at 710px: all seven steps passed; 10 findings (table below). Findings 9 and 10 left to the owner; 10 is the checkpoint-1 answer, 9 is Q-034. 1280px clicks did not land, so 1280px rests on e2e.
 
 ## Scope
 
@@ -185,8 +185,20 @@ App: `npm run dev` is running (backend 8081, Vite http://localhost:5180). V12 an
 
 ## Cowork findings
 
-| # | Check | Result | Fault seen | Test added |
-| --- | --- | --- | --- | --- |
+Owner's Cowork pass (2026-10-05, dev data, Entering as Maya): all seven steps passed at 710px and every figure matched across the card page, Accounts list, Household card and Spending. At 1280px layout was measured (no sideways scroll, tables fit, headings at the top with focus) but clicks did not land reliably, so panel position and Cancel focus there rest on the e2e at 1280px.
+
+| # | Finding | Result | Test added (each failed before the fix) |
+| --- | --- | --- | --- |
+| 1 | Activity description became a 114px column at 710px | Fixed: Entered by moves under the description below 1024px, amount does not wrap | `11c-cards.spec.ts` "Cowork 1 to 3": description cell at least 150px |
+| 2 | History table scrolls inside its card at 710px (also slice 06 finding 5, slice 07 finding 3) | Fixed: Category and Reason columns appear from 1024px, below it they sit inside the Description and Saved by cells | same test: the wrapper has no inner scroll; removing the change fails it |
+| 3 | Accounts list balance wrapped over three lines | Fixed: the Balance cell does not wrap | same test: "Card credit" is one line |
+| 4 | "Groceries $80.00 (2 expenses)" counted a refund as an expense | Fixed: the Spending list says entries | `CardActivity.test.tsx` V2_MONTHLY_002 Cowork 4 and 7 |
+| 5 | A purchase read -$100.00 beside a Balance that read owed; a refund had no label | Fixed: a card list shows debt added as positive and credits negative, a refund is labelled "Refund" | `CardActivity.test.tsx` V2_CARD_006 Cowork 5 and 8 |
+| 6 | Checking offered Interest charged and Annual fee | Fixed in the UI: only a card offers them (the server keeps one list, D-020) | `CardActivity.test.tsx` V2_CARD_011 Cowork 6 |
+| 7 | Spending Account chooser lacked the type | Fixed: "Everyday Credit Card (Credit card)" | same test as 4 |
+| 8 | Purchase and refund reviews lacked the card Balance after | Fixed for a card | same test as 5 |
+| 9 | A card payment can only be started from the card page | Open: Q-034, recommend yes (a "Pay a card" button on checking and savings) in slice 09 or with the next account work | none |
+| 10 | Update balance on a card has no "Correct the starting balance" | Intended: the owner's checkpoint answer 3 (use Update balance) | none |
 
 ## How it works
 

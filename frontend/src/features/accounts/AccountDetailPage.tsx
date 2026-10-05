@@ -295,6 +295,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
         </CardTitle>
         <ActivityList
           accountId={account.id}
+          accountType={account.type}
           opening={{ amount: account.openingAmount, on: account.openedOn, type: account.type }}
           members={members}
           onEdit={

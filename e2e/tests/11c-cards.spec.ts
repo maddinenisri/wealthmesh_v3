@@ -208,7 +208,9 @@ test.describe.serial('credit cards', () => {
       // The same figures on every screen: Spending, the Month review, the account list and the Household card.
       await page.getByRole('link', { name: 'Spending' }).click()
       await page.getByLabel('Month', { exact: true }).fill('2026-09')
-      await page.getByLabel('Account', { exact: true }).selectOption({ label: name })
+      await page
+        .getByLabel('Account', { exact: true })
+        .selectOption({ label: `${name} (Credit card)` })
       await expect(page.getByRole('region', { name: 'Month review' })).toContainText(
         'Spending $120.00',
       )
@@ -381,7 +383,9 @@ test.describe.serial('credit cards', () => {
 
     await page.goto('/spending')
     await page.getByLabel('Month', { exact: true }).fill('2026-09')
-    await page.getByLabel('Account', { exact: true }).selectOption({ label: 'Monthly Card' })
+    await page
+      .getByLabel('Account', { exact: true })
+      .selectOption({ label: 'Monthly Card (Credit card)' })
     const month = page.getByRole('region', { name: /September 2026/ })
     await expect(month).toContainText('Spending $600.00')
     await month.getByRole('button', { name: 'Groceries' }).click()
@@ -490,4 +494,57 @@ test.describe.serial('credit cards', () => {
       expect(await sideways(page)).toBeLessThanOrEqual(0)
     })
   }
+  test('V2_CARD_006 V2_CARD_010 Cowork 1 to 3: at 710px the card activity, its history and the Accounts balance fit', async ({
+    page,
+    request,
+  }) => {
+    await page.setViewportSize({ width: 710, height: 900 })
+    const bank = await makeAccount(request, {
+      type: 'checking',
+      name: 'Layout Everyday Checking',
+      openingBalance: '5000.00',
+    })
+    const cardId = await makeAccount(request, {
+      type: 'credit_card',
+      name: 'Layout Rewards Card',
+      institution: 'Harbor Cards',
+      openingBalance: '50.00',
+      balanceSide: 'credit',
+    })
+    const member = await ownerId(request)
+    const send = async (path: string, key: string, data: Record<string, unknown>) => {
+      const response = await request.post(path, {
+        headers: { 'Idempotency-Key': `e2e-layout-${key}` },
+        data: { enteredByMemberId: member, ...data },
+      })
+      expect(response.status()).toBe(201)
+    }
+    await send('/api/v1/card-payments', 'pay', {
+      fromAccountId: bank,
+      toAccountId: cardId,
+      amount: '20.00',
+      occurredOn: '2026-09-20',
+    })
+    await send(`/api/v1/accounts/${cardId}/balance-corrections`, 'fix', {
+      requestedBalance: '25.00',
+      balanceSide: 'credit',
+      asOn: '2026-09-30',
+      reason: 'Statement shows a different amount than the activity explains',
+    })
+    await page.goto(`/accounts/${cardId}`)
+    const description = page.getByRole('cell', { name: /Payment from Layout Everyday Checking/ })
+    expect((await description.boundingBox())!.width).toBeGreaterThanOrEqual(150)
+    await page.getByRole('button', { name: 'Show history' }).click()
+    const history = page.getByRole('table', { name: 'History' })
+    await expect(history).toBeVisible()
+    const inner = await history.evaluate((table) => {
+      const wrapper = table.parentElement!
+      return wrapper.scrollWidth - wrapper.clientWidth
+    })
+    expect(inner).toBeLessThanOrEqual(0)
+
+    await page.getByRole('link', { name: 'Accounts', exact: true }).click()
+    const balance = row(page, 'Layout Rewards Card').getByText('Card credit')
+    expect((await balance.boundingBox())!.height).toBeLessThan(28)
+  })
 })

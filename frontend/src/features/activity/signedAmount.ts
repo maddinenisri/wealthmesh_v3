@@ -4,3 +4,13 @@ export function signedAmount(entry: { kind: string; amount: string }): number {
     ? -Number(entry.amount)
     : Number(entry.amount)
 }
+
+/**
+ * What an amount reads as in a list. A card shows debt added as a positive figure (a purchase) and debt taken away as
+ * a negative one (a refund or a payment), the way a card statement does; every other account shows the effect on
+ * the Balance.
+ */
+export function shownAmount(entry: { kind: string; amount: string }, accountType?: string): number {
+  const effect = signedAmount(entry)
+  return accountType === 'credit_card' ? -effect : effect
+}

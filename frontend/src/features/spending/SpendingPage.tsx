@@ -21,6 +21,7 @@ import {
   useSpendingHistory,
 } from '../../hooks/useActivity'
 import { ownerNames } from '../accounts/ownerNames'
+import { accountChoice } from '../transfers/accountChoice'
 import { useAccountContext } from '../accounts/useAccountContext'
 import type { Activity } from '../../api/activity'
 
@@ -74,7 +75,7 @@ export function SpendingPage() {
                 <option value="">All accounts</option>
                 {accounts.data?.map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.name}
+                    {accountChoice(account)}
                   </option>
                 ))}
               </Select>
@@ -139,8 +140,8 @@ const KIND = {
     list: 'Spending by category',
     table: 'Expenses in this category',
     details: 'Expense details',
-    noun: 'expense',
-    nouns: 'expenses',
+    noun: 'entry',
+    nouns: 'entries',
     column: 'Expense',
     place: 'Paid from',
   },

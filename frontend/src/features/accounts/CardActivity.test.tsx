@@ -157,4 +157,117 @@ describe('card purchases and refunds', () => {
     await user.click(screen.getByRole('button', { name: 'Confirm removal' }))
     await waitFor(() => expect(api.accounts[0].balance.amount).toBe('-1000.00'))
   })
+  it('V2_CARD_006 Cowork 5 and 8: a card purchase reads as debt added, a refund is labelled, and the review shows the Balance after', async () => {
+    const owed = card('1000.00')
+    mockApi({
+      household,
+      members: [maya, sam],
+      accounts: [{ ...owed, balance: { amount: '-1080.00', asOf: '2026-09-12' } }],
+      activity: [
+        {
+          id: 'p1',
+          accountId: owed.id,
+          kind: 'expense',
+          amount: '100.00',
+          occurredOn: '2026-09-10',
+          description: 'Groceries run',
+          categoryId: 'c0000000-0000-4000-8000-000000000003',
+          enteredByMemberId: maya.id,
+        },
+        {
+          id: 'r1',
+          accountId: owed.id,
+          kind: 'refund',
+          amount: '20.00',
+          occurredOn: '2026-09-12',
+          description: 'Returned jar',
+          categoryId: 'c0000000-0000-4000-8000-000000000003',
+          enteredByMemberId: maya.id,
+        },
+      ],
+    })
+    const { user } = renderRoute(`/accounts/${owed.id}`)
+    const purchase = (await screen.findByText('Groceries run')).closest('tr')!
+    expect(purchase).toHaveTextContent('$100.00')
+    expect(purchase).not.toHaveTextContent('-$100.00')
+    const refund = screen.getByText('Returned jar').closest('tr')!
+    expect(refund).toHaveTextContent('-$20.00')
+    expect(refund).toHaveTextContent('Refund')
+
+    await user.selectOptions(screen.getByLabelText('Entering as'), 'Maya')
+    await user.click(screen.getByRole('button', { name: 'Record purchase' }))
+    await fill(user, { amount: '$50.00', date: '2026-09-15', category: 'Groceries' })
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    const review = await screen.findByRole('region', { name: 'Review purchase' })
+    expect(review).toHaveTextContent('Everyday Credit Card Balance after$1,130.00 owed')
+  })
+
+  it('V2_CARD_011 Cowork 6: only a card offers Interest charged and Annual fee', async () => {
+    const bank: MockAccount = {
+      id: '66666666-6666-4666-8666-666666666666',
+      type: 'checking',
+      name: 'Everyday Checking',
+      institution: 'Harbor Bank',
+      ownerMemberIds: [maya.id],
+      openedOn: '2026-09-01',
+      openingAmount: '5000.00',
+      balance: { amount: '5000.00', asOf: '2026-09-01' },
+      status: 'active',
+    }
+    mockApi({ household, members: [maya, sam], accounts: [bank, card('1000.00')] })
+    const checkingPage = renderRoute(`/accounts/${bank.id}`)
+    await checkingPage.user.click(await screen.findByRole('button', { name: 'Add money out' }))
+    const categories = await screen.findByLabelText('Category')
+    await within(categories).findByRole('option', { name: 'Groceries' })
+    expect(within(categories).queryByRole('option', { name: 'Interest charged' })).toBeNull()
+    expect(within(categories).queryByRole('option', { name: 'Annual fee' })).toBeNull()
+    checkingPage.unmount()
+
+    const cardPage = renderRoute(`/accounts/${card('1000.00').id}`)
+    await cardPage.user.click(await screen.findByRole('button', { name: 'Record purchase' }))
+    const cardCategories = await screen.findByLabelText('Category')
+    expect(
+      await within(cardCategories).findByRole('option', { name: 'Interest charged' }),
+    ).toBeVisible()
+    expect(within(cardCategories).getByRole('option', { name: 'Annual fee' })).toBeVisible()
+  })
+
+  it('V2_MONTHLY_002 Cowork 4 and 7: category counts say entries, and the Account chooser names the type', async () => {
+    const owed = card('1000.00')
+    mockApi({
+      household,
+      members: [maya, sam],
+      accounts: [owed],
+      activity: [
+        {
+          id: 'p1',
+          accountId: owed.id,
+          kind: 'expense',
+          amount: '100.00',
+          occurredOn: '2026-09-10',
+          description: 'Shop',
+          categoryId: 'c0000000-0000-4000-8000-000000000003',
+          enteredByMemberId: maya.id,
+        },
+        {
+          id: 'r1',
+          accountId: owed.id,
+          kind: 'refund',
+          amount: '20.00',
+          occurredOn: '2026-09-12',
+          description: 'Back',
+          categoryId: 'c0000000-0000-4000-8000-000000000003',
+          enteredByMemberId: maya.id,
+        },
+      ],
+    })
+    renderRoute('/spending')
+    fireEvent.change(await screen.findByLabelText('Month'), { target: { value: '2026-09' } })
+    const month = await screen.findByRole('region', { name: /September 2026/ })
+    expect(await within(month).findByText(/\(2 entries\)/)).toBeVisible()
+    expect(within(month).queryByText(/expenses\)/)).toBeNull()
+    expect(
+      screen.getByRole('option', { name: 'Everyday Credit Card (Credit card)' }),
+    ).toBeInTheDocument()
+  })
 })

@@ -5,7 +5,7 @@ import { useAccountHistory } from '../../hooks/useActivity'
 import { useOpeningRevisions } from '../../hooks/useStartingBalance'
 import { formatMoney } from '../../lib/money'
 import { BalanceFigure } from '../accounts/BalanceFigure'
-import { signedAmount } from './signedAmount'
+import { shownAmount } from './signedAmount'
 import { isMovement, movementName } from './transferRows'
 
 const STATUS = { effective: 'Effective', replaced: 'Replaced', removed: 'Removed' } as const
@@ -60,11 +60,11 @@ export function EntryHistory({
           <tr>
             <Th>Date</Th>
             <Th>Description</Th>
-            <Th>Category</Th>
+            <Th className="hidden lg:table-cell">Category</Th>
             <Th className="text-right">Amount</Th>
             <Th>Status</Th>
             <Th>Saved by</Th>
-            <Th>Reason</Th>
+            <Th className="hidden lg:table-cell">Reason</Th>
             <Th>
               <span className="sr-only">Actions</span>
             </Th>
@@ -81,10 +81,15 @@ export function EntryHistory({
                     : isMovement(entry)
                       ? movementName(entry).replace(/^./, (letter) => letter.toUpperCase())
                       : (entry.description ?? '')}
+                  {entry.categoryName && (
+                    <span className="block text-caption text-ink-muted lg:hidden">
+                      {entry.categoryName}
+                    </span>
+                  )}
                 </Td>
-                <Td>{entry.categoryName ?? ''}</Td>
+                <Td className="hidden lg:table-cell">{entry.categoryName ?? ''}</Td>
                 <Td className="text-right whitespace-nowrap">
-                  <Amount value={signedAmount(entry)} />
+                  <Amount value={shownAmount(entry, opening?.type)} />
                 </Td>
                 <Td>
                   {STATUS[entry.status]}
@@ -119,8 +124,13 @@ export function EntryHistory({
                 <Td>
                   {entry.enteredByName ?? ''}
                   <div className="text-caption text-ink-muted">{stamp(entry.createdAt)}</div>
+                  {entry.reason && (
+                    <div className="text-caption text-ink-muted [overflow-wrap:anywhere] lg:hidden">
+                      Reason: {entry.reason}
+                    </div>
+                  )}
                 </Td>
-                <Td>{entry.reason ?? ''}</Td>
+                <Td className="hidden lg:table-cell">{entry.reason ?? ''}</Td>
                 <Td>
                   {entry.status === 'removed' && (
                     <Button
@@ -165,7 +175,7 @@ export function EntryHistory({
                   </span>
                 )}
               </Td>
-              <Td />
+              <Td className="hidden lg:table-cell" />
               <Td className="text-right whitespace-nowrap">
                 <Amount value={Number(correction.openingAmount)} />
               </Td>
@@ -180,8 +190,11 @@ export function EntryHistory({
               <Td>
                 {correction.enteredByName}
                 <div className="text-caption text-ink-muted">{stamp(correction.createdAt)}</div>
+                <div className="text-caption text-ink-muted [overflow-wrap:anywhere] lg:hidden">
+                  Reason: {correction.reason}
+                </div>
               </Td>
-              <Td>{correction.reason}</Td>
+              <Td className="hidden lg:table-cell">{correction.reason}</Td>
               <Td />
             </tr>
           ))}
@@ -189,7 +202,7 @@ export function EntryHistory({
             <tr>
               <Td className="whitespace-nowrap">{original.on}</Td>
               <Td>Initial Balance</Td>
-              <Td />
+              <Td className="hidden lg:table-cell" />
               <Td className="text-right whitespace-nowrap">
                 <BalanceFigure
                   type={opening?.type ?? 'checking'}
@@ -206,7 +219,7 @@ export function EntryHistory({
                 )}
               </Td>
               <Td />
-              <Td />
+              <Td className="hidden lg:table-cell" />
               <Td />
             </tr>
           )}

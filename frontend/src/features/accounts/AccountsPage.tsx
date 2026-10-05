@@ -58,7 +58,7 @@ export function AccountsPage() {
                   </Td>
                   <Td>{ownerNames(account.ownerMemberIds, members)}</Td>
                   <Td>{account.institution}</Td>
-                  <Td className="text-right">
+                  <Td className="whitespace-nowrap text-right">
                     <BalanceFigure type={account.type} amount={account.balance.amount} />
                     <span className="block text-caption text-ink-muted">
                       as of {account.balance.asOf}

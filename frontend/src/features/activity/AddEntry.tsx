@@ -26,7 +26,7 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney, parseAmount } from '../../lib/money'
 import { MONTH_NAMES } from '../../lib/months'
 import { ACCOUNT_TYPES } from '../accounts/accountTypes'
-import { isCard } from '../accounts/cardBalance'
+import { balanceText, isCard } from '../accounts/cardBalance'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { EnteredBy } from './EnteredBy'
 import { HistoricalSetup } from './HistoricalSetup'
@@ -54,6 +54,9 @@ const amountRules = {
     return Number(amount) > 0 || 'Enter an amount greater than zero'
   },
 }
+
+/** Charges only a card has; a bank account's fees are Bank fees. The server keeps one list (D-020). */
+const CARD_ONLY_CATEGORIES = ['Interest charged', 'Annual fee']
 
 const editNoun = (kind: EntryKind, onCard: boolean) =>
   kind === 'income' ? 'money in' : kind === 'refund' ? 'refund' : onCard ? 'purchase' : 'money out'
@@ -235,6 +238,17 @@ export function AddEntry({
               <Amount value={Number(parseAmount(reviewing.amount))} />
             )}
           </Item>
+          {onCard && !editing && !reminder && (
+            <Item label={`${account.name} Balance after`}>
+              {balanceText(
+                account.type,
+                String(
+                  Number(account.balance.amount) +
+                    (kind === 'refund' ? 1 : -1) * Number(parseAmount(reviewing.amount)),
+                ),
+              )}
+            </Item>
+          )}
           <Item label="Category">
             {changed(editing?.categoryName ?? undefined, categoryName(reviewing.categoryId))}
           </Item>
@@ -349,11 +363,13 @@ export function AddEntry({
           rules={{ required: 'Choose a category' }}
         >
           <option value="">Choose a category</option>
-          {categories.data?.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
+          {categories.data
+            ?.filter((category) => onCard || !CARD_ONLY_CATEGORIES.includes(category.name))
+            .map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
         </SelectField>
         {editing && <TextField control={control} name="reason" label="Reason" />}
         {!editing && futureDate > today && (
