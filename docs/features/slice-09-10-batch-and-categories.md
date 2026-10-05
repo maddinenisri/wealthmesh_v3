@@ -75,7 +75,7 @@ What exists (grep, not memory):
 | --- | --- | --- | --- |
 | 1. Category core and classes: V14, create spending and income categories, default class, class on each expense (default or override), uncategorized expense with flag and its own unclassified total, class totals on Spending, blank and duplicate names | `V2_CATEGORIES_001`, `006`, `007`, `008` | API (Testcontainers, race) + UI (MSW) + e2e `11d-categories.spec.ts` at 710px and 1280px | done 2026-10-05 (001 default and override, 006, 007, 008) |
 | 2. Category lifecycle: change default, rename with history, merge and Undo, archive and restore, each reviewed with Cancel | `V2_CATEGORIES_002`, `003`, `004`, `005` | API (race: category row locks) + UI + e2e `11d-categories.spec.ts` (same file, restore steps below) | done 2026-10-05 |
-| 3. Batch entry: Save and add another, prepare several, review with total, Cancel, all-or-none, replay-safe, on a card and on checking | `V2_EXPENSE_002`, `003`, `004`, `005` | API (race, same key at once, retry) + UI + e2e `11e-batch.spec.ts` at 710px and 1280px | todo |
+| 3. Batch entry: Save and add another, prepare several, review with total, Cancel, all-or-none, replay-safe, on a card and on checking | `V2_EXPENSE_002`, `003`, `004`, `005` | API (race, same key at once, retry) + UI + e2e `11e-batch.spec.ts` at 710px and 1280px | done 2026-10-05 |
 | 4. Pay a card button on checking and savings (Q-034) | none (extra, cites Q-034) | UI (MSW) + e2e `11f-pay-card.spec.ts` at 710px and 1280px | todo |
 
 12 of 12 IDs; four groups, no split. Fallback split point on a stop rule: after group 2 (batch entry and Pay a card move to a later session, slices 09 partial).
@@ -104,7 +104,9 @@ This slice mutates (tests): Groceries (rename, default class), Dining (default c
 ## Progress
 
 - Group 1 done (commit `cdc3485`). Group 2 done and committed locally (2026-10-05): V15, lifecycle API (`CategoryLifecycleService`), merge as a pointer resolved in `ActivityStore` (effective category), category rows read `FOR SHARE` by entry saves and `FOR UPDATE` by category writes, Categories page with reviewed Rename, Change default, Archive, Restore, Merge and Undo, per-category History. Backend, frontend (162), e2e (100, run twice), lint and `npm run check` green. Race tests fail when the share lock or the `FOR UPDATE` is removed (mutation runs). Fix found by the e2e: a review that replaces a form inside one panel now scrolls and focuses its heading; `useReturnFocus` no longer scrolls (a card-payment e2e that checks the new row's position flaked once rows got taller).
-- Next: group 3 (batch), group 4 (Pay a card); Prove, Checkpoint 2, Land.
+- Group 3 done and committed locally (2026-10-05): `POST /accounts/{id}/expense-batches` (`BatchEntryService`, one batch key stored as `<key>:i` per row, read under the account lock, member read FOR SHARE), the Add several form with review and Cancel, and Save and add another on the single form. Deviation from decision 9: no server preview endpoint; the review is computed in the browser from the entered rows and the account Balance, and the server validates every row on save (a bad row answers 400 `Row N: ...`). Race mutations (no account lock, no member share lock) fail the batch tests. Backend, frontend (166) and e2e (108, `11e-batch.spec.ts`) green.
+- Next: group 4 (Pay a card); Prove, Checkpoint 2, Land.
+
 
 ## Coverage
 

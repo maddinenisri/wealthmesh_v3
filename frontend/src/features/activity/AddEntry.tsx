@@ -106,8 +106,10 @@ export function AddEntry({
   const [reviewing, setReviewing] = useState<Values | null>(null)
   // An entry dated before tracking began goes through a reviewed move of the start (V2_CHECKING_016).
   const [historical, setHistorical] = useState<Values | null>(null)
-  const [key] = useState(newKey)
-  const { control, handleSubmit } = useForm<Values>({
+  const [key, setKey] = useState(newKey)
+  // After "Save and add another": what was just saved, shown above the next form (EXPENSE_002).
+  const [notice, setNotice] = useState<string | null>(null)
+  const { control, handleSubmit, reset } = useForm<Values>({
     defaultValues: {
       description: editing?.description ?? '',
       amount: editing?.amount ?? '',
@@ -158,6 +160,13 @@ export function AddEntry({
     heading?.scrollIntoView?.({ block: 'start' })
     heading?.focus({ preventScroll: true })
   }, [inReview])
+  // The form comes back after a save: bring its heading into view and focus it.
+  useEffect(() => {
+    if (!notice) return
+    const heading = document.getElementById('entry-heading')
+    heading?.scrollIntoView?.({ block: 'start' })
+    heading?.focus({ preventScroll: true })
+  }, [notice])
   const target = targetOf(reviewing?.accountId ?? chosenId)
   const moving = !!editing && target.id !== account.id
   const effect = useReplacementPreview(
@@ -175,6 +184,43 @@ export function AddEntry({
   const defaultClass = categories.data?.find((c) => c.id === chosenCategory)?.defaultClass
   /** What the entry will be saved with: the class chosen, else the category's default now. */
   const savedClass = (values: Values) => values.classification || defaultClass || null
+
+  // The next form keeps the account and category (and class) and asks for the date and amount again.
+  const saveAndAddAnother = () => {
+    if (!reviewing || !member) return
+    const values = reviewing
+    record.mutate(
+      {
+        key,
+        entry: {
+          description: values.description.trim(),
+          amount: parseAmount(values.amount)!,
+          occurredOn: values.occurredOn,
+          categoryId: values.categoryId,
+          ...(classed && values.classification ? { classification: values.classification } : {}),
+          enteredByMemberId: member.id,
+        },
+      },
+      {
+        onSuccess: () => {
+          setNotice(
+            `Saved ${formatMoney(Number(parseAmount(values.amount)))} on ${values.occurredOn}. Confirm the date and amount of the next ${onCard ? 'purchase' : 'expense'}.`,
+          )
+          setKey(newKey())
+          setReviewing(null)
+          reset({
+            description: '',
+            amount: '',
+            occurredOn: '',
+            categoryId: values.categoryId,
+            classification: values.classification,
+            reason: '',
+            accountId: account.id,
+          })
+        },
+      },
+    )
+  }
 
   const confirm = () => {
     if (!reviewing || !member) return
@@ -323,6 +369,15 @@ export function AddEntry({
                   ? 'Confirm replacement'
                   : 'Confirm saving'}
           </Button>
+          {!editing && !replacing && !reminder && kind === 'expense' && (
+            <Button
+              variant="secondary"
+              onClick={saveAndAddAnother}
+              disabled={save.isPending || !member}
+            >
+              Save and add another
+            </Button>
+          )}
           <Button variant="secondary" onClick={() => setReviewing(null)} disabled={save.isPending}>
             Back
           </Button>
@@ -336,9 +391,14 @@ export function AddEntry({
 
   return (
     <Card aria-labelledby="entry-heading">
-      <CardTitle id="entry-heading" className="text-lg">
+      <CardTitle id="entry-heading" tabIndex={-1} className="scroll-mt-10 text-lg outline-none">
         {editing ? `Edit ${editNoun(kind, onCard)}` : words.add}
       </CardTitle>
+      {notice && (
+        <p role="status" className="mt-2 max-w-md rounded-control border border-line p-3 text-sm">
+          {notice}
+        </p>
+      )}
       <form
         noValidate
         className="mt-3 flex max-w-md flex-col gap-4"

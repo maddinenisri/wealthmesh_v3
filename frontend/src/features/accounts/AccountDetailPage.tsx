@@ -8,6 +8,7 @@ import { useAccount, useToday } from '../../hooks/useAccounts'
 import type { EntryKind } from '../../api/activity'
 import type { Activity as ActivityEntry } from '../../api/activity'
 import { AddEntry } from '../activity/AddEntry'
+import { BatchEntry } from '../activity/BatchEntry'
 import { UpdateBalance } from '../activity/UpdateBalance'
 import { ActivityList } from '../activity/ActivityList'
 import { Panel } from '../activity/Panel'
@@ -183,9 +184,17 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
     null,
   )
   const [transfer, setTransfer] = useState<TransferPanel | null>(null)
+  const [batching, setBatching] = useState(false)
   const today = useToday()
   const ready =
-    !adding && !editing && !correcting && !changing && !transfer && !!today.data && !!members
+    !adding &&
+    !editing &&
+    !correcting &&
+    !changing &&
+    !transfer &&
+    !batching &&
+    !!today.data &&
+    !!members
   // After a save the new row is what the person came for, so the table's top is brought into view.
   const closeTransfer = (saved?: boolean) => {
     setTransfer(null)
@@ -195,7 +204,9 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
       )
     }
   }
-  const remember = useReturnFocus(!!adding || !!editing || !!correcting || !!changing || !!transfer)
+  const remember = useReturnFocus(
+    !!adding || !!editing || !!correcting || !!changing || !!transfer || batching,
+  )
 
   return (
     <>
@@ -207,6 +218,21 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             members={members}
             today={today.data}
             onDone={() => setAdding(null)}
+          />
+        </Panel>
+      )}
+      {batching && today.data && members && (
+        <Panel>
+          <BatchEntry
+            account={account}
+            members={members}
+            today={today.data}
+            onDone={() => {
+              setBatching(false)
+              requestAnimationFrame(() =>
+                document.getElementById('activity-heading')?.scrollIntoView?.({ block: 'start' }),
+              )
+            }}
           />
         </Panel>
       )}
@@ -352,6 +378,17 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               size="sm"
               onClick={() => {
                 remember()
+                setBatching(true)
+              }}
+              disabled={!ready}
+            >
+              Add several purchases
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
                 setAdding('refund')
               }}
               disabled={!ready}
@@ -404,6 +441,17 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               disabled={!ready}
             >
               Add money out
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setBatching(true)
+              }}
+              disabled={!ready}
+            >
+              Add several expenses
             </Button>
             <Button
               variant="secondary"

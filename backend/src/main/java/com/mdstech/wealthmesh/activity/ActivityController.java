@@ -15,12 +15,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.mdstech.wealthmesh.activity.dto.ActivityResponse;
+import com.mdstech.wealthmesh.activity.dto.BatchRequest;
+import com.mdstech.wealthmesh.activity.dto.BatchResponse;
 import com.mdstech.wealthmesh.activity.dto.ChangeRequest;
 import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
 import com.mdstech.wealthmesh.activity.dto.HistoricalEntryRequest;
 import com.mdstech.wealthmesh.activity.dto.HistoryEntry;
 import com.mdstech.wealthmesh.activity.dto.ReplacementPreview;
 import com.mdstech.wealthmesh.activity.dto.ReplacementRequest;
+import com.mdstech.wealthmesh.activity.service.BatchEntryService;
 import com.mdstech.wealthmesh.activity.service.EntryChangeService;
 import com.mdstech.wealthmesh.activity.service.EntryService;
 import com.mdstech.wealthmesh.activity.service.HistoricalEntryService;
@@ -34,12 +37,14 @@ import reactor.core.publisher.Mono;
 public class ActivityController {
 
     private final EntryService service;
+    private final BatchEntryService batches;
     private final EntryChangeService changes;
     private final HistoricalEntryService historical;
     private final ReplacementPreviewService replacementPreviews;
 
-    public ActivityController(EntryService service, EntryChangeService changes, HistoricalEntryService historical,
-            ReplacementPreviewService replacementPreviews) {
+    public ActivityController(EntryService service, BatchEntryService batches, EntryChangeService changes,
+            HistoricalEntryService historical, ReplacementPreviewService replacementPreviews) {
+        this.batches = batches;
         this.replacementPreviews = replacementPreviews;
         this.service = service;
         this.changes = changes;
@@ -79,6 +84,15 @@ public class ActivityController {
             @RequestHeader(name = "Idempotency-Key", required = false) String key,
             @RequestBody ExpenseRequest request) {
         return save(accountId, key, "expense", request);
+    }
+
+    /** Several expenses saved together or not at all: 201 when created, 200 for a repeated batch key. */
+    @PostMapping("/expense-batches")
+    public Mono<ResponseEntity<BatchResponse>> recordBatch(@PathVariable UUID accountId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String key,
+            @RequestBody BatchRequest request) {
+        return batches.record(accountId, key, request).map(saved -> ResponseEntity
+                .status(saved.created() ? HttpStatus.CREATED : HttpStatus.OK).body(saved.batch()));
     }
 
     /** An entry dated before tracking began, saved with the reviewed move of the start (V2_CHECKING_016). */

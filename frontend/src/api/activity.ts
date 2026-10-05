@@ -415,6 +415,34 @@ export const recordEntry = (accountId: string, kind: EntryKind, key: string, ent
     parse: parseActivity,
   })
 
+/** One expense or purchase in a batch. */
+export type NewBatchEntry = Omit<NewEntry, 'enteredByMemberId'>
+
+export type SavedBatch = { entries: Activity[]; total: string }
+
+/**
+ * Several expenses for one account, saved together or not at all. `key` identifies one form: sending the same batch
+ * again returns the stored entries (D-024). An invalid entry refuses the whole batch with a "Row N:" message.
+ */
+export const recordBatch = (
+  accountId: string,
+  key: string,
+  enteredByMemberId: string,
+  entries: NewBatchEntry[],
+) =>
+  request(`/accounts/${accountId}/expense-batches`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+    body: {
+      enteredByMemberId,
+      entries: entries.map((entry) => entryBody({ ...entry, enteredByMemberId })),
+    },
+    parse: (value): SavedBatch => {
+      const data = record(value)
+      return { entries: list(data.entries, parseActivity), total: str(data.total) }
+    },
+  })
+
 /** Edit as replacement: the original stays in history. `key` makes a repeated save safe (D-024). */
 export const replaceEntry = (
   accountId: string,

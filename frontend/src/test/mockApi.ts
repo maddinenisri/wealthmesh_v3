@@ -367,6 +367,10 @@ export function mockApi(
       : (body.classification ??
         CATEGORIES.find((c) => c.id === body.categoryId)?.defaultClass ??
         null)
+  const batchView = (rows: MockActivity[]) => ({
+    entries: rows.map((a) => decorate(a, state.accounts, state.activity)),
+    total: rows.reduce((sum, a) => sum + Number(a.amount), 0).toFixed(2),
+  })
   const currentBalance = (account: MockAccount) => balanceOn(account, '9999-12-31')
   /** What counts toward a month figure: spending is expenses minus refunds (the server defines it once). */
   const counted = (a: MockActivity, kind: string) =>
@@ -1416,6 +1420,49 @@ export function mockApi(
         return HttpResponse.json(decorate(entry, state.accounts), { status: 201 })
       },
     ),
+    http.post('*/api/v1/accounts/:id/expense-batches', async ({ request, params }) => {
+      log(request)
+      const key = request.headers.get('Idempotency-Key') ?? ''
+      state.keys.push(key)
+      const body = (await request.json()) as {
+        enteredByMemberId: string
+        entries: ExpenseBody[]
+      }
+      const account = state.accounts.find((a) => a.id === params.id)
+      if (!account) return problem(404, 'Account not found')
+      const stored = state.activity.filter((a) => a.key?.startsWith(`${key}:`))
+      if (stored.length > 0) return HttpResponse.json(batchView(stored), { status: 200 })
+      if (body.entries.length === 0 || body.entries.length > 20)
+        return problem(400, 'Enter 1 to 20 expenses to save together')
+      for (const [index, row] of body.entries.entries()) {
+        if (!(Number(row.amount) > 0))
+          return problem(400, `Row ${index + 1}: Enter an amount greater than zero`)
+        if (row.occurredOn > today)
+          return problem(
+            400,
+            `Row ${index + 1}: Future activity is not saved as completed history yet`,
+          )
+      }
+      const saved = body.entries.map((row, index): MockActivity => ({
+        id: newId(),
+        accountId: account.id,
+        key: `${key}:${index}`,
+        kind: 'expense',
+        amount: Number(row.amount).toFixed(2),
+        occurredOn: row.occurredOn,
+        description: row.description.trim() || null,
+        categoryId: row.categoryId ?? '',
+        classification: classOf('expense', row),
+        enteredByMemberId: body.enteredByMemberId,
+      }))
+      state.activity.push(...saved)
+      adjust(account, -saved.reduce((sum, a) => sum + Number(a.amount), 0))
+      if (state.loseNextExpenseResponse) {
+        state.loseNextExpenseResponse = false
+        return problem(503, 'The server took too long to answer')
+      }
+      return HttpResponse.json(batchView(saved), { status: 201 })
+    }),
     ...(['expenses', 'income', 'refunds'] as const).map((path) =>
       http.post(`*/api/v1/accounts/:id/${path}`, async ({ request, params }) => {
         const kind = path === 'income' ? 'income' : path === 'refunds' ? 'refund' : 'expense'

@@ -21,6 +21,7 @@ import {
   listIncomeEntries,
   listSpendingEntries,
   previewCorrection,
+  recordBatch,
   recordEntry,
   previewReplacement,
   replaceEntry,
@@ -32,6 +33,7 @@ import {
   type EntryKind,
   type NewCorrection,
   type NewReminder,
+  type NewBatchEntry,
   type NewEntry,
 } from '../api/activity'
 import { accountsKey } from './useAccounts'
@@ -116,6 +118,23 @@ export function useRecordEntry(accountId: string, kind: EntryKind) {
   return useMutation({
     mutationFn: ({ key, entry }: { key: string; entry: NewEntry }) =>
       recordEntry(accountId, kind, key, entry),
+    onSuccess: refresh,
+  })
+}
+
+/** Saves several expenses together. Repeating a call with the same `key` never saves them twice. */
+export function useRecordBatch(accountId: string) {
+  const refresh = useRefreshMoney(accountId)
+  return useMutation({
+    mutationFn: ({
+      key,
+      memberId,
+      entries,
+    }: {
+      key: string
+      memberId: string
+      entries: NewBatchEntry[]
+    }) => recordBatch(accountId, key, memberId, entries),
     onSuccess: refresh,
   })
 }
