@@ -8,7 +8,10 @@ export function useReturnFocus(open: boolean): () => void {
   const trigger = useRef<HTMLElement | null>(null)
   const wasOpen = useRef(false)
   useEffect(() => {
-    if (wasOpen.current && !open && trigger.current?.isConnected) trigger.current.focus()
+    // Focus returns without scrolling: a save scrolls to the new row itself, and the opener (often below a long
+    // table) must not pull the page away from it.
+    if (wasOpen.current && !open && trigger.current?.isConnected)
+      trigger.current.focus({ preventScroll: true })
     wasOpen.current = open
   }, [open])
   return () => {

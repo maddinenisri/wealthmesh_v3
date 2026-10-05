@@ -107,7 +107,7 @@ public class EntryChangeService {
                 .then(Mono.defer(() -> store.expireKey(key, cutoff)))
                 .then(Mono.defer(() -> original(accountId, activityId, true)))
                 .flatMap(original -> moveTarget.resolve(accountId, request.accountId()).flatMap(account -> validator
-                        .parse(account, replacementKind(original), keepClass(original, request))
+                        .parse(account, replacementKind(original), keepClass(original, request), original.categoryId())
                         .doOnNext(entry -> checkFeeMatchesCorrection(original, entry))
                         .doOnNext(entry -> checkStaysPut(original, entry))
                         .flatMap(entry -> activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
@@ -128,6 +128,8 @@ public class EntryChangeService {
                 .then(Mono.defer(() -> activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
                         .flatMap(existing -> replay(existing, entry, original.id()))
                         .switchIfEmpty(Mono.defer(() -> validator.memberLocked(target, entry.memberId())
+                                .then(Mono.defer(() -> validator.checkCategoryLocked(entry.categoryId(),
+                                        original.categoryId())))
                                 .then(Mono.defer(() -> swapLocked(original, entry, key, reason, now)))))));
         return transactions.transactional(swapped);
     }

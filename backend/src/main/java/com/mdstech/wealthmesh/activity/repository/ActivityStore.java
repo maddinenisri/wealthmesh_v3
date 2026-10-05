@@ -30,11 +30,13 @@ public class ActivityStore {
 
     private static final String ENTRY_COLUMNS = """
             SELECT a.id, a.account_id, ac.name AS account_name, a.kind, a.amount, a.occurred_on, a.description,
-                   a.category_id, c.name AS category_name, a.entered_by_member_id, a.created_at, a.reason,
+                   c.id AS category_id, c.name AS category_name,
+                   (c.archived_at IS NOT NULL) AS category_archived, a.entered_by_member_id, a.created_at, a.reason,
                    a.movement_id, cp.account_id AS counter_account_id, cpa.name AS counter_account_name,
                    a.classification
             FROM activity a JOIN account ac ON ac.id = a.account_id
-            LEFT JOIN category c ON c.id = a.category_id
+            LEFT JOIN category oc ON oc.id = a.category_id
+            LEFT JOIN category c ON c.id = COALESCE(oc.merged_into_id, oc.id)
             LEFT JOIN activity cp ON cp.movement_id = a.movement_id AND cp.id <> a.id
             LEFT JOIN account cpa ON cpa.id = cp.account_id
             WHERE a.removed_at IS NULL""";
@@ -132,7 +134,7 @@ public class ActivityStore {
             boolean uncategorized, UUID accountId) {
         String sql = ENTRY_COLUMNS + " AND " + Counted.of(kind, "a.").filter()
                 + " AND a.occurred_on >= :from AND a.occurred_on < :to"
-                + (categoryId == null ? "" : " AND a.category_id = :category")
+                + (categoryId == null ? "" : " AND COALESCE(oc.merged_into_id, oc.id) = :category")
                 + (uncategorized ? " AND a.category_id IS NULL" : "")
                 + (accountId == null ? "" : " AND a.account_id = :account")
                 + " ORDER BY a.occurred_on, a.created_at";
@@ -162,13 +164,14 @@ public class ActivityStore {
     /** Totals of one kind (expense or income) in a month, one row per category. */
     public Flux<CategoryTotal> totalsByCategory(String kind, LocalDate from, LocalDate to, UUID accountId) {
         Counted counted = Counted.of(kind, "a.");
-        DatabaseClient.GenericExecuteSpec spec = client.sql("SELECT a.category_id, "
+        DatabaseClient.GenericExecuteSpec spec = client.sql("SELECT c.id AS category_id, "
                 + "COALESCE(c.name, 'Uncategorized') AS name, SUM(" + counted.value() + ") AS total, COUNT(*) AS n "
-                + "FROM activity a LEFT JOIN category c ON c.id = a.category_id "
+                + "FROM activity a LEFT JOIN category oc ON oc.id = a.category_id "
+                + "LEFT JOIN category c ON c.id = COALESCE(oc.merged_into_id, oc.id) "
                 + "WHERE a.removed_at IS NULL AND " + counted.filter()
                 + " AND a.occurred_on >= :from AND a.occurred_on < :to"
                 + (accountId == null ? "" : " AND a.account_id = :account")
-                + " GROUP BY a.category_id, c.name ORDER BY SUM(" + counted.value() + ") DESC, name")
+                + " GROUP BY c.id, c.name ORDER BY SUM(" + counted.value() + ") DESC, name")
                 .bind("from", from).bind("to", to);
         if (accountId != null) {
             spec = spec.bind("account", accountId);
@@ -268,15 +271,18 @@ public class ActivityStore {
                        r.amount AS r_amount, r.occurred_on AS r_on, rc.name AS r_category,
                        rm.name AS r_by, r.created_at AS r_at,
                        a.movement_id, cp.account_id AS counter_account_id, cpa.name AS counter_account_name
-                FROM activity a LEFT JOIN category c ON c.id = a.category_id
+                FROM activity a LEFT JOIN category c0 ON c0.id = a.category_id
+                LEFT JOIN category c ON c.id = COALESCE(c0.merged_into_id, c0.id)
                 LEFT JOIN household_member m ON m.id = a.entered_by_member_id
                 LEFT JOIN activity r ON r.replaces_id = a.id
                 LEFT JOIN account ra ON ra.id = r.account_id
-                LEFT JOIN category rc ON rc.id = r.category_id
+                LEFT JOIN category rc0 ON rc0.id = r.category_id
+                LEFT JOIN category rc ON rc.id = COALESCE(rc0.merged_into_id, rc0.id)
                 LEFT JOIN household_member rm ON rm.id = r.entered_by_member_id
                 LEFT JOIN activity p ON p.id = a.replaces_id
                 LEFT JOIN account pa ON pa.id = p.account_id
-                LEFT JOIN category pc ON pc.id = p.category_id
+                LEFT JOIN category pc0 ON pc0.id = p.category_id
+                LEFT JOIN category pc ON pc.id = COALESCE(pc0.merged_into_id, pc0.id)
                 LEFT JOIN household_member pm ON pm.id = p.entered_by_member_id
                 LEFT JOIN activity cp ON cp.movement_id = a.movement_id AND cp.id <> a.id
                 LEFT JOIN account cpa ON cpa.id = cp.account_id
@@ -326,6 +332,7 @@ public class ActivityStore {
                 row.get("category_name", String.class), row.get("entered_by_member_id", UUID.class),
                 row.get("created_at", java.time.OffsetDateTime.class).toInstant(), row.get("reason", String.class),
                 row.get("movement_id", UUID.class), row.get("counter_account_id", UUID.class),
-                row.get("counter_account_name", String.class), row.get("classification", String.class));
+                row.get("counter_account_name", String.class), row.get("classification", String.class),
+                Boolean.TRUE.equals(row.get("category_archived", Boolean.class)));
     }
 }

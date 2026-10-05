@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  changeCategory,
   changeEntry,
   createCategory,
+  getCategoryHistory,
+  getCategoryUsage,
+  mergeCategories,
+  undoCategoryMerge,
+  type CategoryAction,
+  type NewMerge,
   getBalanceAsOf,
   getIncome,
   getMonthReview,
@@ -36,10 +43,10 @@ const remindersKey = ['reminders'] as const
 const historyKey = (accountId: string) => ['activity', accountId, 'history'] as const
 export const spendingKey = ['spending'] as const
 
-export function useCategories(kind: EntryKind) {
+export function useCategories(kind: EntryKind, includeArchived = false) {
   return useQuery({
-    queryKey: ['categories', kind],
-    queryFn: () => listCategories(kind === 'income' ? 'income' : 'spending'),
+    queryKey: ['categories', kind, includeArchived],
+    queryFn: () => listCategories(kind === 'income' ? 'income' : 'spending', includeArchived),
     staleTime: Infinity,
   })
 }
@@ -50,6 +57,52 @@ export function useCreateCategory() {
   return useMutation({
     mutationFn: createCategory,
     onSuccess: () => client.invalidateQueries({ queryKey: ['categories'] }),
+  })
+}
+
+/** One change to a category (rename, default, archive, restore); every list that offers one refreshes. */
+export function useChangeCategory(id: string, action: CategoryAction) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { name?: string; defaultClass?: string; enteredByMemberId: string }) =>
+      changeCategory(id, action, body),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['categories'] }),
+  })
+}
+
+export function useMergeCategories() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (merge: NewMerge) => mergeCategories(merge),
+    // A merge moves figures between categories everywhere: Spending, entries and history all re-read.
+    onSuccess: () =>
+      Promise.all([client.invalidateQueries(), client.resetQueries({ queryKey: spendingKey })]),
+  })
+}
+
+export function useUndoMerge(mergeId: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (enteredByMemberId: string) => undoCategoryMerge(mergeId, enteredByMemberId),
+    onSuccess: () => client.invalidateQueries(),
+  })
+}
+
+export function useCategoryUsage(id: string | null) {
+  return useQuery({
+    queryKey: ['categories', 'usage', id],
+    queryFn: () => getCategoryUsage(id!),
+    enabled: id !== null,
+    staleTime: 0,
+  })
+}
+
+export function useCategoryHistory(id: string | null) {
+  return useQuery({
+    queryKey: ['categories', 'history', id],
+    queryFn: () => getCategoryHistory(id!),
+    enabled: id !== null,
+    staleTime: 0,
   })
 }
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
-import type { Category } from '../../api/activity'
+import type { Category, CategoryEvent } from '../../api/activity'
 import { ApiError } from '../../api/client'
 import type { Member } from '../../api/household'
 import {
@@ -12,19 +12,44 @@ import {
   SelectField,
   TextField,
 } from '../../design-system'
-import { useCategories, useCreateCategory } from '../../hooks/useActivity'
+import { useCategories, useCategoryHistory, useCreateCategory } from '../../hooks/useActivity'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useAccountContext } from '../accounts/useAccountContext'
 import { classText } from '../activity/classes'
 import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
 import { useReturnFocus } from '../activity/useReturnFocus'
+import { ArchiveCategory, EditCategory, MergeCategories, UndoMerge } from './CategoryChange'
 
-/** The household's spending and income categories, and a form to add one (CATEGORIES_001, 007, 008). */
+/** The panel that is open above the lists: add, a change to one category, a merge or an Undo of one. */
+type PanelState =
+  | { kind: 'add' }
+  | { kind: 'rename' | 'default-class' | 'archive' | 'restore'; category: Category }
+  | { kind: 'merge' }
+  | { kind: 'undo'; mergeId: string; names: string[]; targetName: string }
+
+/** The household's categories: add, change a default, rename, merge with Undo, archive and restore. */
 export function CategoriesPage() {
   const { members } = useAccountContext()
-  const [adding, setAdding] = useState(false)
-  const remember = useReturnFocus(adding)
+  const [panel, setPanel] = useState<PanelState | null>(null)
+  const [focusId, setFocusId] = useState<string | null>(null)
+  const remember = useReturnFocus(panel !== null)
+  const open = (next: PanelState, id?: string) => {
+    remember()
+    setFocusId(id ?? null)
+    setPanel(next)
+  }
+  // The button that opened a panel can be replaced by the change (Archive becomes Restore): fall back to the row.
+  const close = () => {
+    setPanel(null)
+    if (focusId) {
+      requestAnimationFrame(() => {
+        if (document.activeElement === document.body || !document.activeElement?.isConnected)
+          document.getElementById(`category-${focusId}`)?.focus()
+      })
+    }
+  }
+  const key = panel ? JSON.stringify(panel) : 'none'
 
   return (
     <div className="flex flex-col gap-6">
@@ -32,31 +57,78 @@ export function CategoriesPage() {
         title="Categories"
         description="Names for spending and income, and the class each spending category starts with."
         actions={
-          <Button
-            onClick={() => {
-              remember()
-              setAdding(true)
-            }}
-            disabled={adding || !members}
-          >
-            Add category
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => open({ kind: 'add' })} disabled={panel !== null || !members}>
+              Add category
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => open({ kind: 'merge' })}
+              disabled={panel !== null || !members}
+            >
+              Merge categories
+            </Button>
+          </div>
         }
       />
-      {adding && members && (
-        <Panel>
-          <AddCategory members={members} onDone={() => setAdding(false)} />
+      {panel && members && (
+        <Panel key={key}>
+          {panel.kind === 'add' && <AddCategory members={members} onDone={close} />}
+          {panel.kind === 'merge' && <MergeCategories members={members} onDone={close} />}
+          {(panel.kind === 'rename' || panel.kind === 'default-class') && (
+            <EditCategory
+              mode={panel.kind}
+              category={panel.category}
+              members={members}
+              onDone={close}
+            />
+          )}
+          {(panel.kind === 'archive' || panel.kind === 'restore') && (
+            <ArchiveCategory
+              mode={panel.kind}
+              category={panel.category}
+              members={members}
+              onDone={close}
+            />
+          )}
+          {panel.kind === 'undo' && (
+            <UndoMerge
+              mergeId={panel.mergeId}
+              names={panel.names}
+              targetName={panel.targetName}
+              members={members}
+              onDone={close}
+            />
+          )}
         </Panel>
       )}
-      <CategoryList kind="expense" title="Spending categories" />
-      <CategoryList kind="income" title="Income categories" />
+      <CategoryList kind="expense" title="Spending categories" open={open} busy={panel !== null} />
+      <CategoryList kind="income" title="Income categories" open={open} busy={panel !== null} />
     </div>
   )
 }
 
-function CategoryList({ kind, title }: { kind: 'expense' | 'income'; title: string }) {
-  const categories = useCategories(kind)
+function CategoryList({
+  kind,
+  title,
+  open,
+  busy,
+}: {
+  kind: 'expense' | 'income'
+  title: string
+  open: (panel: PanelState, id?: string) => void
+  busy: boolean
+}) {
+  const categories = useCategories(kind, true)
   const id = `${kind}-categories-heading`
+  const all = categories.data ?? []
+  // Sources of each live merge, listed under the category they were merged into so each can be Undone.
+  const mergesInto = (targetId: string) => {
+    const sources = all.filter((c) => c.mergedIntoId === targetId)
+    const groups = new Map<string, Category[]>()
+    sources.forEach((c) => groups.set(c.mergeId!, [...(groups.get(c.mergeId!) ?? []), c]))
+    return [...groups]
+  }
   return (
     <Card aria-labelledby={id}>
       <CardTitle id={id} className="text-lg">
@@ -69,26 +141,168 @@ function CategoryList({ kind, title }: { kind: 'expense' | 'income'; title: stri
         </p>
       )}
       {categories.data && (
-        <ul aria-label={title} className="mt-3 flex flex-col gap-1">
+        <ul aria-label={title} className="mt-3 flex flex-col gap-3">
           {categories.data.map((category) => (
-            <li
+            <CategoryRow
               key={category.id}
-              id={`category-${category.id}`}
-              tabIndex={-1}
-              className="rounded-control outline-none focus:ring-2 focus:ring-primary [overflow-wrap:anywhere]"
-            >
-              <span className="font-medium">{category.name}</span>
-              {kind === 'expense' && (
-                <span className="ml-2 text-sm text-ink-muted">
-                  Default: {category.defaultClass ? classText(category.defaultClass) : 'none'}
-                </span>
-              )}
-            </li>
+              category={category}
+              kind={kind}
+              target={all.find((c) => c.id === category.mergedIntoId)}
+              merges={mergesInto(category.id)}
+              open={open}
+              busy={busy}
+            />
           ))}
         </ul>
       )}
     </Card>
   )
+}
+
+function CategoryRow({
+  category,
+  kind,
+  target,
+  merges,
+  open,
+  busy,
+}: {
+  category: Category
+  kind: 'expense' | 'income'
+  target: Category | undefined
+  merges: [string, Category[]][]
+  open: (panel: PanelState, id?: string) => void
+  busy: boolean
+}) {
+  const [showHistory, setShowHistory] = useState(false)
+  const history = useCategoryHistory(showHistory ? category.id : null)
+  const merged = category.mergedIntoId !== null
+  return (
+    <li
+      id={`category-${category.id}`}
+      tabIndex={-1}
+      className="rounded-control outline-none focus:ring-2 focus:ring-primary"
+    >
+      <div className="[overflow-wrap:anywhere]">
+        <span className="font-medium">{category.name}</span>
+        {kind === 'expense' && !category.archived && (
+          <span className="ml-2 text-sm text-ink-muted">
+            Default: {category.defaultClass ? classText(category.defaultClass) : 'none'}
+          </span>
+        )}
+        {merged && (
+          <span className="ml-2 text-sm text-ink-muted">
+            Merged into {target?.name ?? 'another category'}
+          </span>
+        )}
+        {category.archived && !merged && (
+          <span className="ml-2 text-sm text-ink-muted">Archived</span>
+        )}
+      </div>
+      <div className="mt-1 flex flex-wrap gap-1">
+        {!merged && (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Rename ${category.name}`}
+            disabled={busy}
+            onClick={() => open({ kind: 'rename', category }, category.id)}
+          >
+            Rename
+          </Button>
+        )}
+        {kind === 'expense' && !category.archived && (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Change default of ${category.name}`}
+            disabled={busy}
+            onClick={() => open({ kind: 'default-class', category }, category.id)}
+          >
+            Change default
+          </Button>
+        )}
+        {!category.archived && (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Archive ${category.name}`}
+            disabled={busy}
+            onClick={() => open({ kind: 'archive', category }, category.id)}
+          >
+            Archive
+          </Button>
+        )}
+        {category.archived && !merged && (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Restore ${category.name}`}
+            disabled={busy}
+            onClick={() => open({ kind: 'restore', category }, category.id)}
+          >
+            Restore
+          </Button>
+        )}
+        {merges.map(([mergeId, sources]) => (
+          <Button
+            key={mergeId}
+            variant="ghost"
+            size="sm"
+            aria-label={`Undo merge of ${sources.map((c) => c.name).join(' and ')}`}
+            disabled={busy}
+            onClick={() =>
+              open(
+                {
+                  kind: 'undo',
+                  mergeId,
+                  names: sources.map((c) => c.name),
+                  targetName: category.name,
+                },
+                category.id,
+              )
+            }
+          >
+            Undo merge of {sources.map((c) => c.name).join(' and ')}
+          </Button>
+        ))}
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`History of ${category.name}`}
+          aria-expanded={showHistory}
+          onClick={() => setShowHistory((now) => !now)}
+        >
+          {showHistory ? 'Hide history' : 'History'}
+        </Button>
+      </div>
+      {showHistory && (
+        <ul aria-label={`History of ${category.name}`} className="mt-1 text-sm text-ink-muted">
+          {history.isPending && <li>Loading</li>}
+          {history.data?.length === 0 && <li>No changes yet.</li>}
+          {history.data?.map((event, index) => (
+            <li key={index} className="[overflow-wrap:anywhere]">
+              {eventText(event)} by {event.byName}
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  )
+}
+
+const EVENT_WORDS: Record<string, string> = {
+  created: 'Created',
+  archived: 'Archived',
+  restored: 'Restored',
+  merge_undone: 'Merge undone',
+}
+
+function eventText(event: CategoryEvent): string {
+  if (event.action === 'renamed') return `Renamed from ${event.oldName} to ${event.newName}`
+  if (event.action === 'default_changed') return `Default changed: ${event.detail}`
+  if (event.action === 'merged') return event.detail ?? 'Merged'
+  return EVENT_WORDS[event.action] ?? event.action
 }
 
 type Values = { name: string; kind: 'spending' | 'income'; defaultClass: string }

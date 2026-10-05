@@ -301,7 +301,10 @@ function Entries({
             <Amount value={open.kind === 'refund' ? -Number(open.amount) : Number(open.amount)} />
             {open.kind === 'refund' && ' (refund)'}
           </Detail>
-          <Detail label="Category">{open.categoryName ?? 'Uncategorized'}</Detail>
+          <Detail label="Category">
+            {open.categoryName ?? 'Uncategorized'}
+            {open.categoryArchived && ' (archived)'}
+          </Detail>
           {open.kind !== 'income' && (
             <Detail label="Class">{classText(open.classification)}</Detail>
           )}

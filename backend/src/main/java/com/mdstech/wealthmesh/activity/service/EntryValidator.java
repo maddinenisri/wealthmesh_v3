@@ -52,7 +52,15 @@ public class EntryValidator {
     }
 
     Mono<Entry> parse(Account account, String kind, ExpenseRequest request) {
-        return parse(account, kind, request, false);
+        return parse(account, kind, request, false, null);
+    }
+
+    /**
+     * An edit may keep the category the entry already has even if it was archived since (CATEGORIES_005: old
+     * entries keep their label); any other category must be active.
+     */
+    public Mono<Entry> parse(Account account, String kind, ExpenseRequest request, UUID keptCategoryId) {
+        return parse(account, kind, request, false, keptCategoryId);
     }
 
     /** A reminder is dated after today and is saved as a plan; its kind must be expense or income. */
@@ -60,10 +68,11 @@ public class EntryValidator {
         if (!"expense".equals(kind) && !"income".equals(kind)) {
             return Mono.error(bad("Choose expense or income"));
         }
-        return parse(account, kind, request, true);
+        return parse(account, kind, request, true, null);
     }
 
-    private Mono<Entry> parse(Account account, String kind, ExpenseRequest request, boolean reminder) {
+    private Mono<Entry> parse(Account account, String kind, ExpenseRequest request, boolean reminder,
+            UUID keptCategoryId) {
         return Mono.fromCallable(() -> {
             if ("income".equals(kind) && AccountType.isCard(account.type())) {
                 throw bad("A card records purchases, refunds and payments, not income");
@@ -71,7 +80,7 @@ public class EntryValidator {
             BigDecimal amount = amount(request.amount());
             checkDate(account, request.occurredOn(), reminder);
             return new Object[] { amount, description(request.description()) };
-        }).flatMap(parts -> category(kind, request, reminder)
+        }).flatMap(parts -> category(kind, request, reminder, keptCategoryId)
                 .flatMap(category -> member(account, request.enteredByMemberId())
                         .map(memberId -> new Entry(account.id(), kind, (BigDecimal) parts[0], request.occurredOn(),
                                 (String) parts[1], category.map(Category::id).orElse(null), memberId,
@@ -106,17 +115,38 @@ public class EntryValidator {
      * The category an entry names. An expense may have none (CATEGORIES_006: it is saved as Uncategorized and flagged
      * for review); income, refunds and reminders must name one of their own kind.
      */
-    private Mono<java.util.Optional<Category>> category(String kind, ExpenseRequest request, boolean reminder) {
+    private Mono<java.util.Optional<Category>> category(String kind, ExpenseRequest request, boolean reminder,
+            UUID keptCategoryId) {
         String categoryKind = "income".equals(kind) ? "income" : "spending";
         boolean named = request.categoryId() != null || request.category() != null && !request.category().isBlank();
         if (!named && "expense".equals(kind) && !reminder) {
             return Mono.just(java.util.Optional.empty());
         }
-        Mono<Category> found = request.categoryId() != null ? categories.findById(request.categoryId())
-                : named ? categories.findByName(request.category().strip()) : Mono.empty();
-        return found.filter(c -> categoryKind.equals(c.kind())).map(java.util.Optional::of)
+        return find(categoryKind, request, named).filter(c -> categoryKind.equals(c.kind()))
                 .switchIfEmpty(Mono.error(bad("Choose " + ("income".equals(categoryKind) ? "an income" : "a spending")
-                        + " category")));
+                        + " category")))
+                .flatMap(c -> c.archived() && !c.id().equals(keptCategoryId)
+                        ? Mono.<Category>error(bad("\"" + c.name() + "\" is archived. Choose another category"))
+                        : Mono.just(c))
+                .map(java.util.Optional::of);
+    }
+
+    /** Read under a share lock inside the save's transaction, so an archive or merge cannot slip in (D-034). */
+    private Mono<Category> find(String categoryKind, ExpenseRequest request, boolean named) {
+        if (request.categoryId() != null) {
+            return categories.findByIdForShare(request.categoryId());
+        }
+        return named ? categories.findActiveByKindAndName(categoryKind, request.category().strip()) : Mono.empty();
+    }
+
+    /** The same rule for a replacement, read again under the locks it takes (the first read was outside them). */
+    public Mono<Void> checkCategoryLocked(UUID categoryId, UUID keptCategoryId) {
+        if (categoryId == null || categoryId.equals(keptCategoryId)) {
+            return Mono.empty();
+        }
+        return categories.findByIdForShare(categoryId).flatMap(c -> c.archived()
+                ? Mono.<Void>error(bad("\"" + c.name() + "\" is archived. Choose another category"))
+                : Mono.<Void>empty());
     }
 
     /**

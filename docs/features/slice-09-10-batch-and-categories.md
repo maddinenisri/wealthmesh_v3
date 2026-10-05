@@ -73,8 +73,8 @@ What exists (grep, not memory):
 
 | Group | Scenario IDs | Test level | Status |
 | --- | --- | --- | --- |
-| 1. Category core and classes: V14, create spending and income categories, default class, class on each expense (default or override), uncategorized expense with flag and its own unclassified total, class totals on Spending, blank and duplicate names | `V2_CATEGORIES_001`, `006`, `007`, `008` | API (Testcontainers, race) + UI (MSW) + e2e `11d-categories.spec.ts` at 710px and 1280px | done 2026-10-05 (001 default and override, 006, 007, 008; 001 edit step of D-041 comes with group 2) |
-| 2. Category lifecycle: change default, rename with history, merge and Undo, archive and restore, each reviewed with Cancel | `V2_CATEGORIES_002`, `003`, `004`, `005` | API (race: category row locks) + UI + e2e `11d-categories.spec.ts` (same file, restore steps below) | todo |
+| 1. Category core and classes: V14, create spending and income categories, default class, class on each expense (default or override), uncategorized expense with flag and its own unclassified total, class totals on Spending, blank and duplicate names | `V2_CATEGORIES_001`, `006`, `007`, `008` | API (Testcontainers, race) + UI (MSW) + e2e `11d-categories.spec.ts` at 710px and 1280px | done 2026-10-05 (001 default and override, 006, 007, 008) |
+| 2. Category lifecycle: change default, rename with history, merge and Undo, archive and restore, each reviewed with Cancel | `V2_CATEGORIES_002`, `003`, `004`, `005` | API (race: category row locks) + UI + e2e `11d-categories.spec.ts` (same file, restore steps below) | done 2026-10-05 |
 | 3. Batch entry: Save and add another, prepare several, review with total, Cancel, all-or-none, replay-safe, on a card and on checking | `V2_EXPENSE_002`, `003`, `004`, `005` | API (race, same key at once, retry) + UI + e2e `11e-batch.spec.ts` at 710px and 1280px | todo |
 | 4. Pay a card button on checking and savings (Q-034) | none (extra, cites Q-034) | UI (MSW) + e2e `11f-pay-card.spec.ts` at 710px and 1280px | todo |
 
@@ -103,8 +103,8 @@ This slice mutates (tests): Groceries (rename, default class), Dining (default c
 
 ## Progress
 
-- Group 1 done and committed locally (2026-10-05): backend 285 tests, frontend 147+, e2e 92, lint, format and `npm run check` green. Existing `HistoricalEntryApiTests.atomic` changed: a blank category is now valid for an expense, so it uses an unknown category name. One `11c-cards` 710px viewport assertion failed once and passed on the rerun (not reproduced).
-- Next: group 2 (V15 lifecycle), group 3 (batch), group 4 (Pay a card); Prove, Checkpoint 2, Land.
+- Group 1 done (commit `cdc3485`). Group 2 done and committed locally (2026-10-05): V15, lifecycle API (`CategoryLifecycleService`), merge as a pointer resolved in `ActivityStore` (effective category), category rows read `FOR SHARE` by entry saves and `FOR UPDATE` by category writes, Categories page with reviewed Rename, Change default, Archive, Restore, Merge and Undo, per-category History. Backend, frontend (162), e2e (100, run twice), lint and `npm run check` green. Race tests fail when the share lock or the `FOR UPDATE` is removed (mutation runs). Fix found by the e2e: a review that replaces a form inside one panel now scrolls and focuses its heading; `useReturnFocus` no longer scrolls (a card-payment e2e that checks the new row's position flaked once rows got taller).
+- Next: group 3 (batch), group 4 (Pay a card); Prove, Checkpoint 2, Land.
 
 ## Coverage
 

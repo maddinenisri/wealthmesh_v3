@@ -2,6 +2,7 @@ package com.mdstech.wealthmesh.category.service;
 
 import java.time.Clock;
 import java.util.Set;
+import java.util.UUID;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
@@ -26,6 +27,10 @@ public class CategoryService {
     /** The classes an expense can carry (CATEGORIES_001). */
     public static final Set<String> CLASSES = Set.of("essential", "discretionary");
 
+    /** How a class reads in events and reviews. */
+    public static final java.util.Map<String, String> CLASS_LABELS = java.util.Map.of("essential", "Essential",
+            "discretionary", "Discretionary");
+
     private final CategoryRepository categories;
     private final CategoryStore store;
     private final HouseholdMemberRepository members;
@@ -41,10 +46,15 @@ public class CategoryService {
         this.clock = clock;
     }
 
-    /** All categories, or only one kind ("spending" or "income"). */
-    public Flux<CategoryResponse> list(String kind) {
-        var found = kind == null || kind.isBlank() ? categories.findAllByOrderBySortOrder()
-                : categories.findAllByKindOrderBySortOrder(kind);
+    /**
+     * The categories offered for new entries, or only one kind ("spending" or "income"). Archived and merged ones
+     * are left out unless `includeArchived` is true (the Categories page shows them with their state).
+     */
+    public Flux<CategoryResponse> list(String kind, boolean includeArchived) {
+        boolean all = kind == null || kind.isBlank();
+        var found = includeArchived
+                ? (all ? categories.findAllByOrderBySortOrder() : categories.findAllByKindOrderBySortOrder(kind))
+                : (all ? categories.findActive() : categories.findActiveByKind(kind));
         return found.map(CategoryService::response);
     }
 
@@ -55,29 +65,39 @@ public class CategoryService {
      */
     public Mono<CategoryResponse> create(CategoryRequest request) {
         return Mono.fromCallable(() -> validate(request))
-                .flatMap(parts -> transactions.transactional(member(request).then(Mono.defer(() -> store
-                        .findDuplicate(parts.kind(), parts.name()).flatMap(existing -> Mono.<Category>error(
-                                duplicate(existing)))
-                        .switchIfEmpty(Mono.defer(() -> store.insert(parts.name(), parts.kind(), parts.defaultClass())))
-                        .flatMap(created -> store.recordEvent(created.id(), "created", null, created.name(), null,
-                                request.enteredByMemberId(), clock.instant()).thenReturn(created))))
+                .flatMap(parts -> transactions.transactional(member(request.enteredByMemberId())
+                        .then(Mono.defer(() -> insert(parts, request.enteredByMemberId()))))
                         .onErrorMap(DuplicateKeyException.class,
                                 e -> new ResponseStatusException(HttpStatus.CONFLICT,
-                                        "\"" + parts.name() + "\" already exists. Use that category instead."))))
+                                        "\"" + parts.name() + "\" already exists. Use that category instead.")))
                 .map(CategoryService::response);
+    }
+
+    private Mono<Category> insert(Parts parts, UUID memberId) {
+        return store.findDuplicate(parts.kind(), parts.name(), null)
+                .flatMap(existing -> Mono.<Category>error(duplicate(existing)))
+                .switchIfEmpty(Mono.defer(() -> store.insert(parts.name(), parts.kind(), parts.defaultClass())))
+                .flatMap(created -> store.recordEvent(created.id(), "created", null, created.name(), null, memberId,
+                        clock.instant()).thenReturn(created));
     }
 
     private record Parts(String name, String kind, String defaultClass) {
     }
 
-    private static Parts validate(CategoryRequest request) {
-        String name = request.name() == null ? "" : request.name().strip();
+    /** A trimmed, non-blank name of at most 80 characters (CATEGORIES_008). */
+    public static String name(String text) {
+        String name = text == null ? "" : text.strip();
         if (name.isEmpty()) {
             throw bad("Enter a category name");
         }
         if (name.length() > 80) {
             throw bad("A category name must be 80 characters or fewer");
         }
+        return name;
+    }
+
+    private static Parts validate(CategoryRequest request) {
+        String name = name(request.name());
         String kind = request.kind();
         if (!"spending".equals(kind) && !"income".equals(kind)) {
             throw bad("Choose spending or income");
@@ -86,7 +106,7 @@ public class CategoryService {
     }
 
     /** Blank means no default; an income category may have none, a spending one Essential or Discretionary. */
-    private static String defaultClass(String kind, String chosen) {
+    static String defaultClass(String kind, String chosen) {
         String defaultClass = chosen == null || chosen.isBlank() ? null : chosen;
         if (defaultClass != null && !CLASSES.contains(defaultClass)) {
             throw bad("Choose Essential or Discretionary");
@@ -97,25 +117,27 @@ public class CategoryService {
         return defaultClass;
     }
 
-    private Mono<Void> member(CategoryRequest request) {
-        if (request.enteredByMemberId() == null) {
+    /** Who made the change must be an active member, read under a share lock (D-034). */
+    public Mono<Void> member(UUID memberId) {
+        if (memberId == null) {
             return Mono.error(bad("Choose who entered this"));
         }
-        return members.findByIdForShare(request.enteredByMemberId())
+        return members.findByIdForShare(memberId)
                 .switchIfEmpty(Mono.error(bad("Choose who entered this from this household")))
                 .flatMap(m -> m.active() ? Mono.<Void>empty() : Mono.error(bad("Choose an active member")));
     }
 
-    private static ResponseStatusException duplicate(Category existing) {
+    static ResponseStatusException duplicate(Category existing) {
         return new ResponseStatusException(HttpStatus.CONFLICT,
                 "\"" + existing.name() + "\" already exists. Use that category instead.");
     }
 
-    private static ResponseStatusException bad(String message) {
+    static ResponseStatusException bad(String message) {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 
-    static CategoryResponse response(Category c) {
-        return new CategoryResponse(c.id(), c.name(), c.kind(), c.defaultClass());
+    public static CategoryResponse response(Category c) {
+        return new CategoryResponse(c.id(), c.name(), c.kind(), c.defaultClass(), c.archived(), c.mergedIntoId(),
+                c.mergeId());
     }
 }

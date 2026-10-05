@@ -78,6 +78,9 @@ export function ActivityList({
                   <Td>
                     {entry.categoryName ??
                       (entry.kind === 'expense' || entry.kind === 'refund' ? 'Uncategorized' : '')}
+                    {entry.categoryArchived && (
+                      <span className="block text-caption text-ink-muted">Archived category</span>
+                    )}
                     {entry.kind === 'expense' && !entry.categoryId && (
                       <span className="block text-caption text-ink-muted">Needs a category</span>
                     )}

@@ -20,5 +20,6 @@ public record ActivityResponse(
         UUID movementId,
         UUID counterAccountId,
         String counterAccountName,
-        String classification) {
+        String classification,
+        boolean categoryArchived) {
 }

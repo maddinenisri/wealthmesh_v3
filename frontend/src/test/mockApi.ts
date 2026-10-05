@@ -93,7 +93,29 @@ type ExpenseBody = {
   enteredByMemberId: string
 }
 
-type MockCategory = { id: string; name: string; kind: string; defaultClass: string | null }
+type MockCategory = {
+  id: string
+  name: string
+  kind: string
+  defaultClass: string | null
+  archived?: boolean
+  mergedIntoId?: string | null
+  mergeId?: string | null
+}
+
+/** What the API returns for a category. */
+const catView = (c: MockCategory) => ({
+  ...c,
+  archived: c.archived ?? false,
+  mergedIntoId: c.mergedIntoId ?? null,
+  mergeId: c.mergeId ?? null,
+})
+
+/** A merged category's entries count under the one it was merged into (a pointer, not a rewrite). */
+const effectiveId = (categoryId: string) => {
+  const c = CATEGORIES.find((x) => x.id === categoryId)
+  return c?.mergedIntoId ?? c?.id ?? ''
+}
 
 /** The seeded category list the backend ships, with the default class of each spending category. */
 const SEEDED: MockCategory[] = [
@@ -164,8 +186,9 @@ function decorate(a: MockActivity, accounts: MockAccount[], all: MockActivity[] 
   return {
     ...a,
     accountName: accounts.find((x) => x.id === a.accountId)?.name ?? '',
-    categoryId: a.categoryId || null,
-    categoryName: CATEGORIES.find((c) => c.id === a.categoryId)?.name ?? null,
+    categoryId: effectiveId(a.categoryId) || null,
+    categoryName: CATEGORIES.find((c) => c.id === effectiveId(a.categoryId))?.name ?? null,
+    categoryArchived: CATEGORIES.find((c) => c.id === effectiveId(a.categoryId))?.archived ?? false,
     classification: a.classification ?? null,
     movementId: a.movementId ?? null,
     counterAccountId: counter?.accountId ?? null,
@@ -229,6 +252,29 @@ export function mockApi(
     requests: [] as string[],
   }
   let nextId = 1
+  const categoryEvents = new Map<string, Record<string, unknown>[]>()
+  const noteEvent = (
+    id: string,
+    event: {
+      action: string
+      oldName?: string
+      newName?: string
+      detail?: string
+      by: string
+      at: string
+    },
+  ) =>
+    categoryEvents.set(id, [
+      ...(categoryEvents.get(id) ?? []),
+      {
+        action: event.action,
+        oldName: event.oldName ?? null,
+        newName: event.newName ?? null,
+        detail: event.detail ?? null,
+        byName: event.by,
+        at: event.at,
+      },
+    ])
   const newId = () => `00000000-0000-4000-8000-${String(nextId++).padStart(12, '0')}`
   const log = (request: Request) =>
     state.requests.push(`${request.method} ${new URL(request.url).pathname}`)
@@ -336,8 +382,9 @@ export function mockApi(
     )
     const byCategory = new Map<string, { total: number; count: number }>()
     rows.forEach((a) => {
-      const row = byCategory.get(a.categoryId) ?? { total: 0, count: 0 }
-      byCategory.set(a.categoryId, { total: row.total + effect(a), count: row.count + 1 })
+      const key = effectiveId(a.categoryId)
+      const row = byCategory.get(key) ?? { total: 0, count: 0 }
+      byCategory.set(key, { total: row.total + effect(a), count: row.count + 1 })
     })
     const total = rows.reduce((sum, a) => sum + effect(a), 0)
     const byClass = (cls: string | null) =>
@@ -732,7 +779,10 @@ export function mockApi(
     http.get('*/api/v1/categories', ({ request }) => {
       log(request)
       const kind = new URL(request.url).searchParams.get('kind')
-      return HttpResponse.json(CATEGORIES.filter((c) => !kind || c.kind === kind))
+      const all = new URL(request.url).searchParams.get('includeArchived') === 'true'
+      return HttpResponse.json(
+        CATEGORIES.filter((c) => (!kind || c.kind === kind) && (all || !c.archived)).map(catView),
+      )
     }),
     http.post('*/api/v1/categories', async ({ request }) => {
       log(request)
@@ -758,7 +808,127 @@ export function mockApi(
         defaultClass: body.defaultClass ?? null,
       }
       CATEGORIES.push(created)
-      return HttpResponse.json(created, { status: 201 })
+      return HttpResponse.json(catView(created), { status: 201 })
+    }),
+    http.get('*/api/v1/categories/:id/usage', ({ request, params }) => {
+      log(request)
+      const rows = live().filter(
+        (a) =>
+          effectiveId(a.categoryId) === params.id && (a.kind === 'expense' || a.kind === 'refund'),
+      )
+      return HttpResponse.json({
+        entries: rows.length,
+        total: rows.reduce((sum, a) => sum + effect(a), 0).toFixed(2),
+      })
+    }),
+    http.get('*/api/v1/categories/:id/history', ({ request, params }) => {
+      log(request)
+      return HttpResponse.json(categoryEvents.get(String(params.id)) ?? [])
+    }),
+    ...(['rename', 'default-class', 'archive', 'restore'] as const).map((action) =>
+      http.post(`*/api/v1/categories/:id/${action}`, async ({ request, params }) => {
+        log(request)
+        const body = (await request.json()) as {
+          name?: string
+          defaultClass?: string
+          enteredByMemberId?: string
+        }
+        const category = CATEGORIES.find((c) => c.id === params.id)
+        if (!category) return problem(404, 'Category not found')
+        if (!body.enteredByMemberId) return problem(400, 'Choose who entered this')
+        const by = nameOf(body.enteredByMemberId)
+        const at = '2026-10-03T09:00:00Z'
+        if (action === 'rename') {
+          const name = (body.name ?? '').trim()
+          if (!name) return problem(400, 'Enter a category name')
+          const same = CATEGORIES.find(
+            (c) =>
+              c.id !== category.id &&
+              c.kind === category.kind &&
+              c.name.toLowerCase() === name.toLowerCase(),
+          )
+          if (same) return problem(409, `"${same.name}" already exists. Use that category instead.`)
+          noteEvent(category.id, {
+            action: 'renamed',
+            oldName: category.name,
+            newName: name,
+            by,
+            at,
+          })
+          category.name = name
+        } else if (action === 'default-class') {
+          noteEvent(category.id, {
+            action: 'default_changed',
+            detail: `${category.defaultClass ?? 'none'} to ${body.defaultClass ?? 'none'}`,
+            by,
+            at,
+          })
+          category.defaultClass = body.defaultClass ?? null
+        } else if (action === 'archive') {
+          if (!category.archived) noteEvent(category.id, { action: 'archived', by, at })
+          category.archived = true
+        } else {
+          if (category.mergedIntoId)
+            return problem(409, `"${category.name}" was merged. Undo the merge instead.`)
+          if (category.archived) noteEvent(category.id, { action: 'restored', by, at })
+          category.archived = false
+        }
+        return HttpResponse.json(catView(category))
+      }),
+    ),
+    http.post('*/api/v1/categories/merges', async ({ request }) => {
+      log(request)
+      const body = (await request.json()) as {
+        sourceIds: string[]
+        targetId?: string
+        newName?: string
+        enteredByMemberId?: string
+      }
+      if (!body.enteredByMemberId) return problem(400, 'Choose who entered this')
+      const sources = CATEGORIES.filter((c) => body.sourceIds.includes(c.id))
+      if (sources.length === 0) return problem(400, 'Choose the categories to merge')
+      const gone = sources.find((c) => c.archived)
+      if (gone) return problem(409, `"${gone.name}" is archived or already merged.`)
+      let target = CATEGORIES.find((c) => c.id === body.targetId)
+      if (!target) {
+        const name = (body.newName ?? '').trim()
+        if (!name) return problem(400, 'Enter a category name')
+        if (
+          CATEGORIES.some(
+            (c) => c.kind === sources[0].kind && c.name.toLowerCase() === name.toLowerCase(),
+          )
+        )
+          return problem(409, `"${name}" already exists. Use that category instead.`)
+        target = { id: newId(), name, kind: sources[0].kind, defaultClass: sources[0].defaultClass }
+        CATEGORIES.push(target)
+      }
+      const mergeId = newId()
+      const by = nameOf(body.enteredByMemberId)
+      sources.forEach((c) => {
+        c.archived = true
+        c.mergedIntoId = target.id
+        c.mergeId = mergeId
+        noteEvent(c.id, {
+          action: 'merged',
+          oldName: c.name,
+          newName: target.name,
+          detail: `Merged into ${target.name}`,
+          by,
+          at: '2026-10-03T09:00:00Z',
+        })
+      })
+      return HttpResponse.json({ mergeId, target: catView(target) }, { status: 201 })
+    }),
+    http.post('*/api/v1/categories/merges/:mergeId/undo', ({ request, params }) => {
+      log(request)
+      const sources = CATEGORIES.filter((c) => c.mergeId === params.mergeId)
+      if (sources.length === 0) return problem(409, 'This merge was already undone.')
+      sources.forEach((c) => {
+        c.archived = false
+        c.mergedIntoId = null
+        c.mergeId = null
+      })
+      return HttpResponse.json(sources.map(catView))
     }),
     http.get('*/api/v1/accounts/:id/activity', ({ request, params }) => {
       log(request)
@@ -1266,6 +1436,9 @@ export function mockApi(
             400,
             kind === 'income' ? 'Choose an income category' : 'Choose a spending category',
           )
+        const chosen = CATEGORIES.find((c) => c.id === body.categoryId)
+        if (chosen?.archived)
+          return problem(400, `"${chosen.name}" is archived. Choose another category`)
         const entry: MockActivity = {
           id: newId(),
           accountId: account.id,
@@ -1316,7 +1489,7 @@ export function mockApi(
                 a.occurredOn.startsWith(query.get('month') ?? '') &&
                 (query.get('uncategorized') === 'true'
                   ? a.categoryId === ''
-                  : a.categoryId === query.get('categoryId')) &&
+                  : effectiveId(a.categoryId) === query.get('categoryId')) &&
                 (!query.get('accountId') || a.accountId === query.get('accountId')),
             )
             .map((a) => decorate(a, state.accounts, state.activity)),

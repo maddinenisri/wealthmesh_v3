@@ -1,7 +1,17 @@
 import { request } from './client'
 
 /** A spending category's default class is essential or discretionary; an income category has none. */
-export type Category = { id: string; name: string; kind: string; defaultClass: string | null }
+export type Category = {
+  id: string
+  name: string
+  kind: string
+  defaultClass: string | null
+  /** Hidden from new choices; its old entries keep it (CATEGORIES_005). A merged category is archived too. */
+  archived: boolean
+  /** Set on a merged category: the one it was merged into, and the merge that Undo clears. */
+  mergedIntoId: string | null
+  mergeId: string | null
+}
 
 /** A new category; the server answers 409 with the existing one's name when it already exists. */
 export type NewCategory = {
@@ -23,6 +33,8 @@ export type Activity = {
   categoryName: string | null
   /** essential or discretionary, saved with the entry; null when unclassified (and for income). */
   classification: string | null
+  /** The category is archived: the entry keeps it and shows an archived label. */
+  categoryArchived: boolean
   enteredByMemberId: string | null
   reason: string | null
   /** Set on a transfer row: the movement both rows share, and the account on the other side. */
@@ -157,6 +169,9 @@ function parseCategory(value: unknown): Category {
     name: str(data.name),
     kind: str(data.kind),
     defaultClass: strOrNull(data.defaultClass),
+    archived: data.archived === true,
+    mergedIntoId: strOrNull(data.mergedIntoId),
+    mergeId: strOrNull(data.mergeId),
   }
 }
 
@@ -173,6 +188,7 @@ function parseActivity(value: unknown): Activity {
     categoryId: strOrNull(data.categoryId),
     categoryName: strOrNull(data.categoryName),
     classification: strOrNull(data.classification),
+    categoryArchived: data.categoryArchived === true,
     enteredByMemberId: strOrNull(data.enteredByMemberId),
     reason: strOrNull(data.reason),
     movementId: strOrNull(data.movementId),
@@ -292,8 +308,86 @@ function parseHistory(value: unknown): SpendingHistory {
   }
 }
 
-export const listCategories = (kind: 'spending' | 'income') =>
-  request(`/categories?kind=${kind}`, { parse: (value) => list(value, parseCategory) })
+/** New choices leave out archived and merged categories; the Categories page asks for them all. */
+export const listCategories = (kind: 'spending' | 'income', includeArchived = false) =>
+  request(`/categories?kind=${kind}${includeArchived ? '&includeArchived=true' : ''}`, {
+    parse: (value) => list(value, parseCategory),
+  })
+
+/** What a category holds today: its effective entries and their total (the figure a review shows). */
+export type CategoryUsage = { entries: number; total: string }
+
+export type CategoryEvent = {
+  action: string
+  oldName: string | null
+  newName: string | null
+  detail: string | null
+  byName: string
+  at: string
+}
+
+const parseUsage = (value: unknown): CategoryUsage => {
+  const data = record(value)
+  if (typeof data.entries !== 'number') throw bad()
+  return { entries: data.entries, total: str(data.total) }
+}
+
+const parseEvent = (value: unknown): CategoryEvent => {
+  const data = record(value)
+  return {
+    action: str(data.action),
+    oldName: strOrNull(data.oldName),
+    newName: strOrNull(data.newName),
+    detail: strOrNull(data.detail),
+    byName: str(data.byName),
+    at: str(data.at),
+  }
+}
+
+export const getCategoryUsage = (id: string) =>
+  request(`/categories/${id}/usage`, { parse: parseUsage })
+
+export const getCategoryHistory = (id: string) =>
+  request(`/categories/${id}/history`, { parse: (value) => list(value, parseEvent) })
+
+/** Each change names who made it; repeating one leaves the same state (no save key needed). */
+export type CategoryAction = 'rename' | 'default-class' | 'archive' | 'restore'
+
+export const changeCategory = (
+  id: string,
+  action: CategoryAction,
+  body: { name?: string; defaultClass?: string; enteredByMemberId: string },
+) =>
+  request(`/categories/${id}/${action}`, {
+    method: 'POST',
+    body: { ...body, defaultClass: body.defaultClass || undefined },
+    parse: parseCategory,
+  })
+
+/** Merge into an existing `targetId` or a new category called `newName`. */
+export type NewMerge = {
+  sourceIds: string[]
+  targetId?: string
+  newName?: string
+  enteredByMemberId: string
+}
+
+export const mergeCategories = (merge: NewMerge) =>
+  request('/categories/merges', {
+    method: 'POST',
+    body: merge,
+    parse: (value) => {
+      const data = record(value)
+      return { mergeId: str(data.mergeId), target: parseCategory(data.target) }
+    },
+  })
+
+export const undoCategoryMerge = (mergeId: string, enteredByMemberId: string) =>
+  request(`/categories/merges/${mergeId}/undo`, {
+    method: 'POST',
+    body: { enteredByMemberId },
+    parse: (value) => list(value, parseCategory),
+  })
 
 export const createCategory = (category: NewCategory) =>
   request('/categories', { method: 'POST', body: category, parse: parseCategory })

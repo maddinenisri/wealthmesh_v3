@@ -97,7 +97,8 @@ export function AddEntry({
 }) {
   const onCard = isCard(account.type)
   const words = WORDS[onCard && kind === 'expense' ? 'purchase' : kind]
-  const categories = useCategories(kind)
+  // An edit also loads archived categories: the entry keeps the one it has (CATEGORIES_005), no other archived one.
+  const categories = useCategories(kind, !!editing)
   const record = useRecordEntry(account.id, kind)
   const activity = useAccountActivity(account.id)
   const remind = useSaveReminder(account.id)
@@ -394,7 +395,8 @@ export function AddEntry({
             {kind === 'expense' ? 'No category (review later)' : 'Choose a category'}
           </option>
           {categories.data
-            ?.filter((category) => onCard || !CARD_ONLY_CATEGORIES.includes(category.name))
+            ?.filter((category) => !category.archived || category.id === editing?.categoryId)
+            .filter((category) => onCard || !CARD_ONLY_CATEGORIES.includes(category.name))
             .map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
