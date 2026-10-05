@@ -137,7 +137,19 @@ Filled from `npm run coverage -- --slice 09` and `--slice 10` at Prove.
 
 ## What to click (710px and 1280px; `docs/process/ui-checklist.md` for the Cowork pass)
 
-Filled at Checkpoint 2.
+App: `npm run dev` is running (backend 8081, Vite http://localhost:5180). V14 and V15 are applied to the dev database. Use Entering as: Alex (or any member). Dev data is whatever earlier sessions left; note anything you add.
+
+1. **Categories** (new nav item). Spending list shows each default class. Add category: blank name, then "groceries" (duplicate: the message and a "Go to Groceries" button), then a new spending category with a default, then an income category (no class choice). The new row is scrolled into view and focused.
+2. **Class on an expense.** On a checking account: Add money out, pick a category, see "Category default (Essential)" in Class, override it to Discretionary, Review (shows Class), Confirm. The row shows the class under the category. Add money out with no category: it is saved as Uncategorized with "Needs a category". Spending: the class totals line, the Uncategorized row (open it). Edit that entry: choose Groceries and Essential, review shows "No category changed to Groceries".
+3. **Change default**: Dining to Essential, Review, Cancel (nothing changes), repeat and Confirm. Old Dining expenses keep Discretionary; a new one takes Essential. Put Dining back to Discretionary afterwards.
+4. **Rename**: Groceries to "Food shopping" (review says how many entries and the total), Confirm, then History shows the earlier name. Rename it back.
+5. **Merge**: create "Restaurants" first. Merge categories: tick Dining and Restaurants, new name "Eating out", Review (entries and total), Confirm. Spending shows Eating out with both. "Undo merge of Dining and Restaurants" brings both back.
+6. **Archive**: Archive Travel (review), Confirm: it is labelled Archived, gone from the money-out category list, old entries show "Archived category". Restore it.
+7. **Batch**: on a credit card, Add several purchases: add rows (new rows copy the category), fill four weekly $150.00 Groceries, Review (dates, card, total $600.00), Cancel (nothing saved), repeat and Confirm saving all. Try -$100.00 in one row: the message is under its Amount and nothing is saved. Same on checking with Add several expenses.
+8. **Save and add another**: on a card, Record purchase, Review, Save and add another: the card and category stay, date and amount are empty.
+9. **Pay a card** (Q-034): on checking and on savings, Pay a card: the bank is fixed, choose the card, Review (both Balances), Cancel, then Confirm. With no credit card in the household the button is disabled with a note.
+
+At 710px and 1280px each: the panel's top in view and focus inside; Cancel returns focus; long names wrap; nothing scrolls sideways.
 
 ## Cowork findings
 
