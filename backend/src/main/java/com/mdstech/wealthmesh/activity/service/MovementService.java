@@ -57,6 +57,7 @@ public class MovementService {
     private static final Duration KEY_LIFETIME = EntryService.KEY_LIFETIME;
     private static final MovementKind KIND = MovementKind.TRANSFER;
     static final String WRONG_TYPE = "Money cannot be moved to or from this type of account yet";
+    static final String CARD_TYPE = "Use Record payment to pay a card";
     private static final String USED = "This save was already used. Start a new entry.";
     private static final String USED_DIFFERENTLY =
             "This save was already used with different details. Start a new entry.";
@@ -289,6 +290,9 @@ public class MovementService {
                     if (!AccountType.holdsActivity(both.getT1().type())
                             || !AccountType.holdsActivity(both.getT2().type())) {
                         return Mono.error(EntryValidator.bad(WRONG_TYPE));
+                    }
+                    if (AccountType.isCard(both.getT1().type()) || AccountType.isCard(both.getT2().type())) {
+                        return Mono.error(EntryValidator.bad(CARD_TYPE));
                     }
                     return Mono.just(new Pair(both.getT1(), both.getT2()));
                 });

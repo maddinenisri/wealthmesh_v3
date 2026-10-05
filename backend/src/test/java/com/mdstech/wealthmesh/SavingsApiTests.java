@@ -127,7 +127,7 @@ class SavingsApiTests extends LedgerApiTestBase {
     void unsupportedType() {
         webTestClient.post().uri("/api/v1/accounts").contentType(MediaType.APPLICATION_JSON)
                 .bodyValue("""
-                        {"type": "credit_card", "name": "Card", "ownerMemberIds": ["%s"]}""".formatted(mayaId))
+                        {"type": "brokerage", "name": "Brokerage", "ownerMemberIds": ["%s"]}""".formatted(mayaId))
                 .exchange().expectStatus().isBadRequest();
     }
 }

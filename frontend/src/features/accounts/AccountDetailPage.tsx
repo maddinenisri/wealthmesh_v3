@@ -1,18 +1,9 @@
 import { useState } from 'react'
 import { useBalanceAsOf } from '../../hooks/useActivity'
-import { formatMoney } from '../../lib/money'
 import { Link, useParams } from 'react-router'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
-import {
-  Amount,
-  Button,
-  Card,
-  CardTitle,
-  EmptyState,
-  PageHeader,
-  buttonStyles,
-} from '../../design-system'
+import { Button, Card, CardTitle, EmptyState, PageHeader, buttonStyles } from '../../design-system'
 import { useAccount, useToday } from '../../hooks/useAccounts'
 import type { EntryKind } from '../../api/activity'
 import type { Activity as ActivityEntry } from '../../api/activity'
@@ -29,7 +20,9 @@ import { ChangeToTransfer } from '../transfers/ChangeToTransfer'
 import { TransferChange, type TransferTarget } from '../transfers/TransferChange'
 import { TransferForm } from '../transfers/TransferForm'
 import { accountTypeLabel } from './accountTypes'
-import { OVERDRAFT_NOTICE, OverdrawnLabel } from './Overdrawn'
+import { BalanceFigure } from './BalanceFigure'
+import { balanceText, isCard } from './cardBalance'
+import { OVERDRAFT_NOTICE } from './Overdrawn'
 import { ownerNames } from './ownerNames'
 import { useAccountContext } from './useAccountContext'
 
@@ -90,19 +83,21 @@ function Details({ account, owners }: { account: Account; owners: string }) {
           <dd>{owners}</dd>
         </div>
         <div>
-          <dt className="text-caption text-ink-muted">Bank</dt>
+          <dt className="text-caption text-ink-muted">
+            {isCard(account.type) ? 'Issuer' : 'Bank'}
+          </dt>
           <dd>{account.institution ?? 'Not set'}</dd>
         </div>
         <div>
           <dt className="text-caption text-ink-muted">Balance</dt>
           <dd>
-            <Amount
-              value={Number(account.balance.amount)}
+            <BalanceFigure
+              type={account.type}
+              amount={account.balance.amount}
               className="font-sans text-2xl normal-nums"
             />
-            <OverdrawnLabel balance={account.balance.amount} />
             <span className="block text-caption text-ink-muted">as of {account.balance.asOf}</span>
-            {Number(account.balance.amount) < 0 && (
+            {!isCard(account.type) && Number(account.balance.amount) < 0 && (
               <span className="mt-1 block max-w-prose text-sm text-ink-muted">
                 {OVERDRAFT_NOTICE}
               </span>
@@ -112,8 +107,10 @@ function Details({ account, owners }: { account: Account; owners: string }) {
         <div>
           <dt className="text-caption text-ink-muted">Initial Balance</dt>
           <dd>
-            <Amount
-              value={Number(account.openingAmount)}
+            <BalanceFigure
+              type={account.type}
+              amount={account.openingAmount}
+              overdraft={false}
               className="font-sans text-2xl normal-nums"
             />
             <span className="block text-caption text-ink-muted">{` on ${account.openedOn}`}</span>
@@ -152,8 +149,9 @@ function BalanceOnDate({ account, today }: { account: Account; today: string }) 
             <>Balance on {view.data.asOn}: not available (before tracking began)</>
           ) : (
             <>
-              Balance on {view.data.asOn}: <strong>{formatMoney(Number(view.data.amount))}</strong>.
-              The current Balance ({formatMoney(Number(account.balance.amount))}) is unchanged.
+              Balance on {view.data.asOn}:{' '}
+              <strong>{balanceText(account.type, view.data.amount)}</strong>. The current Balance (
+              {balanceText(account.type, account.balance.amount)}) is unchanged.
             </>
           )}
         </p>
@@ -220,10 +218,14 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             members={members}
             today={today.data}
             editing={editing}
-            onChangeToTransfer={() => {
-              setTransfer({ kind: 'convert', entry: editing })
-              setEditing(null)
-            }}
+            onChangeToTransfer={
+              isCard(account.type)
+                ? undefined
+                : () => {
+                    setTransfer({ kind: 'convert', entry: editing })
+                    setEditing(null)
+                  }
+            }
             onDone={() => setEditing(null)}
           />
         </Panel>
@@ -286,7 +288,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
         </CardTitle>
         <ActivityList
           accountId={account.id}
-          opening={{ amount: account.openingAmount, on: account.openedOn }}
+          opening={{ amount: account.openingAmount, on: account.openedOn, type: account.type }}
           members={members}
           onEdit={
             ready
@@ -324,61 +326,85 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               : undefined
           }
         />
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              remember()
-              setAdding('income')
-            }}
-            disabled={!ready}
-          >
-            Add money in
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              remember()
-              setAdding('expense')
-            }}
-            disabled={!ready}
-          >
-            Add money out
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              remember()
-              setCorrecting({})
-            }}
-            disabled={!ready}
-          >
-            Update balance
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              remember()
-              setTransfer({ kind: 'new' })
-            }}
-            disabled={!ready}
-          >
-            Add transfer
-          </Button>
-        </div>
+        {isCard(account.type) ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setAdding('expense')
+              }}
+              disabled={!ready}
+            >
+              Record purchase
+            </Button>
+            <Button variant="secondary" size="sm" disabled>
+              Record refund
+            </Button>
+            <Button variant="secondary" size="sm" disabled>
+              Record payment
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setAdding('income')
+              }}
+              disabled={!ready}
+            >
+              Add money in
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setAdding('expense')
+              }}
+              disabled={!ready}
+            >
+              Add money out
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setCorrecting({})
+              }}
+              disabled={!ready}
+            >
+              Update balance
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setTransfer({ kind: 'new' })
+              }}
+              disabled={!ready}
+            >
+              Add transfer
+            </Button>
+          </div>
+        )}
       </Card>
       {today.data && <BalanceOnDate account={account} today={today.data} />}
       <RemindersCard accountId={account.id} />
-      <StatementsCard
-        accountId={account.id}
-        balance={account.balance.amount}
-        members={members}
-        today={today.data}
-      />
+      {!isCard(account.type) && (
+        <StatementsCard
+          accountId={account.id}
+          balance={account.balance.amount}
+          members={members}
+          today={today.data}
+        />
+      )}
     </>
   )
 }

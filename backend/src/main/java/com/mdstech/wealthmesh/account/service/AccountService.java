@@ -103,11 +103,36 @@ public class AccountService {
         BigDecimal opening = openingAmount(request.openingBalance());
         AccountType type = AccountType.fromWire(request.type())
                 .orElseThrow(() -> bad("Unsupported account type"));
+        opening = signed(type, opening, request.balanceSide());
         LocalDate openedOn = request.openedOn() == null ? today : request.openedOn();
         if (openedOn.isAfter(today)) {
             throw bad("The opening date cannot be in the future");
         }
         return new NewAccount(type, name, requireInstitution(request.institution()), openedOn, opening);
+    }
+
+    /**
+     * A card's amount is entered as a positive figure with a side; it is stored with the asset sign (owed negative,
+     * Card credit positive) so Balance sums and wealth need no card branch. A zero card amount needs no side.
+     */
+    static BigDecimal signed(AccountType type, BigDecimal amount, String side) {
+        if (type != AccountType.CREDIT_CARD) {
+            if (side != null) {
+                throw bad("Owed or Card credit applies to a card only");
+            }
+            return amount;
+        }
+        if (amount.signum() < 0) {
+            throw bad("Enter a valid amount");
+        }
+        if (amount.signum() == 0) {
+            return amount;
+        }
+        return switch (side == null ? "" : side) {
+            case "owed" -> amount.negate();
+            case "credit" -> amount;
+            default -> throw bad("Choose Owed or Card credit");
+        };
     }
 
     static String requireDetailsOnly(AccountUpdateRequest request) {

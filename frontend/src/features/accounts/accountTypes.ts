@@ -5,7 +5,7 @@
 export const ACCOUNT_TYPES = [
   { value: 'checking', label: 'Checking', ready: true },
   { value: 'savings', label: 'Savings', ready: true },
-  { value: 'credit_card', label: 'Credit card', ready: false },
+  { value: 'credit_card', label: 'Credit card', ready: true },
   { value: 'brokerage', label: 'Brokerage', ready: false },
   { value: 'loan', label: 'Loan', ready: false },
   { value: 'mortgage', label: 'Mortgage', ready: false },

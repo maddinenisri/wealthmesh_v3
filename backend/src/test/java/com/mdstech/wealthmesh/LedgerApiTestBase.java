@@ -117,6 +117,23 @@ abstract class LedgerApiTestBase {
         return id.get();
     }
 
+    /** A credit card at Harbor Cards owned by Maya; `side` is "owed" or "credit", null for a blank Balance. */
+    protected String card(String name, String amount, String side, String openedOn) {
+        AtomicReference<String> id = new AtomicReference<>();
+        webTestClient.post().uri("/api/v1/accounts").contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(cardBody(name, amount, side, openedOn)).exchange().expectStatus().isCreated()
+                .expectBody().jsonPath("$.id").value(String.class, id::set);
+        return id.get();
+    }
+
+    protected String cardBody(String name, String amount, String side, String openedOn) {
+        String balance = amount == null ? "" : ", \"openingBalance\": \"" + amount + "\"";
+        String sideField = side == null ? "" : ", \"balanceSide\": \"" + side + "\"";
+        return """
+                {"type": "credit_card", "name": "%s", "institution": "Harbor Cards", "ownerMemberIds": ["%s"],
+                 "openedOn": "%s"%s%s}""".formatted(name, mayaId, openedOn, balance, sideField);
+    }
+
     protected WebTestClient.ResponseSpec post(String accountId, String path, String key, String json) {
         return webTestClient.post().uri("/api/v1/accounts/{id}/{path}", accountId, path)
                 .contentType(MediaType.APPLICATION_JSON).header("Idempotency-Key", key)

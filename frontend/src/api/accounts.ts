@@ -21,6 +21,8 @@ export type NewAccount = {
   openedOn: string
   /** An amount string such as "5000.00", or null to start at 0.00. */
   openingBalance: string | null
+  /** A card's amount is positive; this says if it is owed or Card credit. Left out for every other type. */
+  balanceSide?: 'owed' | 'credit' | null
 }
 
 export type AccountDetails = { name: string; institution: string; ownerMemberIds: string[] }
@@ -74,6 +76,7 @@ export const createAccount = (account: NewAccount) =>
       ownerMemberIds: account.ownerMemberIds,
       openedOn: account.openedOn,
       openingBalance: account.openingBalance,
+      ...(account.balanceSide ? { balanceSide: account.balanceSide } : {}),
     },
     parse: parseAccount,
   })

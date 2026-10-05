@@ -4,6 +4,7 @@ import { Amount, Button, Table, Td, Th } from '../../design-system'
 import { useAccountHistory } from '../../hooks/useActivity'
 import { useOpeningRevisions } from '../../hooks/useStartingBalance'
 import { formatMoney } from '../../lib/money'
+import { BalanceFigure } from '../accounts/BalanceFigure'
 import { signedAmount } from './signedAmount'
 
 const STATUS = { effective: 'Effective', replaced: 'Replaced', removed: 'Removed' } as const
@@ -24,7 +25,7 @@ export function EntryHistory({
 }: {
   accountId: string
   /** The initial Balance lives on the account, not in the activity, so history shows it as its own row. */
-  opening?: { amount: string; on: string }
+  opening?: { amount: string; on: string; type?: string }
   /** Starts bringing a removed entry back; left out while another form is open. */
   onUndo?: (entry: HistoryEntry) => void
 }) {
@@ -189,7 +190,11 @@ export function EntryHistory({
               <Td>Initial Balance</Td>
               <Td />
               <Td className="text-right whitespace-nowrap">
-                <Amount value={Number(original.amount)} />
+                <BalanceFigure
+                  type={opening?.type ?? 'checking'}
+                  amount={original.amount}
+                  overdraft={false}
+                />
               </Td>
               <Td>
                 {corrections.length > 0 ? 'Replaced' : 'Effective'}

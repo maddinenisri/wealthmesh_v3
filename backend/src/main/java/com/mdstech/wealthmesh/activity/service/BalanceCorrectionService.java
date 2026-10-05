@@ -194,7 +194,7 @@ public class BalanceCorrectionService {
     private Mono<Account> load(UUID id) {
         return accounts.findById(id).switchIfEmpty(Mono.error(
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
-                .filter(account -> AccountType.holdsActivity(account.type()))
+                .filter(account -> AccountType.holdsActivity(account.type()) && !AccountType.isCard(account.type()))
                 .switchIfEmpty(Mono.error(EntryValidator.bad(
                         "The Balance of this type of account cannot be corrected yet")));
     }

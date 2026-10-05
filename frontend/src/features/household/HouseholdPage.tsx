@@ -13,7 +13,7 @@ import {
 import { useAccounts } from '../../hooks/useAccounts'
 import { useWealth } from '../../hooks/useWealth'
 import { accountTypeLabel } from '../accounts/accountTypes'
-import { OverdrawnLabel } from '../accounts/Overdrawn'
+import { BalanceFigure } from '../accounts/BalanceFigure'
 import { ownerNames } from '../accounts/ownerNames'
 import { useAccountContext } from '../accounts/useAccountContext'
 import { CreateHouseholdForm, RenameHouseholdForm } from './HouseholdForms'
@@ -138,8 +138,7 @@ function AccountsAndWealth() {
                 </span>
               </span>
               <span className="text-right">
-                <Amount value={Number(account.balance.amount)} />
-                <OverdrawnLabel balance={account.balance.amount} />
+                <BalanceFigure type={account.type} amount={account.balance.amount} />
               </span>
             </li>
           ))}

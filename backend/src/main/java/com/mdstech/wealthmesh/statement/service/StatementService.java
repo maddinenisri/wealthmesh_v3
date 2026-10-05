@@ -15,6 +15,7 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.activity.service.EntryValidator;
@@ -143,7 +144,9 @@ public class StatementService {
     }
 
     private Mono<Account> account(UUID accountId) {
-        return accounts.findById(accountId).switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)));
+        return accounts.findById(accountId).switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)))
+                .filter(account -> !AccountType.isCard(account.type()))
+                .switchIfEmpty(Mono.error(EntryValidator.bad("Statements for a card cannot be added yet")));
     }
 
     private static String requireKey(String key) {

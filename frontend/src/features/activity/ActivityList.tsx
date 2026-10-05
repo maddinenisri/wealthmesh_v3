@@ -20,7 +20,7 @@ export function ActivityList({
   onUndo,
 }: {
   accountId: string
-  opening?: { amount: string; on: string }
+  opening?: { amount: string; on: string; type?: string }
   members: Member[] | undefined
   /** Starts correcting one entry; left out while another form is open. */
   onEdit?: (entry: Activity) => void

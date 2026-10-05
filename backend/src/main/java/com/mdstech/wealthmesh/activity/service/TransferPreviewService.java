@@ -121,7 +121,9 @@ public class TransferPreviewService {
     private Mono<Account> accountOf(UUID id) {
         return accounts.findById(id).switchIfEmpty(Mono.error(notFound("Account not found: " + id)))
                 .filter(account -> AccountType.holdsActivity(account.type()))
-                .switchIfEmpty(Mono.error(EntryValidator.bad(MovementService.WRONG_TYPE)));
+                .switchIfEmpty(Mono.error(EntryValidator.bad(MovementService.WRONG_TYPE)))
+                .filter(account -> !AccountType.isCard(account.type()))
+                .switchIfEmpty(Mono.error(EntryValidator.bad(MovementService.CARD_TYPE)));
     }
 
     private Mono<BigDecimal> balance(Account account) {

@@ -114,7 +114,9 @@ public class HistoricalEntryService {
     private Mono<Account> load(UUID id) {
         return accounts.findById(id).switchIfEmpty(Mono.error(
                         new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
-                .flatMap(account -> AccountType.holdsActivity(account.type()) ? Mono.just(account)
+                .flatMap(account -> AccountType.isCard(account.type())
+                        ? Mono.error(EntryValidator.bad("Use Update balance"))
+                        : AccountType.holdsActivity(account.type()) ? Mono.just(account)
                         : Mono.error(EntryValidator.bad(
                                 "Money in and out cannot be recorded on this type of account yet")));
     }

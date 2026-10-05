@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.activity.domain.Activity;
 import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
 import com.mdstech.wealthmesh.category.domain.Category;
@@ -62,6 +63,9 @@ public class EntryValidator {
 
     private Mono<Entry> parse(Account account, String kind, ExpenseRequest request, boolean reminder) {
         return Mono.fromCallable(() -> {
+            if ("income".equals(kind) && AccountType.isCard(account.type())) {
+                throw bad("A card records purchases, refunds and payments, not income");
+            }
             BigDecimal amount = amount(request.amount());
             checkDate(account, request.occurredOn(), reminder);
             return new Object[] { amount, description(request.description()) };

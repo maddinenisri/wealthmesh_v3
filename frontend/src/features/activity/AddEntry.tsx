@@ -26,6 +26,7 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney, parseAmount } from '../../lib/money'
 import { MONTH_NAMES } from '../../lib/months'
 import { ACCOUNT_TYPES } from '../accounts/accountTypes'
+import { isCard } from '../accounts/cardBalance'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { EnteredBy } from './EnteredBy'
 import { HistoricalSetup } from './HistoricalSetup'
@@ -58,6 +59,7 @@ const amountRules = {
 const WORDS = {
   expense: { add: 'Add money out', review: 'Review money out', place: 'Paid from' },
   income: { add: 'Add money in', review: 'Review money in', place: 'Received into' },
+  purchase: { add: 'Record purchase', review: 'Review purchase', place: 'Charged to' },
 } as const
 
 /**
@@ -83,7 +85,8 @@ export function AddEntry({
   onChangeToTransfer?: () => void
   onDone: () => void
 }) {
-  const words = WORDS[kind]
+  const onCard = isCard(account.type)
+  const words = WORDS[onCard && kind === 'expense' ? 'purchase' : kind]
   const categories = useCategories(kind)
   const record = useRecordEntry(account.id, kind)
   const activity = useAccountActivity(account.id)
@@ -105,8 +108,10 @@ export function AddEntry({
   })
   // An edit may move the entry to another account that holds money activity (the server decides, too).
   const accounts = useAccounts()
-  const choices = (accounts.data ?? []).filter((candidate) =>
-    ACCOUNT_TYPES.some((type) => type.ready && type.value === candidate.type),
+  const choices = (accounts.data ?? []).filter(
+    (candidate) =>
+      ACCOUNT_TYPES.some((type) => type.ready && type.value === candidate.type) &&
+      !(kind === 'income' && isCard(candidate.type)),
   )
   const chosenId = useWatch({ control, name: 'accountId' })
   const targetOf = (id: string) => choices.find((candidate) => candidate.id === id) ?? account
@@ -199,10 +204,10 @@ export function AddEntry({
     const reminder = isReminder(reviewing.occurredOn)
     // Advisory only: money that really left the account is still recorded (the bill was paid).
     const shortBy = moving
-      ? kind === 'expense' && effect.data
+      ? kind === 'expense' && effect.data && !isCard(target.type)
         ? Math.max(0, -Number(effect.data.to.balanceAfter))
         : 0
-      : kind === 'expense' && !reminder && !(match && !separate)
+      : kind === 'expense' && !reminder && !(match && !separate) && !onCard
         ? Number(parseAmount(reviewing.amount)) - Number(account.balance.amount)
         : 0
     return (
@@ -280,7 +285,9 @@ export function AddEntry({
   return (
     <Card aria-labelledby="entry-heading">
       <CardTitle id="entry-heading" className="text-lg">
-        {editing ? `Edit ${kind === 'income' ? 'money in' : 'money out'}` : words.add}
+        {editing
+          ? `Edit ${kind === 'income' ? 'money in' : onCard ? 'purchase' : 'money out'}`
+          : words.add}
       </CardTitle>
       <form
         noValidate

@@ -1202,9 +1202,15 @@ export function mockApi(
       const failure =
         validateAccount(body.name, body.ownerMemberIds) ??
         validateOwners(state.members, body.ownerMemberIds, []) ??
-        validateOpening(body, today)
+        validateOpening(body, today) ??
+        validateSide(body)
       if (failure) return failure
-      const opening = amountOrZero(body.openingBalance) as string
+      // A card is entered as a positive figure with a side and stored with the asset sign (owed negative).
+      const entered = amountOrZero(body.openingBalance) as string
+      const opening =
+        body.type === 'credit_card' && body.balanceSide === 'owed' && Number(entered) !== 0
+          ? (-Number(entered)).toFixed(2)
+          : entered
       const account: MockAccount = {
         id: newId(),
         type: body.type,
@@ -1275,6 +1281,7 @@ type NewAccountBody = {
   ownerMemberIds: string[]
   openedOn: string
   openingBalance: string | null
+  balanceSide?: string
 }
 
 function amountOrZero(value: string | null) {
@@ -1285,6 +1292,20 @@ function amountOrZero(value: string | null) {
 function validateAccount(name: string, owners: string[]) {
   if (!name?.trim()) return problem(400, 'Enter an account name')
   if (!owners?.length) return problem(400, 'Choose an owner')
+  return null
+}
+
+/** A card amount needs Owed or Card credit and is never negative; any other type takes no side. */
+function validateSide(body: NewAccountBody) {
+  const card = body.type === 'credit_card'
+  if (!card) {
+    return body.balanceSide ? problem(400, 'Owed or Card credit applies to a card only') : null
+  }
+  const entered = Number(amountOrZero(body.openingBalance))
+  if (entered < 0) return problem(400, 'Enter a valid amount')
+  if (entered !== 0 && body.balanceSide !== 'owed' && body.balanceSide !== 'credit') {
+    return problem(400, 'Choose Owed or Card credit')
+  }
   return null
 }
 

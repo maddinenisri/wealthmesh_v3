@@ -1,4 +1,4 @@
-import { useForm, type Control } from 'react-hook-form'
+import { useForm, useWatch, type Control } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
@@ -13,10 +13,16 @@ import {
 import { useCreateAccount, useUpdateAccount } from '../../hooks/useAccounts'
 import { parseAmount } from '../../lib/money'
 import { ACCOUNT_TYPES } from './accountTypes'
+import { isCard } from './cardBalance'
 import { memberLabel } from './ownerNames'
 
 type DetailsValues = { name: string; institution: string; ownerMemberIds: string[] }
-type SetupValues = DetailsValues & { type: string; openedOn: string; balance: string }
+type SetupValues = DetailsValues & {
+  type: string
+  openedOn: string
+  balance: string
+  balanceSide: 'owed' | 'credit'
+}
 
 const nameRules = {
   validate: (value: string) => value.trim() !== '' || 'Enter an account name',
@@ -67,8 +73,10 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       ownerMemberIds: [],
       openedOn: today,
       balance: '',
+      balanceSide: 'owed',
     },
   })
+  const card = isCard(useWatch({ control, name: 'type' }))
 
   const onSubmit = handleSubmit((values) =>
     create
@@ -79,6 +87,8 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         ownerMemberIds: values.ownerMemberIds,
         openedOn: values.openedOn,
         openingBalance: values.balance.trim() === '' ? null : parseAmount(values.balance),
+        balanceSide:
+          isCard(values.type) && values.balance.trim() !== '' ? values.balanceSide : null,
       })
       .then(
         () => navigate('/accounts'),
@@ -97,7 +107,12 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         ))}
       </SelectField>
       <TextField control={control} name="name" label="Account name" rules={nameRules} />
-      <TextField control={control} name="institution" label="Bank" rules={bankRules} />
+      <TextField
+        control={control}
+        name="institution"
+        label={card ? 'Issuer' : 'Bank'}
+        rules={bankRules}
+      />
       <OwnerChoices members={members} control={control} />
       <TextField
         control={control}
@@ -117,10 +132,24 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         placeholder="0.00"
         hint="Optional. Leave blank to start at $0.00 on the opening date."
         rules={{
-          validate: (value) =>
-            value.trim() === '' || parseAmount(value) !== null || 'Enter a valid amount',
+          validate: (value) => {
+            if (value.trim() === '') return true
+            const amount = parseAmount(value)
+            return (amount !== null && !(card && amount.startsWith('-'))) || 'Enter a valid amount'
+          },
         }}
       />
+      {card && (
+        <SelectField
+          control={control}
+          name="balanceSide"
+          label="Balance means"
+          hint="Enter the amount as a positive figure. Owed is a debt; Card credit is money the card owes you."
+        >
+          <option value="owed">Owed</option>
+          <option value="credit">Card credit</option>
+        </SelectField>
+      )}
       <div className="flex gap-2">
         <Button type="submit" disabled={create.isPending}>
           {create.isPending ? 'Saving' : 'Save account'}
@@ -158,7 +187,12 @@ export function AccountEditForm({ account, members }: { account: Account; member
     <form onSubmit={onSubmit} noValidate className="flex max-w-md flex-col gap-4">
       <FormAlert message={update.error?.message} />
       <TextField control={control} name="name" label="Account name" rules={nameRules} />
-      <TextField control={control} name="institution" label="Bank" rules={bankRules} />
+      <TextField
+        control={control}
+        name="institution"
+        label={isCard(account.type) ? 'Issuer' : 'Bank'}
+        rules={bankRules}
+      />
       <OwnerChoices members={members} control={control} current={account.ownerMemberIds} />
       <div className="flex gap-2">
         <Button type="submit" disabled={update.isPending}>
