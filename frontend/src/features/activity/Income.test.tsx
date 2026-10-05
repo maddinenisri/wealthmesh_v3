@@ -72,7 +72,7 @@ describe('recording income', () => {
     await openForm(user)
 
     const category = await screen.findByLabelText('Category')
-    expect(category.querySelectorAll('option')).toHaveLength(2) // placeholder and Salary
+    expect(category.querySelectorAll('option')).toHaveLength(4) // placeholder, Salary, Interest, Bonus
     await fillIncome(user, { amount: '6000.00', date: '2026-09-02', category: 'Salary' })
     await user.click(screen.getByRole('button', { name: 'Review' }))
 

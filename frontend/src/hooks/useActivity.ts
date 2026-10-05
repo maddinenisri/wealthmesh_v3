@@ -14,6 +14,7 @@ import {
   listSpendingEntries,
   previewCorrection,
   recordEntry,
+  previewReplacement,
   replaceEntry,
   saveCorrection,
   saveHistoricalEntry,
@@ -94,11 +95,30 @@ export function useAccountHistory(accountId: string, enabled: boolean) {
 
 /** Replaces one entry with a corrected one. Repeating a call with the same `key` saves nothing twice. */
 export function useReplaceEntry(accountId: string, activityId: string) {
+  const queryClient = useQueryClient()
   const refresh = useRefreshMoney(accountId)
   return useMutation({
     mutationFn: ({ key, entry }: { key: string; entry: EditedEntry }) =>
       replaceEntry(accountId, activityId, key, entry),
-    onSuccess: refresh,
+    // The entry may have moved to another account, so every account's activity and history is stale.
+    onSuccess: () =>
+      Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['activity'] })]),
+  })
+}
+
+/** The review of a replacement: both accounts' Balances and both months, from the server. Nothing is saved. */
+export function useReplacementPreview(
+  accountId: string,
+  activityId: string,
+  targetAccountId: string,
+  amount: string,
+  occurredOn: string,
+) {
+  return useQuery({
+    queryKey: ['replacement-preview', accountId, activityId, targetAccountId, amount, occurredOn],
+    queryFn: () => previewReplacement(accountId, activityId, targetAccountId, amount, occurredOn),
+    enabled: activityId !== '' && targetAccountId !== '' && amount !== '' && occurredOn !== '',
+    gcTime: 0,
   })
 }
 

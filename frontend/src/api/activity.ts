@@ -16,6 +16,19 @@ export type Activity = {
   reason: string | null
 }
 
+/** The other side of a replacement: what the entry was, where, and who saved it when. */
+export type HistoryOrigin = {
+  id: string
+  accountId: string
+  accountName: string
+  kind: string
+  amount: string
+  occurredOn: string
+  categoryName: string | null
+  enteredByName: string | null
+  at: string
+}
+
 /** One ledger row as history shows it: effective, replaced by a later edit, or removed. */
 export type HistoryEntry = {
   id: string
@@ -29,6 +42,10 @@ export type HistoryEntry = {
   reason: string | null
   replacesId: string | null
   replacedById: string | null
+  /** The entry this one replaced, with its account (it can be on another account). */
+  replaces: HistoryOrigin | null
+  /** The entry that replaced this one, and where it went. */
+  replacedBy: HistoryOrigin | null
   status: 'effective' | 'replaced' | 'removed'
   /** Who replaced, removed or restored the entry and when, oldest first. */
   events: { action: 'replaced' | 'removed' | 'restored'; byName: string; at: string }[]
@@ -43,7 +60,22 @@ export type NewEntry = {
   enteredByMemberId: string
 }
 
-export type EditedEntry = NewEntry & { reason: string }
+/** A corrected entry; `accountId` moves it to another account (left out: it stays where it is). */
+export type EditedEntry = NewEntry & { reason: string; accountId?: string }
+
+/** What a replacement would change before it is saved: both Balances and both months. */
+export type ReplacementPreview = {
+  from: { id: string; name: string; balanceAfter: string }
+  to: { id: string; name: string; balanceAfter: string }
+  oldMonth: MonthFigure
+  newMonth: MonthFigure
+}
+export type MonthFigure = {
+  month: string
+  kind: 'income' | 'spending'
+  before: string
+  after: string
+}
 
 export type CategorySpending = {
   categoryId: string | null
@@ -110,6 +142,43 @@ function parseActivity(value: unknown): Activity {
   }
 }
 
+function parseOrigin(value: unknown): HistoryOrigin {
+  const data = record(value)
+  return {
+    id: str(data.id),
+    accountId: str(data.accountId),
+    accountName: str(data.accountName),
+    kind: str(data.kind),
+    amount: str(data.amount),
+    occurredOn: str(data.occurredOn),
+    categoryName: strOrNull(data.categoryName),
+    enteredByName: strOrNull(data.enteredByName),
+    at: str(data.at),
+  }
+}
+
+function parseMonth(value: unknown): MonthFigure {
+  const data = record(value)
+  const kind = str(data.kind)
+  if (kind !== 'income' && kind !== 'spending') throw bad()
+  return { month: str(data.month), kind, before: str(data.before), after: str(data.after) }
+}
+
+function parseAccountFigure(value: unknown) {
+  const data = record(value)
+  return { id: str(data.id), name: str(data.name), balanceAfter: str(data.balanceAfter) }
+}
+
+function parseReplacementPreview(value: unknown): ReplacementPreview {
+  const data = record(value)
+  return {
+    from: parseAccountFigure(data.from),
+    to: parseAccountFigure(data.to),
+    oldMonth: parseMonth(data.oldMonth),
+    newMonth: parseMonth(data.newMonth),
+  }
+}
+
 function parseHistoryEntry(value: unknown): HistoryEntry {
   const data = record(value)
   const status = str(data.status)
@@ -126,6 +195,8 @@ function parseHistoryEntry(value: unknown): HistoryEntry {
     reason: strOrNull(data.reason),
     replacesId: strOrNull(data.replacesId),
     replacedById: strOrNull(data.replacedById),
+    replaces: data.replaces == null ? null : parseOrigin(data.replaces),
+    replacedBy: data.replacedBy == null ? null : parseOrigin(data.replacedBy),
     status,
     events: list(data.events, (entry) => {
       const event = record(entry)
@@ -199,6 +270,20 @@ export const replaceEntry = (
     body: entry,
     parse: parseActivity,
   })
+
+/** The review of a replacement that may move the entry to another account: figures only, nothing saved. */
+export const previewReplacement = (
+  accountId: string,
+  activityId: string,
+  targetAccountId: string,
+  amount: string,
+  occurredOn: string,
+) =>
+  request(
+    `/accounts/${accountId}/activity/${activityId}/replacement/preview?` +
+      new URLSearchParams({ targetAccountId, amount, occurredOn }).toString(),
+    { parse: parseReplacementPreview },
+  )
 
 /** An entry dated before tracking began, saved together with the reviewed move of the start. */
 export type HistoricalEntry = {

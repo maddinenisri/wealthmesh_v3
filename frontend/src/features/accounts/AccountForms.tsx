@@ -12,6 +12,7 @@ import {
 } from '../../design-system'
 import { useCreateAccount, useUpdateAccount } from '../../hooks/useAccounts'
 import { parseAmount } from '../../lib/money'
+import { ACCOUNT_TYPES } from './accountTypes'
 import { memberLabel } from './ownerNames'
 
 type DetailsValues = { name: string; institution: string; ownerMemberIds: string[] }
@@ -54,17 +55,7 @@ function OwnerChoices<T extends DetailsValues>({
   )
 }
 
-/** Account types in their final order. Only checking can be chosen until its feature is built. */
-const TYPES = [
-  { value: 'checking', label: 'Checking', ready: true },
-  { value: 'savings', label: 'Savings', ready: false },
-  { value: 'credit_card', label: 'Credit card', ready: false },
-  { value: 'brokerage', label: 'Brokerage', ready: false },
-  { value: 'loan', label: 'Loan', ready: false },
-  { value: 'mortgage', label: 'Mortgage', ready: false },
-] as const
-
-/** Sets up a checking account. Balance is optional; blank starts at $0.00 on the opening date. */
+/** Sets up a checking or savings account. Balance is optional; blank starts at $0.00 on the opening date. */
 export function AccountSetupForm({ members, today }: { members: Member[]; today: string }) {
   const navigate = useNavigate()
   const create = useCreateAccount()
@@ -82,7 +73,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
   const onSubmit = handleSubmit((values) =>
     create
       .mutateAsync({
-        type: values.type as 'checking',
+        type: values.type,
         name: values.name.trim(),
         institution: values.institution.trim(),
         ownerMemberIds: values.ownerMemberIds,
@@ -99,7 +90,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
     <form onSubmit={onSubmit} noValidate className="flex max-w-md flex-col gap-4">
       <FormAlert message={create.error?.message} />
       <SelectField control={control} name="type" label="Account type">
-        {TYPES.map((type) => (
+        {ACCOUNT_TYPES.map((type) => (
           <option key={type.value} value={type.value} disabled={!type.ready}>
             {type.ready ? type.label : `${type.label} (coming soon)`}
           </option>

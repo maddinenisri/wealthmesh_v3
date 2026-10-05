@@ -13,8 +13,8 @@ export type Account = {
 }
 
 export type NewAccount = {
-  /** Only 'checking' can be created for now. */
-  type: 'checking'
+  /** A wire type such as 'checking' or 'savings'; the server refuses one it cannot set up yet. */
+  type: string
   name: string
   institution: string
   ownerMemberIds: string[]

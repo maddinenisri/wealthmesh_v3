@@ -95,6 +95,8 @@ export const CATEGORIES = [
   { id: 'c0000000-0000-4000-8000-000000000004', name: 'Salary', kind: 'income' },
   { id: 'c0000000-0000-4000-8000-000000000005', name: 'Dining', kind: 'spending' },
   { id: 'c0000000-0000-4000-8000-000000000006', name: 'Bank fees', kind: 'spending' },
+  { id: 'c0000000-0000-4000-8000-000000000007', name: 'Interest', kind: 'income' },
+  { id: 'c0000000-0000-4000-8000-000000000008', name: 'Bonus', kind: 'income' },
 ]
 
 function decorate(a: MockActivity, accounts: MockAccount[]) {
@@ -358,9 +360,65 @@ export function mockApi(
           .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn)),
       )
     }),
+    http.get(
+      '*/api/v1/accounts/:id/activity/:activityId/replacement/preview',
+      ({ request, params }) => {
+        log(request)
+        const query = new URL(request.url).searchParams
+        const original = state.activity.find((a) => a.id === params.activityId)
+        const source = state.accounts.find((a) => a.id === params.id)
+        const target = state.accounts.find(
+          (a) => a.id === (query.get('targetAccountId') ?? params.id),
+        )
+        if (!original || !source || !target) return problem(404, 'Entry not found')
+        const amount = Number(query.get('amount'))
+        const date = query.get('occurredOn') ?? ''
+        const same = source.id === target.id
+        const oldSigned = signed(original)
+        const newSigned = original.kind === 'income' ? amount : -amount
+        const fromAfter = Number(source.balance.amount) - oldSigned + (same ? newSigned : 0)
+        const toAfter = same ? fromAfter : Number(target.balance.amount) + newSigned
+        const kind = original.kind === 'income' ? 'income' : 'expense'
+        const month = (m: string) => {
+          const before = live()
+            .filter((a) => a.kind === kind && a.occurredOn.startsWith(m))
+            .reduce((sum, a) => sum + Number(a.amount), 0)
+          const after =
+            before -
+            (original.occurredOn.startsWith(m) ? Number(original.amount) : 0) +
+            (date.startsWith(m) ? amount : 0)
+          return {
+            month: m,
+            kind: kind === 'income' ? 'income' : 'spending',
+            before: before.toFixed(2),
+            after: after.toFixed(2),
+          }
+        }
+        return HttpResponse.json({
+          from: { id: source.id, name: source.name, balanceAfter: fromAfter.toFixed(2) },
+          to: { id: target.id, name: target.name, balanceAfter: toAfter.toFixed(2) },
+          oldMonth: month(original.occurredOn.slice(0, 7)),
+          newMonth: month(date.slice(0, 7)),
+        })
+      },
+    ),
     http.get('*/api/v1/accounts/:id/activity/history', ({ request, params }) => {
       log(request)
       const name = (id: string | null | undefined) => nameOf(id) || null
+      const origin = (row: MockActivity | undefined) => {
+        if (!row) return null
+        return {
+          id: row.id,
+          accountId: row.accountId,
+          accountName: state.accounts.find((a) => a.id === row.accountId)?.name ?? '',
+          kind: row.kind,
+          amount: row.amount,
+          occurredOn: row.occurredOn,
+          categoryName: CATEGORIES.find((c) => c.id === row.categoryId)?.name ?? null,
+          enteredByName: name(row.enteredByMemberId),
+          at: row.createdAt ?? '2026-10-03T09:00:00Z',
+        }
+      }
       return HttpResponse.json(
         state.activity
           .filter((a) => a.accountId === params.id)
@@ -378,6 +436,8 @@ export function mockApi(
               reason: a.reason ?? null,
               replacesId: a.replacesId ?? null,
               replacedById: replacement?.id ?? null,
+              replaces: origin(state.activity.find((r) => r.id === a.replacesId)),
+              replacedBy: origin(replacement),
               events: a.events ?? [],
               status: replacement ? 'replaced' : a.removedAt ? 'removed' : 'effective',
             }
@@ -685,10 +745,11 @@ export function mockApi(
       async ({ request, params }) => {
         log(request)
         const key = request.headers.get('Idempotency-Key') ?? ''
-        const body = (await request.json()) as ExpenseBody & { reason?: string }
-        const account = state.accounts.find((a) => a.id === params.id)
+        const body = (await request.json()) as ExpenseBody & { reason?: string; accountId?: string }
+        const source = state.accounts.find((a) => a.id === params.id)
+        const account = state.accounts.find((a) => a.id === (body.accountId ?? params.id))
         const original = state.activity.find((a) => a.id === params.activityId)
-        if (!account || !original) return problem(404, 'Entry not found')
+        if (!source || !account || !original) return problem(404, 'Entry not found')
         const amount = Number(body.amount)
         if (!(amount > 0)) return problem(400, 'Enter an amount greater than zero')
         if (body.occurredOn > today)
@@ -731,6 +792,21 @@ export function mockApi(
           replacesId: original.id,
         }
         state.activity.push(entry)
+        if (account.id !== source.id) {
+          // Moved: the original leaves the source Balance, the replacement joins the target's.
+          source.balance = {
+            ...source.balance,
+            amount: (
+              Number(source.balance.amount) -
+              sign(original.kind) * Number(original.amount)
+            ).toFixed(2),
+          }
+          account.balance = {
+            ...account.balance,
+            amount: (Number(account.balance.amount) + sign(original.kind) * amount).toFixed(2),
+          }
+          return HttpResponse.json(decorate(entry, state.accounts), { status: 201 })
+        }
         account.balance = {
           ...account.balance,
           amount:

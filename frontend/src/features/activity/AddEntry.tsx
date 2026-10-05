@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
@@ -17,15 +17,19 @@ import {
   useCategories,
   useRecordEntry,
   useReplaceEntry,
+  useReplacementPreview,
   useSaveReminder,
   useSpending,
 } from '../../hooks/useActivity'
+import { useAccounts } from '../../hooks/useAccounts'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney, parseAmount } from '../../lib/money'
 import { MONTH_NAMES } from '../../lib/months'
+import { ACCOUNT_TYPES } from '../accounts/accountTypes'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { EnteredBy } from './EnteredBy'
 import { HistoricalSetup } from './HistoricalSetup'
+import { MoveFigures } from './MoveFigures'
 
 type Values = {
   description: string
@@ -33,6 +37,8 @@ type Values = {
   occurredOn: string
   categoryId: string
   reason: string
+  /** The account the entry lands on; only an edit can choose another one. */
+  accountId: string
 }
 
 /** One id per form instance: a repeat of the same save carries the same id (D-024). */
@@ -91,8 +97,16 @@ export function AddEntry({
       occurredOn: editing?.occurredOn ?? today,
       categoryId: editing?.categoryId ?? '',
       reason: '',
+      accountId: account.id,
     },
   })
+  // An edit may move the entry to another account that holds money activity (the server decides, too).
+  const accounts = useAccounts()
+  const choices = (accounts.data ?? []).filter((candidate) =>
+    ACCOUNT_TYPES.some((type) => type.ready && type.value === candidate.type),
+  )
+  const chosenId = useWatch({ control, name: 'accountId' })
+  const targetOf = (id: string) => choices.find((candidate) => candidate.id === id) ?? account
 
   // A date after today is a plan, saved as a reminder: it never changes the Balance or a month's totals.
   const isReminder = (date: string) => !editing && date > today
@@ -116,6 +130,23 @@ export function AddEntry({
     match && !separate && reviewing ? reviewing.occurredOn.slice(0, 7) : '',
   )
   const save = replacing ? replace : reviewing && isReminder(reviewing.occurredOn) ? remind : record
+  // The review replaces the form in the same panel: bring its heading into view and focus it.
+  const inReview = reviewing !== null
+  useEffect(() => {
+    if (!inReview) return
+    const heading = document.getElementById('review-heading')
+    heading?.scrollIntoView?.({ block: 'start' })
+    heading?.focus({ preventScroll: true })
+  }, [inReview])
+  const target = targetOf(reviewing?.accountId ?? chosenId)
+  const moving = !!editing && target.id !== account.id
+  const effect = useReplacementPreview(
+    account.id,
+    editing && reviewing ? editing.id : '',
+    target.id,
+    reviewAmount ?? '',
+    reviewing?.occurredOn ?? '',
+  )
 
   const categoryName = (id: string) => categories.data?.find((c) => c.id === id)?.name ?? ''
 
@@ -133,7 +164,10 @@ export function AddEntry({
       remind.mutate({ key, reminder: { ...rest, kind, dueOn } }, { onSuccess: onDone })
     } else if (replacing) {
       const reason = editing ? reviewing.reason.trim() : 'Replaced by the actual expense'
-      replace.mutate({ key, entry: { ...entry, reason } }, { onSuccess: onDone })
+      replace.mutate(
+        { key, entry: { ...entry, reason, ...(moving ? { accountId: target.id } : {}) } },
+        { onSuccess: onDone },
+      )
     } else {
       record.mutate({ key, entry }, { onSuccess: onDone })
     }
@@ -161,23 +195,26 @@ export function AddEntry({
   if (reviewing) {
     const reminder = isReminder(reviewing.occurredOn)
     // Advisory only: money that really left the account is still recorded (the bill was paid).
-    const shortBy =
-      kind === 'expense' && !reminder && !(match && !separate)
+    const shortBy = moving
+      ? kind === 'expense' && effect.data
+        ? Math.max(0, -Number(effect.data.to.balanceAfter))
+        : 0
+      : kind === 'expense' && !reminder && !(match && !separate)
         ? Number(parseAmount(reviewing.amount)) - Number(account.balance.amount)
         : 0
     return (
       <Card aria-labelledby="review-heading">
-        <CardTitle id="review-heading" className="text-lg">
+        <CardTitle id="review-heading" tabIndex={-1} className="scroll-mt-4 text-lg outline-none">
           {editing ? 'Review change' : reminder ? 'Review reminder' : words.review}
         </CardTitle>
         <FormAlert message={save.error?.message} />
         {shortBy > 0 && (
           <p role="alert" className="mt-3 max-w-md rounded-control border border-line p-3 text-sm">
-            This will leave {account.name} overdrawn by {formatMoney(shortBy)}. {OVERDRAFT_NOTICE}
+            This will leave {target.name} overdrawn by {formatMoney(shortBy)}. {OVERDRAFT_NOTICE}
           </p>
         )}
         <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
-          <Item label={words.place}>{account.name}</Item>
+          <Item label={words.place}>{changed(editing && account.name, target.name)}</Item>
           <Item label="Date">{changed(editing?.occurredOn, reviewing.occurredOn)}</Item>
           <Item label="Amount">
             {editing && Number(editing.amount) !== Number(parseAmount(reviewing.amount)) ? (
@@ -210,9 +247,14 @@ export function AddEntry({
             </Button>
           </div>
         )}
+        {editing && effect.data && <MoveFigures preview={effect.data} />}
+        {editing && effect.isError && <FormAlert message={effect.error.message} />}
         <EnteredBy members={members} member={member} setMemberId={setMemberId} />
         <div className="mt-4 flex gap-2">
-          <Button onClick={confirm} disabled={save.isPending || !member}>
+          <Button
+            onClick={confirm}
+            disabled={save.isPending || !member || (moving && !effect.data)}
+          >
             {save.isPending
               ? 'Saving'
               : reminder
@@ -246,9 +288,19 @@ export function AddEntry({
             : setReviewing(values),
         )}
       >
-        <p className="text-sm text-ink-muted">
-          {words.place} <strong>{account.name}</strong>
-        </p>
+        {editing ? (
+          <SelectField control={control} name="accountId" label={words.place}>
+            {(choices.length > 0 ? choices : [account]).map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.name}
+              </option>
+            ))}
+          </SelectField>
+        ) : (
+          <p className="text-sm text-ink-muted">
+            {words.place} <strong>{account.name}</strong>
+          </p>
+        )}
         <TextField control={control} name="description" label="Description" />
         <TextField
           control={control}
@@ -268,7 +320,7 @@ export function AddEntry({
             validate: (value) =>
               value <= today
                 ? !editing ||
-                  value >= account.openedOn ||
+                  value >= targetOf(chosenId).openedOn ||
                   "This date is before the account's opening date"
                 : !editing || 'Future activity cannot replace a saved entry',
           }}

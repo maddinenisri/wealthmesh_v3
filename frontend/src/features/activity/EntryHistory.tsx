@@ -1,7 +1,9 @@
+import { Fragment } from 'react'
 import type { HistoryEntry } from '../../api/activity'
 import { Amount, Button, Table, Td, Th } from '../../design-system'
 import { useAccountHistory } from '../../hooks/useActivity'
 import { useOpeningRevisions } from '../../hooks/useStartingBalance'
+import { formatMoney } from '../../lib/money'
 import { signedAmount } from './signedAmount'
 
 const STATUS = { effective: 'Effective', replaced: 'Replaced', removed: 'Removed' } as const
@@ -68,51 +70,69 @@ export function EntryHistory({
         </thead>
         <tbody>
           {history.data.map((entry) => (
-            <tr key={entry.id}>
-              <Td className="whitespace-nowrap">{entry.occurredOn}</Td>
-              <Td>
-                {entry.kind === 'correction' ? 'Balance correction' : (entry.description ?? '')}
-              </Td>
-              <Td>{entry.categoryName ?? ''}</Td>
-              <Td className="text-right whitespace-nowrap">
-                <Amount value={signedAmount(entry)} />
-              </Td>
-              <Td>
-                {STATUS[entry.status]}
-                {entry.status === 'replaced' &&
-                  replacement(entry)?.kind === 'expense' &&
-                  entry.kind === 'correction' && (
-                    <span className="block text-caption text-ink-muted">
-                      Replaced by the {replacement(entry)?.categoryName ?? 'actual'} expense
+            <Fragment key={entry.id}>
+              <tr>
+                <Td className="whitespace-nowrap">{entry.occurredOn}</Td>
+                <Td>
+                  {entry.kind === 'correction' ? 'Balance correction' : (entry.description ?? '')}
+                </Td>
+                <Td>{entry.categoryName ?? ''}</Td>
+                <Td className="text-right whitespace-nowrap">
+                  <Amount value={signedAmount(entry)} />
+                </Td>
+                <Td>
+                  {STATUS[entry.status]}
+                  {entry.replacedBy && entry.replacedBy.accountId !== accountId && (
+                    <span className="block text-caption text-ink-muted [overflow-wrap:anywhere]">
+                      Moved to {entry.replacedBy.accountName}
                     </span>
                   )}
-                <ul className="text-caption text-ink-muted">
-                  {entry.events.map((event) => (
-                    <li key={`${event.action}-${event.at}`}>
-                      {ACTION[event.action]} by {event.byName} {stamp(event.at)}
-                    </li>
-                  ))}
-                </ul>
-              </Td>
-              <Td>
-                {entry.enteredByName ?? ''}
-                <div className="text-caption text-ink-muted">{stamp(entry.createdAt)}</div>
-              </Td>
-              <Td>{entry.reason ?? ''}</Td>
-              <Td>
-                {entry.status === 'removed' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Undo ${entry.description ?? entry.categoryName ?? 'entry'}`}
-                    disabled={!onUndo}
-                    onClick={() => onUndo?.(entry)}
-                  >
-                    Undo
-                  </Button>
-                )}
-              </Td>
-            </tr>
+                  {entry.status === 'replaced' &&
+                    replacement(entry)?.kind === 'expense' &&
+                    entry.kind === 'correction' && (
+                      <span className="block text-caption text-ink-muted">
+                        Replaced by the {replacement(entry)?.categoryName ?? 'actual'} expense
+                      </span>
+                    )}
+                  <ul className="text-caption text-ink-muted">
+                    {entry.events.map((event) => (
+                      <li key={`${event.action}-${event.at}`}>
+                        {ACTION[event.action]} by {event.byName} {stamp(event.at)}
+                      </li>
+                    ))}
+                  </ul>
+                </Td>
+                <Td>
+                  {entry.enteredByName ?? ''}
+                  <div className="text-caption text-ink-muted">{stamp(entry.createdAt)}</div>
+                </Td>
+                <Td>{entry.reason ?? ''}</Td>
+                <Td>
+                  {entry.status === 'removed' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Undo ${entry.description ?? entry.categoryName ?? 'entry'}`}
+                      disabled={!onUndo}
+                      onClick={() => onUndo?.(entry)}
+                    >
+                      Undo
+                    </Button>
+                  )}
+                </Td>
+              </tr>
+              {entry.replaces && entry.replaces.accountId !== accountId && (
+                // A note about the other account is long, so it takes the full width under its row.
+                <tr>
+                  <Td colSpan={8} className="text-caption text-ink-muted [overflow-wrap:anywhere]">
+                    Replaced {formatMoney(Number(entry.replaces.amount))}{' '}
+                    {entry.replaces.categoryName ?? 'entry'} on {entry.replaces.accountName}, dated{' '}
+                    {entry.replaces.occurredOn}, saved by {entry.replaces.enteredByName ?? 'nobody'}{' '}
+                    {stamp(entry.replaces.at)}
+                  </Td>
+                </tr>
+              )}
+            </Fragment>
           ))}
           {reversed.map((correction, index) => (
             <tr key={correction.id}>

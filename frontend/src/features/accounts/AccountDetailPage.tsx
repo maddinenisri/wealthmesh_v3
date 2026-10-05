@@ -20,9 +20,11 @@ import { AddEntry } from '../activity/AddEntry'
 import { UpdateBalance } from '../activity/UpdateBalance'
 import { ActivityList } from '../activity/ActivityList'
 import { Panel } from '../activity/Panel'
+import { useReturnFocus } from '../activity/useReturnFocus'
 import { RemindersCard } from '../activity/RemindersCard'
 import { StatementsCard } from '../statements/StatementsCard'
 import { ChangeEntry, type ChangeTarget } from '../activity/ChangeEntry'
+import { accountTypeLabel } from './accountTypes'
 import { OVERDRAFT_NOTICE, OverdrawnLabel } from './Overdrawn'
 import { ownerNames } from './ownerNames'
 import { useAccountContext } from './useAccountContext'
@@ -50,7 +52,7 @@ export function AccountDetailPage() {
         <>
           <PageHeader
             title={account.data.name}
-            description="Checking account"
+            description={`${accountTypeLabel(account.data.type)} account`}
             actions={
               <div className="flex gap-2">
                 <Link
@@ -166,6 +168,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
   )
   const today = useToday()
   const ready = !adding && !editing && !correcting && !changing && !!today.data && !!members
+  const remember = useReturnFocus(!!adding || !!editing || !!correcting || !!changing)
 
   return (
     <>
@@ -222,16 +225,47 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
           accountId={account.id}
           opening={{ amount: account.openingAmount, on: account.openedOn }}
           members={members}
-          onEdit={ready ? setEditing : undefined}
-          onEditCorrection={ready ? (entry) => setCorrecting({ editing: entry }) : undefined}
-          onRemove={ready ? (entry) => setChanging({ mode: 'remove', entry }) : undefined}
-          onUndo={ready ? (entry) => setChanging({ mode: 'undo', entry }) : undefined}
+          onEdit={
+            ready
+              ? (entry) => {
+                  remember()
+                  setEditing(entry)
+                }
+              : undefined
+          }
+          onEditCorrection={
+            ready
+              ? (entry) => {
+                  remember()
+                  setCorrecting({ editing: entry })
+                }
+              : undefined
+          }
+          onRemove={
+            ready
+              ? (entry) => {
+                  remember()
+                  setChanging({ mode: 'remove', entry })
+                }
+              : undefined
+          }
+          onUndo={
+            ready
+              ? (entry) => {
+                  remember()
+                  setChanging({ mode: 'undo', entry })
+                }
+              : undefined
+          }
         />
         <div className="flex flex-wrap gap-2">
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => setAdding('income')}
+            onClick={() => {
+              remember()
+              setAdding('income')
+            }}
             disabled={!ready}
           >
             Add money in
@@ -239,12 +273,23 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => setAdding('expense')}
+            onClick={() => {
+              remember()
+              setAdding('expense')
+            }}
             disabled={!ready}
           >
             Add money out
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => setCorrecting({})} disabled={!ready}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              remember()
+              setCorrecting({})
+            }}
+            disabled={!ready}
+          >
             Update balance
           </Button>
           <Button variant="secondary" size="sm" disabled>
