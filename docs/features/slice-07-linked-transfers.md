@@ -2,7 +2,7 @@
 
 - Slice: 07 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/checking/transfers.feature`, `accounts/checking/activity.feature`, `accounts/savings/activity.feature`, `accounts/savings/setup.feature`, `spending/expenses/record-expenses.feature`, `household/journeys/manage-household-finances.feature`
 - Status: built and committed, not pushed (row turns done when the owner pushes, D-002). Cowork checks 4 to 6 and the whole 1280px pass were not reached (connection lost)
-- Started: 2026-10-05  Finished:   Commit:
+- Started: 2026-10-05  Finished: 2026-10-05  Commit: `c0f4ea0` (five commits from `b2c7cf6`)
 
 ## Prompts and directions
 
@@ -144,7 +144,36 @@ Deviations from the approved plan: (1) `V2_JOURNEY_002` has no e2e, because e2e 
 
 ## How it works
 
-Written after Land.
+Written by a read-only agent over `e7f2fd7..HEAD`; the builder checked its claims against `MovementService.java` and `MovementStore.java` (lock order, key replay before member and date checks, household 404, the date rules). It did not open the UI files or run anything.
+
+**What the user can do now**
+
+1. On a checking or savings account, Add transfer to another account, review it (both Balances after), then confirm or cancel.
+2. The same account in From and To shows "Choose a different account"; what was typed stays.
+3. Edit a transfer's amount, date or either account, with a review of every Balance affected. Remove it and Undo it; both sides move together.
+4. Edit an expense and choose Change to transfer: pick the destination, review, give a reason. The expense stays in history.
+5. Spending has an Account chooser. A transfer is never income or spending, for all accounts or for one.
+6. The Accounts list and Household card show each account's type (Q-033, built on a recommended yes).
+
+**What changed**
+
+- Database: `V11__linked_movements.sql` (transfer rows need a `movement_id`; one live row per side of a movement).
+- API: `TransferController.java` (`/api/v1/transfers`: create, get, preview, replacement, removal, undo; conversion at `/accounts/{id}/activity/{activityId}/transfer`), `MovementService.java`, `MovementStore.java`, `TransferPreviewService.java`; `SpendingController.java` and `IncomeController.java` take `accountId`.
+- UI: `frontend/src/features/transfers/*`, `AccountDetailPage.tsx`, `ActivityList.tsx`, `EntryHistory.tsx`, `SpendingPage.tsx`, `AccountsPage.tsx`, `HouseholdPage.tsx`.
+
+**How a transfer is saved**
+
+1. The server needs a save key, two different accounts and a valid amount.
+2. Both accounts must exist, share a household (another household's is 404) and hold activity.
+3. It locks both accounts, lowest id first, so opposite transfers cannot deadlock.
+4. Under the locks a repeated key replays the stored transfer (200); otherwise it checks the member (`FOR SHARE`) and the date (not in the future, not before either account's start).
+5. It writes `transfer_out` and `transfer_in` with one `movement_id` in one transaction (201).
+
+An edit marks the old pair replaced and writes a new pair that points back at it; remove and Undo act on both rows and answer 409 if the pair was already changed; Undo re-checks both accounts' start dates; a replaced pair cannot be Undone. Converting an expense needs a reason and works for expenses only.
+
+**Decisions and open items:** D-036 (one mechanism, `MovementKind` seam for card payments), D-037 (Spending account filter). `V2_SAVINGS_005` is deferred (Q-030). Open: Q-033, history tables scrolling inside their card at 710px, Cowork checks 4 to 6 and 1280px.
+
+**How to verify:** `npm run coverage -- --require --slice 07`, `npm test`, `npm run e2e`, `npm run lint`, `npm run check`; by hand at 710px and 1280px: add, edit, remove, Undo, change an expense, the Spending Account chooser.
 
 ## Handoff
 
