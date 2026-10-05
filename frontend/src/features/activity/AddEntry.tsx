@@ -204,7 +204,7 @@ export function AddEntry({
         : 0
     return (
       <Card aria-labelledby="review-heading">
-        <CardTitle id="review-heading" tabIndex={-1} className="scroll-mt-4 text-lg outline-none">
+        <CardTitle id="review-heading" tabIndex={-1} className="scroll-mt-10 text-lg outline-none">
           {editing ? 'Review change' : reminder ? 'Review reminder' : words.review}
         </CardTitle>
         <FormAlert message={save.error?.message} />
