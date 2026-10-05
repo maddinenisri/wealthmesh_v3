@@ -5,6 +5,8 @@ import { useAccounts } from '../../hooks/useAccounts'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useChangeTransfer } from '../../hooks/useTransfers'
 import { formatMoney } from '../../lib/money'
+import { balanceText } from '../accounts/cardBalance'
+import { givesMoney, isPayment } from '../activity/transferRows'
 import { EnteredBy } from '../activity/EnteredBy'
 
 /** The part of a transfer row the review shows; both the activity list and history rows fit it. */
@@ -35,9 +37,15 @@ export function TransferChange({
   onDone: (saved?: boolean) => void
 }) {
   const accounts = useAccounts()
-  const change = useChangeTransfer(entry.movementId ?? '', mode === 'remove' ? 'removal' : 'undo')
+  const payment = isPayment(entry)
+  const noun = payment ? 'payment' : 'transfer'
+  const change = useChangeTransfer(
+    entry.movementId ?? '',
+    mode === 'remove' ? 'removal' : 'undo',
+    payment ? 'card-payments' : 'transfers',
+  )
   const { member, setMemberId } = useEnteringAs(members)
-  const outgoing = entry.kind === 'transfer_out'
+  const outgoing = givesMoney(entry)
   const other = accounts.data?.find((candidate) => candidate.id === entry.counterAccountId)
   // Removing gives the money back to the account it left; Undo takes it out again.
   const direction = mode === 'remove' ? -1 : 1
@@ -59,15 +67,19 @@ export function TransferChange({
         <Item label="To">{outgoing ? entry.counterAccountName : account.name}</Item>
         <Item label="Date">{entry.occurredOn}</Item>
         <Item label="Amount">{formatMoney(amount)}</Item>
-        <Item label={`${account.name} Balance after ${word}`}>{formatMoney(here)}</Item>
+        <Item label={`${account.name} Balance after ${word}`}>
+          {balanceText(account.type, String(here))}
+        </Item>
         {other && there !== null && (
-          <Item label={`${other.name} Balance after ${word}`}>{formatMoney(there)}</Item>
+          <Item label={`${other.name} Balance after ${word}`}>
+            {balanceText(other.type, String(there))}
+          </Item>
         )}
       </dl>
       <p className="mt-3 max-w-md text-sm text-ink-muted">
         {mode === 'undo'
-          ? 'Both sides of the transfer return on their original date.'
-          : 'Both sides of the transfer are removed together. The transfer stays in history, where Undo restores it.'}
+          ? `Both sides of the ${noun} return on their original date.`
+          : `Both sides of the ${noun} are removed together. The ${noun} stays in history, where Undo restores it.`}
       </p>
       <EnteredBy members={members} member={member} setMemberId={setMemberId} />
       <div className="mt-4 flex gap-2">

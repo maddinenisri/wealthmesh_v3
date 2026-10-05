@@ -231,4 +231,168 @@ test.describe.serial('credit cards', () => {
       )
     })
   }
+  async function makeAccount(
+    request: APIRequestContext,
+    data: Record<string, string>,
+  ): Promise<string> {
+    const response = await request.post('/api/v1/accounts', {
+      data: {
+        institution: 'Harbor Bank',
+        ownerMemberIds: [await ownerId(request)],
+        openedOn: '2026-09-01',
+        ...data,
+      },
+    })
+    expect(response.status()).toBe(201)
+    return ((await response.json()) as { id: string }).id
+  }
+
+  for (const width of [710, 1280]) {
+    test(`V2_CARD_006 V2_CARD_007 V2_CARD_012 V2_CARD_013 pays a card at ${width}px: review, cancel, overpay, correct, remove and restore`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      const bank = `Paying Checking ${width}`
+      const name = `Paid Card ${width}`
+      await makeAccount(request, {
+        type: 'checking',
+        name: bank,
+        openingBalance: '5000.00',
+      })
+      const cardId = await makeAccount(request, {
+        type: 'credit_card',
+        name,
+        institution: 'Harbor Cards',
+        openingBalance: '100.00',
+        balanceSide: 'owed',
+      })
+      // Long history first, so a page left scrolled down would hide the new row.
+      for (let n = 0; n < 12; n++) {
+        const response = await request.post(`/api/v1/accounts/${cardId}/expenses`, {
+          headers: { 'Idempotency-Key': `e2e-pay-${width}-${n}` },
+          data: {
+            description: `Purchase ${n}`,
+            amount: '0.01',
+            occurredOn: '2026-09-02',
+            category: 'Groceries',
+            enteredByMemberId: await ownerId(request),
+          },
+        })
+        expect(response.status()).toBe(201)
+      }
+      await page.goto(`/accounts/${cardId}`)
+      await page.getByLabel('Entering as').selectOption({ label: OWNER })
+      await expect(page.getByRole('main')).toContainText('$100.12 owed')
+
+      // V2_CARD_007: the card is the destination, the bank is chosen, the review shows both, Cancel saves nothing.
+      await page.getByRole('button', { name: 'Record payment' }).click()
+      await expect(page.getByText('Paid to')).toBeVisible()
+      await page.getByLabel('Paid from').selectOption({ label: `${bank} (Checking)` })
+      await page.getByLabel('Amount', { exact: true }).fill('150.00')
+      await page.getByLabel('Date', { exact: true }).fill('2026-09-20')
+      await page.getByRole('button', { name: 'Review' }).click()
+      const review = page.getByRole('region', { name: 'Review payment' })
+      await expect(review).toBeVisible()
+      await expect(review).toBeInViewport()
+      const effect = page.getByRole('region', { name: 'Effect of this payment' })
+      await expect(effect).toContainText(`${bank} Balance$4,850.00`)
+      // V2_CARD_012: paying more than is owed is explained as Card credit.
+      await expect(effect).toContainText(`${name} Balance$49.88 Card credit`)
+      await expect(effect).toContainText('left with a $49.88 Card credit')
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await expect(page.getByRole('main')).toContainText('$100.12 owed')
+      await expect(page.getByRole('button', { name: 'Record payment' })).toBeFocused()
+
+      // Confirm it: the new row is in view and the card is in credit.
+      await page.getByRole('button', { name: 'Record payment' }).click()
+      await page.getByLabel('Paid from').selectOption({ label: `${bank} (Checking)` })
+      await page.getByLabel('Amount', { exact: true }).fill('150.00')
+      await page.getByLabel('Date', { exact: true }).fill('2026-09-20')
+      await page.getByRole('button', { name: 'Review' }).click()
+      await page.getByRole('button', { name: 'Confirm payment' }).click()
+      await expect(page.getByRole('main')).toContainText('$49.88 Card credit')
+      await expect(page.getByRole('heading', { name: 'Activity' })).toBeInViewport()
+      await expect(page.getByText(`Payment from ${bank}`)).toBeVisible()
+
+      // V2_CARD_013: correct, remove and restore; the card and the bank always move together.
+      await page.getByRole('button', { name: `Edit payment from ${bank}` }).click()
+      await page.getByLabel('Amount', { exact: true }).fill('50.00')
+      await page.getByRole('button', { name: 'Review' }).click()
+      await page.getByRole('button', { name: 'Confirm payment' }).click()
+      await expect(page.getByRole('main')).toContainText('$50.12 owed')
+      await page.getByRole('button', { name: `Remove payment from ${bank}` }).click()
+      await expect(page.getByRole('region', { name: 'Review removal' })).toBeInViewport()
+      await page.getByRole('button', { name: 'Confirm removal' }).click()
+      await expect(page.getByRole('main')).toContainText('$100.12 owed')
+      await page.getByRole('button', { name: 'Show history' }).click()
+      await page.getByRole('button', { name: `Undo payment from ${bank}` }).click()
+      await page.getByRole('button', { name: 'Confirm Undo' }).click()
+      await expect(page.getByRole('main')).toContainText('$50.12 owed')
+      await page.getByRole('link', { name: 'Accounts', exact: true }).click()
+      await expect(row(page, bank)).toContainText('$4,950.00')
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+    })
+  }
+
+  test('V2_MONTHLY_002 a card in Spending leaves out the repayment and the August purchase', async ({
+    page,
+    request,
+  }) => {
+    const bank = await makeAccount(request, {
+      type: 'checking',
+      name: 'Monthly Checking',
+      openingBalance: '5000.00',
+    })
+    const cardId = await makeAccount(request, {
+      type: 'credit_card',
+      name: 'Monthly Card',
+      institution: 'Harbor Cards',
+      openedOn: '2026-08-01',
+    })
+    const member = await ownerId(request)
+    const entry = (description: string, amount: string, occurredOn: string) => ({
+      headers: { 'Idempotency-Key': `e2e-monthly-${description}` },
+      data: { description, amount, occurredOn, category: 'Groceries', enteredByMemberId: member },
+    })
+    for (const [path, args] of [
+      ['expenses', ['August', '90.00', '2026-08-31']],
+      ['expenses', ['Big shop', '620.00', '2026-09-06']],
+      ['refunds', ['Returned', '20.00', '2026-09-12']],
+    ] as const) {
+      const response = await request.post(
+        `/api/v1/accounts/${cardId}/${path}`,
+        entry(args[0], args[1], args[2]),
+      )
+      expect(response.status()).toBe(201)
+    }
+    const paid = await request.post('/api/v1/card-payments', {
+      headers: { 'Idempotency-Key': 'e2e-monthly-payment' },
+      data: {
+        fromAccountId: bank,
+        toAccountId: cardId,
+        amount: '500.00',
+        occurredOn: '2026-09-20',
+        enteredByMemberId: member,
+      },
+    })
+    expect(paid.status()).toBe(201)
+
+    await page.goto('/spending')
+    await page.getByLabel('Month', { exact: true }).fill('2026-09')
+    await page.getByLabel('Account', { exact: true }).selectOption({ label: 'Monthly Card' })
+    const month = page.getByRole('region', { name: /September 2026/ })
+    await expect(month).toContainText('Spending $600.00')
+    await month.getByRole('button', { name: 'Groceries' }).click()
+    const table = month.getByRole('table', { name: 'Expenses in this category' })
+    await expect(table.getByRole('row')).toHaveCount(3)
+    await expect(table).toContainText('2026-09-06')
+    await expect(table).toContainText('$620.00')
+    await expect(table).toContainText('2026-09-12')
+    await expect(table).toContainText('-$20.00')
+    await expect(table).toContainText('Monthly Card')
+    await expect(table).not.toContainText('2026-08-31')
+    await expect(table).not.toContainText('2026-09-20')
+  })
 })

@@ -6,6 +6,7 @@ import { useOpeningRevisions } from '../../hooks/useStartingBalance'
 import { formatMoney } from '../../lib/money'
 import { BalanceFigure } from '../accounts/BalanceFigure'
 import { signedAmount } from './signedAmount'
+import { isMovement, movementName } from './transferRows'
 
 const STATUS = { effective: 'Effective', replaced: 'Replaced', removed: 'Removed' } as const
 const ACTION = { replaced: 'Replaced', removed: 'Removed', restored: 'Restored' } as const
@@ -77,8 +78,8 @@ export function EntryHistory({
                 <Td>
                   {entry.kind === 'correction'
                     ? 'Balance correction'
-                    : entry.kind === 'transfer_out' || entry.kind === 'transfer_in'
-                      ? `Transfer ${entry.kind === 'transfer_out' ? 'to' : 'from'} ${entry.counterAccountName ?? 'account'}`
+                    : isMovement(entry)
+                      ? movementName(entry).replace(/^./, (letter) => letter.toUpperCase())
                       : (entry.description ?? '')}
                 </Td>
                 <Td>{entry.categoryName ?? ''}</Td>
@@ -127,7 +128,7 @@ export function EntryHistory({
                       size="sm"
                       aria-label={`Undo ${
                         entry.movementId
-                          ? `transfer ${entry.kind === 'transfer_out' ? 'to' : 'from'} ${entry.counterAccountName ?? 'account'}`
+                          ? movementName(entry)
                           : (entry.description ?? entry.categoryName ?? 'entry')
                       }`}
                       disabled={!onUndo}

@@ -80,7 +80,8 @@ public class OpeningRevisionService {
 
     /** Informational: the figures a save would produce now. Nothing is stored. */
     public Mono<OpeningPreview> preview(UUID accountId, Object amount, LocalDate on, PendingEntry entry) {
-        return load(accountId).flatMap(account -> check(account, amount, on, null).flatMap(parsed -> activityStore
+        return loadEditable(accountId).flatMap(account -> check(account, amount, on, null)
+                .flatMap(parsed -> activityStore
                 .deltaOf(account.id()).flatMap(delta -> {
                     BigDecimal current = account.openingAmount().add(delta.amount());
                     BigDecimal after = parsed.amount().add(delta.amount());
@@ -124,7 +125,7 @@ public class OpeningRevisionService {
         Instant cutoff = now.minus(KEY_LIFETIME);
         return Mono.fromCallable(() -> requireKey(key))
                 .then(Mono.defer(() -> store.expireKey(key, cutoff)))
-                .then(Mono.defer(() -> load(accountId)))
+                .then(Mono.defer(() -> loadEditable(accountId)))
                 .flatMap(account -> validator.member(account, request.enteredByMemberId())
                         .flatMap(memberId -> locked(account.id(), key, cutoff, request, memberId, now)))
                 .onErrorMap(DuplicateKeyException.class,
@@ -134,7 +135,7 @@ public class OpeningRevisionService {
     /** Lock first, then read the account and the key again: nothing can change between the check and the write. */
     private Mono<Saved> locked(UUID accountId, String key, Instant cutoff, OpeningRequest request, UUID memberId,
             Instant now) {
-        Mono<Saved> work = activityStore.lockAccount(accountId).then(Mono.defer(() -> load(accountId)))
+        Mono<Saved> work = activityStore.lockAccount(accountId).then(Mono.defer(() -> loadEditable(accountId)))
                 .flatMap(account -> revisions.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
                         .flatMap(existing -> replay(existing, request, memberId))
                         .switchIfEmpty(Mono.defer(() -> applyLocked(account, key, request, memberId, now))));
@@ -227,8 +228,12 @@ public class OpeningRevisionService {
 
     private Mono<Account> load(UUID id) {
         return accounts.findById(id).switchIfEmpty(Mono.error(
-                new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
-                .filter(account -> !AccountType.isCard(account.type()))
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)));
+    }
+
+    /** A card's amount is changed with Update balance, not by moving its starting balance. */
+    private Mono<Account> loadEditable(UUID id) {
+        return load(id).filter(account -> !AccountType.isCard(account.type()))
                 .switchIfEmpty(Mono.error(EntryValidator.bad("Use Update balance")));
     }
 

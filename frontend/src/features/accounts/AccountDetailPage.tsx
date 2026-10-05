@@ -15,7 +15,7 @@ import { useReturnFocus } from '../activity/useReturnFocus'
 import { RemindersCard } from '../activity/RemindersCard'
 import { StatementsCard } from '../statements/StatementsCard'
 import { ChangeEntry, type ChangeTarget } from '../activity/ChangeEntry'
-import { isTransfer } from '../activity/transferRows'
+import { isMovement } from '../activity/transferRows'
 import { ChangeToTransfer } from '../transfers/ChangeToTransfer'
 import { TransferChange, type TransferTarget } from '../transfers/TransferChange'
 import { TransferForm } from '../transfers/TransferForm'
@@ -162,7 +162,7 @@ function BalanceOnDate({ account, today }: { account: Account; today: string }) 
 
 /** The transfer panel that is open: a new transfer, a correction, a removal, an Undo, or an expense changed. */
 type TransferPanel =
-  | { kind: 'new' }
+  | { kind: 'new'; payment?: boolean }
   | { kind: 'edit'; entry: ActivityEntry }
   | { kind: 'remove' | 'undo'; entry: TransferTarget }
   | { kind: 'convert'; entry: ActivityEntry }
@@ -244,6 +244,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               members={members}
               today={today.data}
               editing={transfer.kind === 'edit' ? transfer.entry : undefined}
+              payment={transfer.kind === 'new' ? transfer.payment : undefined}
               onDone={closeTransfer}
             />
           )}
@@ -300,7 +301,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             ready
               ? (entry) => {
                   remember()
-                  if (isTransfer(entry)) setTransfer({ kind: 'edit', entry })
+                  if (isMovement(entry)) setTransfer({ kind: 'edit', entry })
                   else setEditing(entry)
                 }
               : undefined
@@ -317,7 +318,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             ready
               ? (entry) => {
                   remember()
-                  if (isTransfer(entry)) setTransfer({ kind: 'remove', entry })
+                  if (isMovement(entry)) setTransfer({ kind: 'remove', entry })
                   else setChanging({ mode: 'remove', entry })
                 }
               : undefined
@@ -356,7 +357,15 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             >
               Record refund
             </Button>
-            <Button variant="secondary" size="sm" disabled>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setTransfer({ kind: 'new', payment: true })
+              }}
+              disabled={!ready}
+            >
               Record payment
             </Button>
           </div>

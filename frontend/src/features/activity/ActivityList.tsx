@@ -7,7 +7,7 @@ import { useAccountActivity } from '../../hooks/useActivity'
 import { ownerNames } from '../accounts/ownerNames'
 import { EntryHistory } from './EntryHistory'
 import { signedAmount } from './signedAmount'
-import { isTransfer, rowName } from './transferRows'
+import { givesMoney, isMovement, movementWord, rowName } from './transferRows'
 
 /** Saved activity of one account, newest first. Income shows as money in, expenses as money out. */
 export function ActivityList({
@@ -61,7 +61,7 @@ export function ActivityList({
                   <Td>
                     {entry.kind === 'correction' ? (
                       `Balance correction${entry.reason ? `: ${entry.reason}` : ''}`
-                    ) : isTransfer(entry) ? (
+                    ) : isMovement(entry) ? (
                       <TransferLabel entry={entry} />
                     ) : (
                       (entry.description ?? '')
@@ -128,7 +128,8 @@ export function ActivityList({
 function TransferLabel({ entry }: { entry: Activity }) {
   return (
     <span className="[overflow-wrap:anywhere]">
-      Transfer {entry.kind === 'transfer_out' ? 'to' : 'from'}{' '}
+      {movementWord(entry) === 'payment' ? 'Payment' : 'Transfer'}{' '}
+      {givesMoney(entry) ? 'to' : 'from'}{' '}
       {entry.counterAccountId ? (
         <Link
           to={`/accounts/${entry.counterAccountId}`}

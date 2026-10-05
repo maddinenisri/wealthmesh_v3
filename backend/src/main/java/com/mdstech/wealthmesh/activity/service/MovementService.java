@@ -7,10 +7,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.BiFunction;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -35,12 +35,20 @@ import reactor.core.publisher.Mono;
  * then judges the rows, the dates and the person again under those locks (D-034, D-035). A replayed save key returns
  * the stored movement (D-024). Card payments (slice 08) add a {@link MovementKind} and reuse all of it.
  */
-@Service
 public class MovementService {
 
-    /** The two row kinds of a movement: the side that gives money and the side that receives it. */
-    public record MovementKind(String outKind, String inKind) {
-        public static final MovementKind TRANSFER = new MovementKind("transfer_out", "transfer_in");
+    /**
+     * The two row kinds of a movement: the side that gives money and the side that receives it, what the person calls
+     * it, and the rule for which two accounts it may join (an error message, or null when the pair is allowed).
+     */
+    public record MovementKind(String outKind, String inKind, String noun,
+            BiFunction<Account, Account, String> refusal) {
+        public static final MovementKind TRANSFER = new MovementKind("transfer_out", "transfer_in", "transfer",
+                (from, to) -> AccountType.isCard(from.type()) || AccountType.isCard(to.type()) ? CARD_TYPE : null);
+        /** A payment: a checking or savings account pays a card (CARD_006, CARD_007). */
+        public static final MovementKind CARD_PAYMENT = new MovementKind("card_payment", "card_payment_in", "payment",
+                (from, to) -> !AccountType.paysCards(from.type()) ? "Pay a card from a checking or savings account"
+                        : !AccountType.isCard(to.type()) ? "Choose a card to pay" : null);
     }
 
     /** The saved movement and whether this call created it (false for a replay). */
@@ -55,7 +63,6 @@ public class MovementService {
     }
 
     private static final Duration KEY_LIFETIME = EntryService.KEY_LIFETIME;
-    private static final MovementKind KIND = MovementKind.TRANSFER;
     static final String WRONG_TYPE = "Money cannot be moved to or from this type of account yet";
     static final String CARD_TYPE = "Use Record payment to pay a card";
     private static final String USED = "This save was already used. Start a new entry.";
@@ -67,22 +74,25 @@ public class MovementService {
     private final ActivityRepository activities;
     private final ActivityStore store;
     private final MovementStore movements;
+    private final MovementKind kind;
     private final Clock clock;
     private final TransactionalOperator transactions;
 
     public MovementService(AccountRepository accounts, EntryValidator validator, ActivityRepository activities,
-            ActivityStore store, MovementStore movements, Clock clock, TransactionalOperator transactions) {
+            ActivityStore store, MovementStore movements, MovementKind kind, Clock clock,
+            TransactionalOperator transactions) {
         this.accounts = accounts;
         this.validator = validator;
         this.activities = activities;
         this.store = store;
         this.movements = movements;
+        this.kind = kind;
         this.clock = clock;
         this.transactions = transactions;
     }
 
     public Mono<Transfer> get(UUID movementId) {
-        return legs(movementId).map(MovementService::toTransfer);
+        return legs(movementId).map(this::toTransfer);
     }
 
     /** A new transfer. 201 for the first save of a key, a replay of the same details returns the stored transfer. */
@@ -127,7 +137,7 @@ public class MovementService {
                             .then(Mono.defer(() -> actor(fresh, memberId)))
                             .then(Mono.defer(() -> movements.removePair(movementId, memberId, now)))
                             .flatMap(n -> n == 2 ? events(fresh, "removed", memberId, now)
-                                    : Mono.error(conflict("This transfer was already changed or removed."))));
+                                    : Mono.error(changed())));
             return transactions.transactional(work);
         }).then(Mono.defer(() -> get(movementId)));
     }
@@ -143,7 +153,7 @@ public class MovementService {
                             .then(Mono.defer(() -> startsStillCover(fresh)))
                             .then(Mono.defer(() -> movements.restorePair(movementId)))
                             .flatMap(n -> n == 2 ? events(fresh, "restored", memberId, now)
-                                    : Mono.error(conflict("Only a removed transfer can be restored."))));
+                                    : Mono.error(notRemoved())));
             return transactions.transactional(work);
         }).then(Mono.defer(() -> get(movementId)));
     }
@@ -193,9 +203,9 @@ public class MovementService {
                         .then(Mono.defer(() -> validator.memberLocked(pair.from(), parsed.memberId())))
                         .then(Mono.defer(() -> movements.removePair(movementId, parsed.memberId(), now)))
                         .flatMap(n -> n == 2 ? events(fresh, "replaced", parsed.memberId(), now)
-                                : Mono.error(conflict("This transfer was already changed or removed.")))
-                        .then(Mono.defer(() -> insertPair(pair, parsed, key, now, leg(fresh, KIND.outKind()).id(),
-                                leg(fresh, KIND.inKind()).id())))
+                                : Mono.error(changed()))
+                        .then(Mono.defer(() -> insertPair(pair, parsed, key, now, leg(fresh, kind.outKind()).id(),
+                                leg(fresh, kind.inKind()).id())))
                         .flatMap(this::get).map(t -> new Saved(t, true))));
     }
 
@@ -221,9 +231,9 @@ public class MovementService {
     private Mono<Saved> replayOf(String key, Instant cutoff, Parsed parsed, List<Leg> replacing) {
         return store.expireKey(key, cutoff).then(Mono.defer(() -> movements.movementOfKey(key, cutoff)))
                 .flatMap(movement -> legs(movement).flatMap(existing -> {
-                    Leg out = leg(existing, KIND.outKind());
+                    Leg out = leg(existing, kind.outKind());
                     boolean replaced = replacing == null ? out.replacesId() == null
-                            : out.replacesId() != null && out.replacesId().equals(leg(replacing, KIND.outKind()).id());
+                            : out.replacesId() != null && out.replacesId().equals(leg(replacing, kind.outKind()).id());
                     if (!replaced || !matches(existing, parsed)) {
                         return Mono.error(conflict(USED_DIFFERENTLY));
                     }
@@ -234,9 +244,9 @@ public class MovementService {
     private Mono<Saved> convertedBy(String key, Instant cutoff, Activity original, ConversionRequest request) {
         return store.expireKey(key, cutoff).then(Mono.defer(() -> movements.movementOfKey(key, cutoff)))
                 .flatMap(movement -> legs(movement).flatMap(existing -> {
-                    Leg out = leg(existing, KIND.outKind());
+                    Leg out = leg(existing, kind.outKind());
                     boolean same = original.id().equals(out.replacesId())
-                            && leg(existing, KIND.inKind()).accountId().equals(request.toAccountId())
+                            && leg(existing, kind.inKind()).accountId().equals(request.toAccountId())
                             && java.util.Objects.equals(out.memberId(), request.enteredByMemberId())
                             && java.util.Objects.equals(out.reason(), request.reason().strip());
                     return same ? Mono.just(new Saved(toTransfer(existing), false))
@@ -247,9 +257,9 @@ public class MovementService {
     private Mono<UUID> insertPair(Pair pair, Parsed parsed, String key, Instant now, UUID replacesOut,
             UUID replacesIn) {
         UUID movement = UUID.randomUUID();
-        return movements.insertLeg(movement, pair.from().id(), KIND.outKind(), parsed.amount(), parsed.on(),
+        return movements.insertLeg(movement, pair.from().id(), kind.outKind(), parsed.amount(), parsed.on(),
                         parsed.description(), parsed.memberId(), key, now, parsed.reason(), replacesOut)
-                .then(Mono.defer(() -> movements.insertLeg(movement, pair.to().id(), KIND.inKind(), parsed.amount(),
+                .then(Mono.defer(() -> movements.insertLeg(movement, pair.to().id(), kind.inKind(), parsed.amount(),
                         parsed.on(), parsed.description(), parsed.memberId(), null, now, parsed.reason(), replacesIn)))
                 .thenReturn(movement);
     }
@@ -291,8 +301,9 @@ public class MovementService {
                             || !AccountType.holdsActivity(both.getT2().type())) {
                         return Mono.error(EntryValidator.bad(WRONG_TYPE));
                     }
-                    if (AccountType.isCard(both.getT1().type()) || AccountType.isCard(both.getT2().type())) {
-                        return Mono.error(EntryValidator.bad(CARD_TYPE));
+                    String refusal = kind.refusal().apply(both.getT1(), both.getT2());
+                    if (refusal != null) {
+                        return Mono.error(EntryValidator.bad(refusal));
                     }
                     return Mono.just(new Pair(both.getT1(), both.getT2()));
                 });
@@ -318,12 +329,12 @@ public class MovementService {
     private Mono<Void> startsStillCover(List<Leg> legs) {
         return Mono.when(legs.stream().map(leg -> accounts.findById(leg.accountId())
                 .filter(account -> !leg.occurredOn().isBefore(account.openedOn()))
-                .switchIfEmpty(Mono.error(conflict("This transfer is dated before an account's tracking start."))))
+                .switchIfEmpty(Mono.error(conflict("This " + kind.noun() + " is dated before an account's start."))))
                 .toList());
     }
 
     private Mono<UUID> actor(List<Leg> legs, UUID memberId) {
-        return accounts.findById(leg(legs, KIND.outKind()).accountId())
+        return accounts.findById(leg(legs, kind.outKind()).accountId())
                 .flatMap(account -> validator.memberLocked(account, memberId));
     }
 
@@ -331,19 +342,19 @@ public class MovementService {
         return Mono.when(legs.stream().map(leg -> store.recordEvent(leg.id(), action, memberId, now)).toList());
     }
 
-    private static Mono<Void> requireLive(List<Leg> legs) {
+    private Mono<Void> requireLive(List<Leg> legs) {
         return legs.stream().allMatch(l -> l.removedAt() == null) ? Mono.empty()
-                : Mono.error(conflict("This transfer was already changed or removed."));
+                : Mono.error(changed());
     }
 
-    private static Mono<Void> requireRemoved(List<Leg> legs) {
+    private Mono<Void> requireRemoved(List<Leg> legs) {
         return legs.stream().allMatch(l -> l.removedAt() != null && l.replacedById() == null) ? Mono.empty()
-                : Mono.error(conflict("Only a removed transfer can be restored."));
+                : Mono.error(notRemoved());
     }
 
-    private static boolean matches(List<Leg> existing, Parsed parsed) {
-        Leg out = leg(existing, KIND.outKind());
-        Leg in = leg(existing, KIND.inKind());
+    private boolean matches(List<Leg> existing, Parsed parsed) {
+        Leg out = leg(existing, kind.outKind());
+        Leg in = leg(existing, kind.inKind());
         return out.accountId().equals(parsed.fromId()) && in.accountId().equals(parsed.toId())
                 && out.amount().compareTo(parsed.amount()) == 0 && out.occurredOn().equals(parsed.on())
                 && java.util.Objects.equals(out.description(), parsed.description())
@@ -356,9 +367,9 @@ public class MovementService {
     /** The two rows of a movement, or not found when the id is not a transfer. */
     private Mono<List<Leg>> legs(UUID movementId) {
         return movements.legs(movementId).collectList()
-                .filter(list -> list.size() == 2 && list.stream().anyMatch(l -> KIND.outKind().equals(l.kind()))
-                        && list.stream().anyMatch(l -> KIND.inKind().equals(l.kind())))
-                .switchIfEmpty(Mono.error(notFound("Transfer not found: " + movementId)));
+                .filter(list -> list.size() == 2 && list.stream().anyMatch(l -> kind.outKind().equals(l.kind()))
+                        && list.stream().anyMatch(l -> kind.inKind().equals(l.kind())))
+                .switchIfEmpty(Mono.error(missing(movementId)));
     }
 
     private static List<UUID> accountsOf(List<Leg> legs, Pair extra) {
@@ -374,9 +385,9 @@ public class MovementService {
         return legs.stream().filter(l -> l.kind().equals(kind)).findFirst().orElseThrow();
     }
 
-    static Transfer toTransfer(List<Leg> legs) {
-        Leg out = leg(legs, KIND.outKind());
-        Leg in = leg(legs, KIND.inKind());
+    Transfer toTransfer(List<Leg> legs) {
+        Leg out = leg(legs, kind.outKind());
+        Leg in = leg(legs, kind.inKind());
         String status = legs.stream().anyMatch(l -> l.replacedById() != null) ? "replaced"
                 : out.removedAt() != null ? "removed" : "effective";
         return new Transfer(out.movementId(), new Transfer.Leg(out.id(), out.accountId(), out.accountName()),
@@ -390,6 +401,19 @@ public class MovementService {
             throw EntryValidator.bad("Missing save key");
         }
         return key;
+    }
+
+    private ResponseStatusException changed() {
+        return conflict("This " + kind.noun() + " was already changed or removed.");
+    }
+
+    private ResponseStatusException notRemoved() {
+        return conflict("Only a removed " + kind.noun() + " can be restored.");
+    }
+
+    private ResponseStatusException missing(UUID movementId) {
+        String noun = kind.noun();
+        return notFound(Character.toUpperCase(noun.charAt(0)) + noun.substring(1) + " not found: " + movementId);
     }
 
     private static ResponseStatusException notFound(String message) {

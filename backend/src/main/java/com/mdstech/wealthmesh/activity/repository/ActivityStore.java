@@ -24,7 +24,8 @@ public class ActivityStore {
 
     /** Signed effect of one row on a bank Balance (foundations 6). */
     private static final String SIGNED = """
-            CASE WHEN kind IN ('income', 'refund', 'transfer_in', 'interest', 'correction') THEN amount
+            CASE WHEN kind IN ('income', 'refund', 'transfer_in', 'card_payment_in', 'interest', 'correction')
+                 THEN amount
                  ELSE -amount END""";
 
     private static final String ENTRY_COLUMNS = """
@@ -257,7 +258,8 @@ public class ActivityStore {
                 LEFT JOIN activity cp ON cp.movement_id = a.movement_id AND cp.id <> a.id
                 LEFT JOIN account cpa ON cpa.id = cp.account_id
                 WHERE a.account_id = :account
-                  AND a.kind IN ('expense', 'income', 'refund', 'correction', 'transfer_in', 'transfer_out')
+                  AND a.kind IN ('expense', 'income', 'refund', 'correction', 'transfer_in', 'transfer_out',
+                      'card_payment', 'card_payment_in')
                 ORDER BY a.created_at DESC, a.occurred_on DESC""")
                 .bind("account", accountId)
                 .map((row, meta) -> new HistoryEntry(row.get("id", UUID.class), row.get("kind", String.class),

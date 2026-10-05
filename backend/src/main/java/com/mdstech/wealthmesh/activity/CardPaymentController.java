@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.mdstech.wealthmesh.activity.dto.ChangeRequest;
-import com.mdstech.wealthmesh.activity.dto.ConversionRequest;
 import com.mdstech.wealthmesh.activity.dto.Transfer;
 import com.mdstech.wealthmesh.activity.dto.TransferPreview;
 import com.mdstech.wealthmesh.activity.dto.TransferRequest;
@@ -27,65 +26,57 @@ import com.mdstech.wealthmesh.activity.service.TransferPreviewService;
 import reactor.core.publisher.Mono;
 
 /**
- * Transfers between two accounts: one request changes both sides (foundations 7). 201 when created, 200 for a
- * replay.
+ * A payment from a checking or savings account to a card: one request changes both sides (foundations 7). `from` is
+ * the bank account, `to` the card. 201 when created, 200 for a replay. Same mechanism as transfers (D-036).
  */
 @RestController
-@RequestMapping("/api/v1")
-public class TransferController {
+@RequestMapping("/api/v1/card-payments")
+public class CardPaymentController {
 
     private final MovementService service;
     private final TransferPreviewService previews;
 
-    public TransferController(@Qualifier("transfers") MovementService service, TransferPreviewService previews) {
+    public CardPaymentController(@Qualifier("cardPayments") MovementService service,
+            TransferPreviewService previews) {
         this.service = service;
         this.previews = previews;
     }
 
-    @PostMapping("/transfers")
+    @PostMapping
     public Mono<ResponseEntity<Transfer>> create(@RequestHeader(name = "Idempotency-Key", required = false) String key,
             @RequestBody TransferRequest request) {
-        return service.create(key, request).map(TransferController::respond);
+        return service.create(key, request).map(CardPaymentController::respond);
     }
 
-    @GetMapping("/transfers/{movementId}")
+    @GetMapping("/{movementId}")
     public Mono<Transfer> get(@PathVariable UUID movementId) {
         return service.get(movementId);
     }
 
-    /** The Balances after a new transfer, a correction of {@code movementId}, or the change of {@code activityId}. */
-    @GetMapping("/transfers/preview")
+    /** The Balances after a new payment, or after the correction of {@code movementId}. */
+    @GetMapping("/preview")
     public Mono<TransferPreview> preview(@RequestParam(required = false) UUID fromAccountId,
             @RequestParam(required = false) UUID toAccountId, @RequestParam(required = false) String amount,
-            @RequestParam(required = false) LocalDate occurredOn, @RequestParam(required = false) UUID movementId,
-            @RequestParam(required = false) UUID activityId) {
-        return previews.preview(MovementKind.TRANSFER, fromAccountId, toAccountId, amount, occurredOn, movementId,
-                activityId);
+            @RequestParam(required = false) LocalDate occurredOn, @RequestParam(required = false) UUID movementId) {
+        return previews.preview(MovementKind.CARD_PAYMENT, fromAccountId, toAccountId, amount, occurredOn,
+                movementId, null);
     }
 
-    @PostMapping("/transfers/{movementId}/replacement")
+    @PostMapping("/{movementId}/replacement")
     public Mono<ResponseEntity<Transfer>> replace(@PathVariable UUID movementId,
             @RequestHeader(name = "Idempotency-Key", required = false) String key,
             @RequestBody TransferRequest request) {
-        return service.replace(movementId, key, request).map(TransferController::respond);
+        return service.replace(movementId, key, request).map(CardPaymentController::respond);
     }
 
-    @PostMapping("/transfers/{movementId}/removal")
+    @PostMapping("/{movementId}/removal")
     public Mono<Transfer> remove(@PathVariable UUID movementId, @RequestBody ChangeRequest request) {
         return service.remove(movementId, request.enteredByMemberId());
     }
 
-    @PostMapping("/transfers/{movementId}/undo")
+    @PostMapping("/{movementId}/undo")
     public Mono<Transfer> undo(@PathVariable UUID movementId, @RequestBody ChangeRequest request) {
         return service.undo(movementId, request.enteredByMemberId());
-    }
-
-    /** An expense that was really a transfer (V2_EXPENSE_008). */
-    @PostMapping("/accounts/{accountId}/activity/{activityId}/transfer")
-    public Mono<ResponseEntity<Transfer>> convert(@PathVariable UUID accountId, @PathVariable UUID activityId,
-            @RequestHeader(name = "Idempotency-Key", required = false) String key,
-            @RequestBody ConversionRequest request) {
-        return service.convert(accountId, activityId, key, request).map(TransferController::respond);
     }
 
     private static ResponseEntity<Transfer> respond(MovementService.Saved saved) {

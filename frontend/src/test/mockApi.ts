@@ -180,7 +180,9 @@ export function mockApi(
     state.members.find((m) => m.id === id)?.name ?? ''
   const live = () => state.activity.filter((a) => !a.removedAt)
   const signed = (a: MockActivity) =>
-    a.kind === 'expense' || a.kind === 'transfer_out' ? -Number(a.amount) : Number(a.amount)
+    a.kind === 'expense' || a.kind === 'transfer_out' || a.kind === 'card_payment'
+      ? -Number(a.amount)
+      : Number(a.amount)
   /** Opening amount plus live activity up to a date, leaving out one row. */
   const balanceOn = (account: MockAccount, date: string, excluding?: string) =>
     Number(account.openingAmount) +
@@ -293,8 +295,8 @@ export function mockApi(
   const rowsOf = (movementId: string) => state.activity.filter((a) => a.movementId === movementId)
   const transferView = (movementId: string) => {
     const rows = rowsOf(movementId)
-    const out = rows.find((a) => a.kind === 'transfer_out')!
-    const into = rows.find((a) => a.kind === 'transfer_in')!
+    const out = rows.find((a) => a.kind === 'transfer_out' || a.kind === 'card_payment')!
+    const into = rows.find((a) => a.kind === 'transfer_in' || a.kind === 'card_payment_in')!
     const name = (a: MockActivity) => state.accounts.find((x) => x.id === a.accountId)?.name ?? ''
     const replaced = rows.some((a) => state.activity.some((r) => r.replacesId === a.id))
     return {
@@ -321,6 +323,7 @@ export function mockApi(
     },
     key: string,
     replaces?: { out: MockActivity; into?: MockActivity },
+    kinds: readonly [string, string] = ['transfer_out', 'transfer_in'],
   ) => {
     const movementId = newId()
     const base = {
@@ -339,7 +342,7 @@ export function mockApi(
         ...base,
         id: newId(),
         accountId: body.fromAccountId,
-        kind: 'transfer_out',
+        kind: kinds[0],
         key,
         replacesId: replaces?.out.id,
       },
@@ -347,7 +350,7 @@ export function mockApi(
         ...base,
         id: newId(),
         accountId: body.toAccountId,
-        kind: 'transfer_in',
+        kind: kinds[1],
         replacesId: replaces?.into?.id,
       },
     )
@@ -360,6 +363,20 @@ export function mockApi(
       Number(body.amount),
     )
     return movementId
+  }
+  /** A transfer takes no card; a payment goes from checking or savings to a card (the server's rule). */
+  const pairRefusal = (path: string, fromId: string, toId: string) => {
+    const from = state.accounts.find((a) => a.id === fromId)
+    const to = state.accounts.find((a) => a.id === toId)
+    if (!from || !to) return problem(404, 'Account not found')
+    if (path === 'transfers') {
+      return from.type === 'credit_card' || to.type === 'credit_card'
+        ? problem(400, 'Use Record payment to pay a card')
+        : null
+    }
+    if (from.type === 'credit_card')
+      return problem(400, 'Pay a card from a checking or savings account')
+    return to.type === 'credit_card' ? null : problem(400, 'Choose a card to pay')
   }
   const retire = (rows: MockActivity[], sign: 1 | -1, action: string, memberId: string) => {
     rows.forEach((row) => {
@@ -374,21 +391,30 @@ export function mockApi(
       )
     })
   }
-  const transferHandlers = () => [
-    http.post('*/api/v1/transfers', async ({ request }) => {
+  /** The movement routes for one kind of pair: transfers, or card payments (bank pays card). */
+  const movementHandlers = (
+    path: 'transfers' | 'card-payments',
+    kinds: readonly [string, string],
+    noun: string,
+  ) => [
+    http.post(`*/api/v1/${path}`, async ({ request }) => {
       log(request)
       const key = request.headers.get('Idempotency-Key') ?? ''
       state.keys.push(key)
       const body = (await request.json()) as Parameters<typeof writePair>[0]
       if (body.fromAccountId === body.toAccountId) return problem(400, 'Choose a different account')
+      const refusal = pairRefusal(path, body.fromAccountId, body.toAccountId)
+      if (refusal) return refusal
       if (!(Number(body.amount) > 0)) return problem(400, 'Enter an amount greater than zero')
       if (body.occurredOn > today)
         return problem(400, 'Future activity is not saved as completed history yet')
       const existing = state.activity.find((a) => a.key === key && a.movementId)
       if (existing) return HttpResponse.json(transferView(existing.movementId!), { status: 200 })
-      return HttpResponse.json(transferView(writePair(body, key)), { status: 201 })
+      return HttpResponse.json(transferView(writePair(body, key, undefined, kinds)), {
+        status: 201,
+      })
     }),
-    http.get('*/api/v1/transfers/preview', ({ request }) => {
+    http.get(`*/api/v1/${path}/preview`, ({ request }) => {
       log(request)
       const query = new URL(request.url).searchParams
       const from = state.accounts.find((a) => a.id === query.get('fromAccountId'))
@@ -432,32 +458,36 @@ export function mockApi(
           : null,
       })
     }),
-    http.post('*/api/v1/transfers/:id/replacement', async ({ request, params }) => {
+    http.post(`*/api/v1/${path}/:id/replacement`, async ({ request, params }) => {
       log(request)
       const key = request.headers.get('Idempotency-Key') ?? ''
       const body = (await request.json()) as Parameters<typeof writePair>[0]
       const rows = rowsOf(String(params.id))
-      if (rows.length !== 2) return problem(404, 'Transfer not found')
+      if (rows.length !== 2)
+        return problem(404, `${noun[0].toUpperCase()}${noun.slice(1)} not found`)
       if (body.fromAccountId === body.toAccountId) return problem(400, 'Choose a different account')
       if (!(Number(body.amount) > 0)) return problem(400, 'Enter an amount greater than zero')
       const existing = state.activity.find((a) => a.key === key && a.movementId)
       if (existing) return HttpResponse.json(transferView(existing.movementId!), { status: 200 })
       if (rows.some((row) => row.removedAt))
-        return problem(409, 'This transfer was already changed or removed.')
+        return problem(409, `This ${noun} was already changed or removed.`)
       retire(rows, 1, 'replaced', body.enteredByMemberId)
-      const out = rows.find((a) => a.kind === 'transfer_out')!
-      const into = rows.find((a) => a.kind === 'transfer_in')!
-      return HttpResponse.json(transferView(writePair(body, key, { out, into })), { status: 201 })
+      const out = rows.find((a) => a.kind === kinds[0])!
+      const into = rows.find((a) => a.kind === kinds[1])!
+      return HttpResponse.json(transferView(writePair(body, key, { out, into }, kinds)), {
+        status: 201,
+      })
     }),
     ...(['removal', 'undo'] as const).map((action) =>
-      http.post(`*/api/v1/transfers/:id/${action}`, async ({ request, params }) => {
+      http.post(`*/api/v1/${path}/:id/${action}`, async ({ request, params }) => {
         log(request)
         const rows = rowsOf(String(params.id))
-        if (rows.length !== 2) return problem(404, 'Transfer not found')
+        if (rows.length !== 2)
+          return problem(404, `${noun[0].toUpperCase()}${noun.slice(1)} not found`)
         const { enteredByMemberId } = (await request.json()) as { enteredByMemberId: string }
         const replaced = rows.some((row) => state.activity.some((r) => r.replacesId === row.id))
         if (action === 'removal' ? rows.some((r) => r.removedAt) : !rows[0].removedAt || replaced)
-          return problem(409, 'This transfer was already changed or removed.')
+          return problem(409, `This ${noun} was already changed or removed.`)
         retire(
           rows,
           action === 'removal' ? 1 : -1,
@@ -467,6 +497,10 @@ export function mockApi(
         return HttpResponse.json(transferView(String(params.id)))
       }),
     ),
+  ]
+  const transferHandlers = () => [
+    ...movementHandlers('transfers', ['transfer_out', 'transfer_in'], 'transfer'),
+    ...movementHandlers('card-payments', ['card_payment', 'card_payment_in'], 'payment'),
     http.post(
       '*/api/v1/accounts/:id/activity/:activityId/transfer',
       async ({ request, params }) => {

@@ -33,6 +33,9 @@ export type NewTransfer = {
   reason?: string
 }
 
+/** A transfer and a payment to a card are the same pair on the server, under two routes (D-036). */
+export type MovementPath = 'transfers' | 'card-payments'
+
 const bad = () => new Error('Unexpected response from the server.')
 
 function record(value: unknown): Record<string, unknown> {
@@ -102,8 +105,12 @@ function parsePreview(value: unknown): TransferPreview {
 }
 
 /** `key` identifies one form instance: a repeat of the same save returns the stored transfer (D-024). */
-export const saveTransfer = (key: string, transfer: NewTransfer) =>
-  request('/transfers', {
+export const saveTransfer = (
+  key: string,
+  transfer: NewTransfer,
+  path: MovementPath = 'transfers',
+) =>
+  request(`/${path}`, {
     method: 'POST',
     headers: { 'Idempotency-Key': key },
     body: transfer,
@@ -111,8 +118,13 @@ export const saveTransfer = (key: string, transfer: NewTransfer) =>
   })
 
 /** A correction replaces the whole pair; the original stays in history. */
-export const replaceTransfer = (movementId: string, key: string, transfer: NewTransfer) =>
-  request(`/transfers/${movementId}/replacement`, {
+export const replaceTransfer = (
+  movementId: string,
+  key: string,
+  transfer: NewTransfer,
+  path: MovementPath = 'transfers',
+) =>
+  request(`/${path}/${movementId}/replacement`, {
     method: 'POST',
     headers: { 'Idempotency-Key': key },
     body: transfer,
@@ -124,8 +136,9 @@ export const changeTransfer = (
   movementId: string,
   action: 'removal' | 'undo',
   enteredByMemberId: string,
+  path: MovementPath = 'transfers',
 ) =>
-  request(`/transfers/${movementId}/${action}`, {
+  request(`/${path}/${movementId}/${action}`, {
     method: 'POST',
     body: { enteredByMemberId },
     parse: parseTransfer,
@@ -146,15 +159,18 @@ export const convertToTransfer = (
   })
 
 /** What the transfer would leave in each account, from the server. Nothing is saved. */
-export const previewTransfer = (query: {
-  fromAccountId: string
-  toAccountId: string
-  amount?: string
-  occurredOn?: string
-  movementId?: string
-  activityId?: string
-}) => {
+export const previewTransfer = (
+  query: {
+    fromAccountId: string
+    toAccountId: string
+    amount?: string
+    occurredOn?: string
+    movementId?: string
+    activityId?: string
+  },
+  path: MovementPath = 'transfers',
+) => {
   const params = new URLSearchParams()
   Object.entries(query).forEach(([name, value]) => value && params.set(name, value))
-  return request(`/transfers/preview?${params.toString()}`, { parse: parsePreview })
+  return request(`/${path}/preview?${params.toString()}`, { parse: parsePreview })
 }

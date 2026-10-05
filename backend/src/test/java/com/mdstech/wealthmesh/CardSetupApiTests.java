@@ -154,6 +154,11 @@ class CardSetupApiTests extends LedgerApiTestBase {
                          "enteredByMemberId": "%s"}""".formatted(mayaId))
                 .exchange().expectStatus().isBadRequest().expectBody()
                 .jsonPath("$.message").isEqualTo("Use Update balance");
+        // Reading the corrections of a card works (history loads them); only changing the start is refused.
+        webTestClient.get().uri("/api/v1/accounts/{id}/starting-balance-corrections", owedCard).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.length()").isEqualTo(0);
+        webTestClient.get().uri("/api/v1/accounts/{id}/starting-balance-corrections/preview?openingAmount=900.00"
+                + "&openedOn=2026-09-01", owedCard).exchange().expectStatus().isBadRequest();
         assertBalance(owedCard, "-1000.00");
         assertActivityCount(owedCard, 0);
         assertBalance(checking, "5000.00");

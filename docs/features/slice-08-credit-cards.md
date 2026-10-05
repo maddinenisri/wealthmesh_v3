@@ -82,7 +82,7 @@ What exists (grep, not memory):
 | --- | --- | --- | --- |
 | A. Card setup: enable `credit_card` (server and `accountTypes.ts` together), Owed / Card credit chooser, signed opening, list, detail and Household labels, edit separately from Balance, name and amount errors keep entries, Cancel adds nothing, wealth shows debt and Card credit separately, no Overdrawn label on a card, per-type kind rules (decision 2) | `V2_CARD_001`, `003`, `004`, `005`, `014` | API + UI (MSW) + e2e at 710px and 1280px | done 2026-10-05 |
 | B. Card spending: purchase, refund, interest and fee entries, refund kind in every spending reader (one shared definition, `ActivityStore.Counted`), two seeded categories (V12), negative category with explanation, card in the Spending account filter | `V2_CARD_002`, `008`, `009`, `011` (`V2_MONTHLY_002` moved to C, see deviation) | API + UI + e2e at 710px and 1280px (refund form) | done 2026-10-05 |
-| C. Card payment: `MovementKind.CARD_PAYMENT`, V12, Record payment from the card detail (bank chosen, destination fixed), review and Cancel, overpayment explained, edit, remove and Undo as a pair, plain transfers to a card refused | `V2_CARD_006`, `007`, `012`, `013` | API (race tests) + UI + e2e at 710px and 1280px | todo |
+| C. Card payment: `MovementKind.CARD_PAYMENT`, V13, Record payment from the card detail (bank chosen, destination fixed), review and Cancel, overpayment explained, edit, remove and Undo as a pair, plain transfers to a card refused, a card in Spending leaves out the repayment | `V2_CARD_006`, `007`, `012`, `013`, `V2_MONTHLY_002` | API (race tests) + UI + e2e at 710px and 1280px | done 2026-10-05 |
 | D. Card Balance correction and statements: Update balance with Owed / Card credit, increase in debt wording, statement with a meaning, corrected copy keeps the original | `V2_CARD_010`, `V2_SUPPORTING_RECORD_001` | API + UI + e2e at 710px and 1280px (Update balance on a card) | todo |
 
 16 of 16 IDs, 4 groups. The e2e spec is `11c-cards.spec.ts` (sorts before `12-members.spec.ts`, which renames Alex Doe). Order A, B, C, D (C needs A and B; D needs A).
@@ -104,6 +104,10 @@ Every shared row or state this slice changes, with each reader and writer (grep 
 | Household member state (entered-by) | `EntryValidator.member`, `memberLocked` | member writes | deactivate during a card payment save: refused under the lock, holding only the member row |
 | `statement` rows (balance and meaning) | `StatementService.ofAccount`, `StatementsCard`, history | `StatementService.attach`, `revise` | concurrent revisions of one card statement: one wins (`UNIQUE (replaces_id)`) |
 | Seeded `category` rows | `CategoryService`, `EntryValidator` | V12 migration | none (read-only) |
+
+- Group C: `MovementService` is no longer a singleton `@Service`; `MovementConfiguration` builds one per `MovementKind` (`transfers`, `cardPayments`), so lock order, replay and member checks are shared. `MovementKind` carries the pair rule (`refusal`) and the noun for messages. Routes: `/api/v1/card-payments` (create, get, preview, replacement, removal, undo). The card leg is `card_payment_in`, the bank leg `card_payment` (V13 widens the kind check and the movement-id check).
+- The e2e found a real fault the API and MSW tests missed: a card's history showed "Use Update balance" because listing starting-balance corrections went through the same card refusal as changing them. `OpeningRevisionService.load` is now plain and only `loadEditable` (preview, save) refuses a card; a card test reads the list.
+- Race tests (`CardPaymentRaceApiTests`): with `MovementStore.lockAccounts` emptied, 3 of 9 fail (change/remove/Undo waits, same key at once, one winner); the create wait and the member-row tests still wait on the foreign-key share lock and the member lock.
 
 ### Given tally (D-021 evidence, filled at Prove)
 

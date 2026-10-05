@@ -18,6 +18,7 @@ import com.mdstech.wealthmesh.activity.domain.Activity;
 import com.mdstech.wealthmesh.activity.dto.ReplacementPreview.AccountFigure;
 import com.mdstech.wealthmesh.activity.dto.ReplacementPreview.MonthFigure;
 import com.mdstech.wealthmesh.activity.dto.TransferPreview;
+import com.mdstech.wealthmesh.activity.service.MovementService.MovementKind;
 import com.mdstech.wealthmesh.activity.repository.ActivityRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.activity.repository.MovementStore;
@@ -47,8 +48,8 @@ public class TransferPreviewService {
         this.movements = movements;
     }
 
-    public Mono<TransferPreview> preview(UUID fromId, UUID toId, Object amount, LocalDate on, UUID movementId,
-            UUID activityId) {
+    public Mono<TransferPreview> preview(MovementKind kind, UUID fromId, UUID toId, Object amount, LocalDate on,
+            UUID movementId, UUID activityId) {
         if (fromId == null || toId == null) {
             return Mono.error(EntryValidator.bad("Choose both accounts"));
         }
@@ -62,7 +63,7 @@ public class TransferPreviewService {
                     }
                     BigDecimal newAmount = original.map(Activity::amount)
                             .orElseGet(() -> EntryValidator.amount(amount));
-                    return figures(fromId, toId, newAmount, movementId, original.orElse(null));
+                    return figures(kind, fromId, toId, newAmount, movementId, original.orElse(null));
                 });
     }
 
@@ -74,14 +75,15 @@ public class TransferPreviewService {
                         .switchIfEmpty(Mono.error(notFound("Entry not found: " + activityId)));
     }
 
-    private Mono<TransferPreview> figures(UUID fromId, UUID toId, BigDecimal amount, UUID movementId,
-            Activity expense) {
+    private Mono<TransferPreview> figures(MovementKind kind, UUID fromId, UUID toId, BigDecimal amount,
+            UUID movementId, Activity expense) {
         // What leaves each account before the new rows are added: the old pair, or the expense.
         Map<UUID, BigDecimal> adjust = new LinkedHashMap<>();
         if (expense != null) {
             adjust.merge(expense.accountId(), expense.amount(), BigDecimal::add);
         }
-        return accountOf(fromId).zipWith(accountOf(toId)).flatMap(pair -> oldRows(movementId, adjust)
+        return accountOf(fromId).zipWith(accountOf(toId)).flatMap(pair -> refuse(kind, pair.getT1(), pair.getT2())
+                .then(Mono.defer(() -> oldRows(kind, movementId, adjust)))
                 .then(Mono.defer(() -> {
                     adjust.merge(pair.getT1().id(), amount.negate(), BigDecimal::add);
                     adjust.merge(pair.getT2().id(), amount, BigDecimal::add);
@@ -94,17 +96,18 @@ public class TransferPreviewService {
     }
 
     /** Takes the old pair's effect out of each account it touched, source side first. */
-    private Mono<Void> oldRows(UUID movementId, Map<UUID, BigDecimal> adjust) {
+    private Mono<Void> oldRows(MovementKind kind, UUID movementId, Map<UUID, BigDecimal> adjust) {
         if (movementId == null) {
             return Mono.empty();
         }
-        return movements.legs(movementId).collectList().filter(legs -> legs.size() == 2)
+        return movements.legs(movementId).collectList()
+                .filter(legs -> legs.size() == 2 && legs.stream().anyMatch(leg -> kind.outKind().equals(leg.kind())))
                 .switchIfEmpty(Mono.error(notFound("Transfer not found: " + movementId)))
                 .filter(legs -> legs.stream().allMatch(leg -> leg.removedAt() == null))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
                         "This transfer was already changed or removed.")))
                 .doOnNext(legs -> legs.reversed().forEach(leg -> adjust.merge(leg.accountId(),
-                        "transfer_in".equals(leg.kind()) ? leg.amount().negate() : leg.amount(), BigDecimal::add)))
+                        kind.inKind().equals(leg.kind()) ? leg.amount().negate() : leg.amount(), BigDecimal::add)))
                 .then();
     }
 
@@ -121,9 +124,13 @@ public class TransferPreviewService {
     private Mono<Account> accountOf(UUID id) {
         return accounts.findById(id).switchIfEmpty(Mono.error(notFound("Account not found: " + id)))
                 .filter(account -> AccountType.holdsActivity(account.type()))
-                .switchIfEmpty(Mono.error(EntryValidator.bad(MovementService.WRONG_TYPE)))
-                .filter(account -> !AccountType.isCard(account.type()))
-                .switchIfEmpty(Mono.error(EntryValidator.bad(MovementService.CARD_TYPE)));
+                .switchIfEmpty(Mono.error(EntryValidator.bad(MovementService.WRONG_TYPE)));
+    }
+
+    /** The same pair rule the save applies, so the review never shows what the save would refuse. */
+    private static Mono<Void> refuse(MovementKind kind, Account from, Account to) {
+        String refusal = kind.refusal().apply(from, to);
+        return refusal == null ? Mono.empty() : Mono.error(EntryValidator.bad(refusal));
     }
 
     private Mono<BigDecimal> balance(Account account) {

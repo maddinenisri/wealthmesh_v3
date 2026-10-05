@@ -9,6 +9,7 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useConvertToTransfer, useTransferPreview } from '../../hooks/useTransfers'
 import { formatMoney } from '../../lib/money'
 import { ACCOUNT_TYPES } from '../accounts/accountTypes'
+import { isCard } from '../accounts/cardBalance'
 import { EnteredBy } from '../activity/EnteredBy'
 import { TransferFigures } from './TransferFigures'
 import { accountChoice } from './accountChoice'
@@ -35,6 +36,7 @@ export function ChangeToTransfer({
   const choices = (accounts.data ?? []).filter(
     (candidate) =>
       candidate.id !== account.id &&
+      !isCard(candidate.type) &&
       ACCOUNT_TYPES.some((type) => type.ready && type.value === candidate.type),
   )
   const convert = useConvertToTransfer(account.id, entry.id)
