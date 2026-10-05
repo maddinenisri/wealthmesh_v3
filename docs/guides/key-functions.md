@@ -7,11 +7,12 @@ The files that carry the design, and what breaks or gets harder without each. Pa
 | Where                                          | What it does                                                                  | Why it matters                                              |
 | ---------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `household/service/HouseholdService`           | `get`, `create`, `rename` for the single household; validates; maps 409/404   | Holds the rules; the singleton conflict becomes a clean 409 |
-| `household/service/HouseholdMemberService`     | CRUD plus `validate` (name 1-120, label up to 80) and `duplicate` (409)       | One place for member rules and error mapping                |
+| `household/service/HouseholdMemberService`     | CRUD plus `validate` (name 1-120, label up to 80) and `duplicate` (409); `update` records a rename in `member_name_change`; `deactivate`/`restore` flip `active` under a row lock; delete of a used member is 409 | One place for member rules and error mapping (slice 05)     |
+| `household/repository/MemberNameHistoryStore`  | `record`, `historyByMember`: profile change history, newest first (`seq`)      | A rename keeps the earlier name; plain SQL like `AccountOwnerStore` |
 | `household/mapper/HouseholdMemberMapper`       | `toResponse`, `toNewEntity`, `toUpdatedEntity` (two sources), `@Named` helpers| Normalises names, builds keys and timestamps for records    |
 | `household/mapper/HouseholdMapper`             | Same for the household                                                        | Keeps entities out of controllers                           |
 | `household/domain/*`                           | Table-mapped records with `@Id UUID`                                          | DB-generated ids; null id means insert                      |
-| `account/service/AccountService`               | `create`, `update`, `findAll`, `findById`; `parse` validates (name, amount, type, date); owners must belong to the household | One place for account rules; edit never touches money (D-017) |
+| `account/service/AccountService`               | `create`, `update`, `findAll`, `findById`; `parse` validates (name, amount, type, date); owners must belong to the household; `checkOwners` reads members `FOR SHARE` and refuses a new inactive owner (an existing one may stay) | One place for account rules; edit never touches money (D-017) |
 | `account/repository/AccountOwnerStore`         | Owner links (composite key) with plain SQL: `replace`, `ownersByAccount`, `ownersOf` | Joint accounts later need no schema change                  |
 | `activity/service/EntryService`                | `record(accountId, key, kind, request)`: validates and saves an expense or income; replay by key (D-024) | One place for money in and out; `kind` picks the category kind and the Balance direction |
 | `activity/service/EntryChangeService`          | `replace` (edit as replacement), `remove`, `undo`, `history` with who/when events (`activity_event`) | Money rows are never updated in place; a replacement and the original swap in one transaction |
@@ -42,6 +43,7 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | --------------------------------------- | -------------------------------------------------------------------------------- |
 | `TestcontainersConfiguration`           | Starts `postgres:17`; `DynamicPropertyRegistrar` sets R2DBC and Flyway properties|
 | `HouseholdMemberApiTests`               | Ordered end-to-end API journey: create, conflict, validate, edit, list, delete   |
+| `MemberLifecycleApiTests`               | Joint account, rename history, deactivate/restore, inactive-owner rule and its lock (held uncommitted deactivate) |
 | `AccountApiTests`                       | Ordered API journey for accounts and `/today`; `@DirtiesContext` gives it its own database |
 | `MutableClock`                          | `@Primary` test clock (from `TestcontainersConfiguration`); `setToday(date)`     |
 | `web/SpaFallbackFilterTests`            | Parameterised cases for `isPageRequest` plus rewrite behaviour                   |
@@ -53,7 +55,7 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | `api/client.ts` `request()`                   | Typed fetch under `/api/v1`; absolute URL; `ApiError`; 204 handling             | Single place for URL, errors and network failure             |
 | `api/household.ts`                            | `getHousehold`, `createHousehold`, `renameHousehold`, member functions, parsers | Components never build URLs or trust raw JSON                |
 | `hooks/useHousehold.ts`                       | `useHousehold` (adds `isMissing` for 404), create and rename mutations          | Screens branch on state, not on exceptions                   |
-| `hooks/useMembers.ts`                         | `useMembers`, `useAddMember`, `useUpdateMember`                                 | Invalidates the list key after every change                  |
+| `hooks/useMembers.ts`                         | `useMembers`, `useAddMember`, `useUpdateMember`, `useSetMemberActive`           | Invalidates the list key after every change                  |
 | `design-system/tokens.css`                    | Light and dark variables, `@theme inline`, focus ring, reduced motion           | The one place to restyle the app                             |
 | `design-system/cn.ts`                         | `cn(...)` = `clsx` + `tailwind-merge`                                           | Safe class overrides                                         |
 | `design-system/forms/TextField.tsx`           | react-hook-form `useController` bound to `Field`                                | Reusable controlled input with validation messages           |
@@ -73,7 +75,9 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | `layout/AppLayout.tsx`, `AppFooter.tsx`       | Shell: skip link, nav, main, sticky footer                                      | Accessibility and consistent chrome                          |
 | `layout/useDocumentTitle.ts`                  | Sets the tab title from `handle.title` of the deepest route                     | Titles stay next to the route definition                     |
 | `features/household/HouseholdPage.tsx`        | Loading, error, create, details and members states                              | The reference screen to copy                                 |
-| `features/household/HouseholdForms.tsx`       | Create, rename and member forms                                                 | Shows the form pattern end to end                            |
+| `features/household/HouseholdForms.tsx`       | Create, rename and member forms; `MemberForm` reviews a rename before saving     | Shows the form pattern end to end                            |
+| `features/household/MembersCard.tsx`          | Member list with Edit, Remove (review, Cancel, Confirm), Restore, earlier names   | Member lifecycle UI (slice 05)                               |
+| `design-system/forms/CheckboxGroupField.tsx`  | String-array checkbox group for react-hook-form; first box takes the focus on error | Used for joint owners                                         |
 | `test/mockApi.ts`                             | In-memory backend for MSW: rules, 404/400/409, request log                      | Fast, realistic UI tests without a server                    |
 | `test/render.tsx`                             | `renderWithProviders`, `renderRoute(path)`                                      | Fresh query cache, no retries, real routes                   |
 | `test/setup.ts`                               | Starts MSW with `onUnhandledRequest: 'error'`                                   | Stray requests fail tests                                    |
@@ -93,5 +97,6 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | `e2e/playwright.config.ts`             | `webServer` runs the stack, `workers: 1`, health URL, graceful shutdown              |
 | `e2e/tests/01-household.spec.ts`       | The ordered journey from an empty database; specs run by file name, so the number is the order |
 | `e2e/tests/02-checking-setup.spec.ts`  | Checking setup journey; needs the household and members left by 01                  |
+| `e2e/tests/12-members.spec.ts`         | Joint owners, rename, remove at 710px and 1280px; renames Alex Doe to Alex Patel, so it runs last |
 | `e2e/tests/shell.spec.ts`              | Shell, navigation without reload, not-found view, API and health endpoints           |
 | `.pre-commit-config.yaml`              | All hooks, grouped by stage                                                          |
