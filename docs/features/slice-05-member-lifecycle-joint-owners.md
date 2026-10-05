@@ -1,8 +1,8 @@
 # Slice 05: Member lifecycle and joint owners
 
 - Slice: 05 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/household/setup/set-up-household.feature`, `docs/requirements/v2/household/members/manage-members.feature`
-- Status: done (committed, not pushed: push only when the owner says, D-002)
-- Started: 2026-10-04  Finished: 2026-10-05  Commit: see git log
+- Status: done (pushed 2026-10-05)
+- Started: 2026-10-04  Finished: 2026-10-05  Commit: `95df2af`
 
 ## Prompts and directions
 
