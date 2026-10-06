@@ -330,6 +330,8 @@ export function mockApi(
     budgets?: MockBudget[]
     /** Recurring schedules already saved. */
     schedules?: MockSchedule[]
+    /** Suggestions the server would find: the bills are the account's matching expenses. */
+    suggestions?: { accountId: string; categoryId: string; description: string }[]
   } = {},
 ) {
   CATEGORIES.splice(0, CATEGORIES.length, ...SEEDED.map((c) => ({ ...c })))
@@ -343,6 +345,7 @@ export function mockApi(
     statements: [...(seed.statements ?? [])],
     budgets: (seed.budgets ?? []).map((b) => ({ ...b, events: b.events ?? [] })) as MockBudget[],
     schedules: (seed.schedules ?? []).map((s) => ({ ...s })) as MockSchedule[],
+    suggestions: (seed.suggestions ?? []).map((s) => ({ ...s })),
     openingRevisions: [] as MockOpeningRevision[],
     /** Save keys seen on POST expenses, in order. */
     keys: [] as string[],
@@ -1091,17 +1094,73 @@ export function mockApi(
     if (!(body.description ?? 'x').trim()) return problem(400, 'Enter what this bill is')
     return null
   }
+  /** A suggestion is offered until a schedule has its account, category and description or it is dismissed. */
+  const suggestionViews = () =>
+    state.suggestions
+      .filter(
+        (g) =>
+          !state.schedules.some(
+            (s) =>
+              !s.removed &&
+              s.accountId === g.accountId &&
+              effectiveId(s.categoryId) === effectiveId(g.categoryId) &&
+              s.description.trim().toLowerCase() === g.description.trim().toLowerCase(),
+          ),
+      )
+      .map((g) => {
+        const bills = state.activity
+          .filter(
+            (a) =>
+              !a.removedAt &&
+              a.kind === 'expense' &&
+              a.accountId === g.accountId &&
+              effectiveId(a.categoryId) === effectiveId(g.categoryId) &&
+              (a.description ?? '').trim().toLowerCase() === g.description.trim().toLowerCase(),
+          )
+          .sort((a, b) => a.occurredOn.localeCompare(b.occurredOn))
+        const latest = bills[bills.length - 1]
+        const category = CATEGORIES.find((c) => c.id === effectiveId(g.categoryId))
+        return {
+          accountId: g.accountId,
+          accountName: state.accounts.find((a) => a.id === g.accountId)?.name ?? '',
+          categoryId: category?.id ?? g.categoryId,
+          categoryName: category?.name ?? '',
+          description: g.description,
+          amount: Number(latest.amount).toFixed(2),
+          frequency: 'monthly',
+          lastRecordedOn: latest.occurredOn,
+          nextExpectedOn: followingDue(
+            latest.occurredOn,
+            'monthly',
+            Number(latest.occurredOn.slice(8)),
+          ),
+          bills: bills.map((a) => decorate(a, state.accounts, state.activity)),
+        }
+      })
+  const overview = () => ({
+    today,
+    suggestions: suggestionViews(),
+    schedules: state.schedules
+      .filter((s) => !s.removed)
+      .sort((a, b) => a.nextDueOn.localeCompare(b.nextDueOn))
+      .map(scheduleView),
+  })
   const recurringHandlers = () => [
     http.get('*/api/v1/recurring', ({ request }) => {
       log(request)
-      return HttpResponse.json({
-        today,
-        suggestions: [],
-        schedules: state.schedules
-          .filter((s) => !s.removed)
-          .sort((a, b) => a.nextDueOn.localeCompare(b.nextDueOn))
-          .map(scheduleView),
-      })
+      return HttpResponse.json(overview())
+    }),
+    http.post('*/api/v1/recurring/suggestions/dismiss', async ({ request }) => {
+      log(request)
+      const body = (await request.json()) as { accountId: string; description: string }
+      state.suggestions = state.suggestions.filter(
+        (g) =>
+          !(
+            g.accountId === body.accountId &&
+            g.description.trim().toLowerCase() === body.description.trim().toLowerCase()
+          ),
+      )
+      return HttpResponse.json(overview())
     }),
     http.post('*/api/v1/recurring/review', async ({ request }) => {
       log(request)

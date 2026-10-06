@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import com.mdstech.wealthmesh.recurring.dto.EventView;
 import com.mdstech.wealthmesh.recurring.dto.OccurrenceView;
+import com.mdstech.wealthmesh.recurring.service.Suggestions;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -116,6 +117,21 @@ public class RecurringStore {
                 .bind("key", key)
                 .map((row, meta) -> new KeyHit(row.get("schedule_id", UUID.class),
                         row.get("fingerprint", String.class))).one();
+    }
+
+    /** The dismissed suggestions, as the keys they match (account, category, description). */
+    public Flux<String> dismissedKeys() {
+        return client.sql("SELECT account_id, category_id, description_key FROM recurring_dismissal")
+                .map((row, meta) -> Suggestions.key(row.get("account_id", UUID.class),
+                        row.get("category_id", UUID.class), row.get("description_key", String.class))).all();
+    }
+
+    /** Dismisses a suggestion; a repeat changes nothing. */
+    public Mono<Void> dismiss(UUID accountId, UUID categoryId, String descriptionKey, UUID memberId, Instant at) {
+        return client.sql("INSERT INTO recurring_dismissal (account_id, category_id, description_key, member_id, at) "
+                        + "VALUES (:account, :category, :description, :member, :at) ON CONFLICT DO NOTHING")
+                .bind("account", accountId).bind("category", categoryId).bind("description", descriptionKey)
+                .bind("member", memberId).bind("at", at).then();
     }
 
     private static Schedule schedule(io.r2dbc.spi.Readable row) {

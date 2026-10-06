@@ -69,6 +69,36 @@ abstract class RecurringTestBase extends LifecycleTestBase {
         return overview().expectBody();
     }
 
+    /** Saves an expense with a description of its own (the bills a suggestion is found in) and returns its id. */
+    protected String bill(String account, String key, String description, String category, String amount,
+            String date) {
+        AtomicReference<String> id = new AtomicReference<>();
+        post(account, "expenses", key, entry(mayaId, description, amount, date, category)).expectStatus().isCreated()
+                .expectBody().jsonPath("$.id").value(String.class, id::set);
+        return id.get();
+    }
+
+    protected void removeEntry(String account, String id) {
+        webTestClient.post().uri("/api/v1/accounts/{a}/activity/{id}/removal", account, id)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange().expectStatus().isOk();
+    }
+
+    protected WebTestClient.ResponseSpec dismissSuggestion(String account, String categoryId, String description) {
+        return webTestClient.post().uri(RECURRING + "/suggestions/dismiss").contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"accountId": "%s", "categoryId": "%s", "description": "%s", "enteredByMemberId": "%s"}"""
+                        .formatted(account, categoryId, description, mayaId)).exchange();
+    }
+
+    protected String categoryId(String name) {
+        AtomicReference<String> id = new AtomicReference<>();
+        webTestClient.get().uri("/api/v1/categories?kind=spending").exchange().expectBody()
+                .jsonPath("$[?(@.name=='" + name + "')].id")
+                .value(List.class, ids -> id.set((String) ids.getFirst()));
+        return id.get();
+    }
+
     protected void setToday(String date) {
         clock.setToday(LocalDate.parse(date));
     }

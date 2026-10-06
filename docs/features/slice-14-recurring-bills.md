@@ -66,7 +66,7 @@ What to watch for in slice 14
 | --- | --- | --- | --- |
 | 0 Q-044: retry of a saved entry, batch or reminder is judged on what was saved (replay-mode parse, decision 9). One test per writer for each cause (category archived, category merged, member deactivated, default class changed; reminder also after its due date passes), by id and by name | none new; cites `V2_ACCOUNT_LIFECYCLE_001` and D-024 | API (Testcontainers, `MutableClock`) | done (see Group 0 result) |
 | 1 Base: V22 tables, service shell, `lockHousehold` reuse, create a manual schedule with first due date, list with following occurrence, frequency math (weekly, monthly with month ends, yearly), negative amount | `V2_RECURRING_006` (3 examples), `V2_RECURRING_005` (negative half) | API + UI (MSW) + e2e | done |
-| 2 Suggestions and supporting bills: detection, inspect, confirm, dismiss | `V2_RECURRING_001`, `V2_RECURRING_002`, `V2_RECURRING_009` (dismiss half) | API + UI + e2e | todo |
+| 2 Suggestions and supporting bills: detection, inspect, confirm, dismiss | `V2_RECURRING_001`, `V2_RECURRING_002`, `V2_RECURRING_009` (dismiss half) | API + UI + e2e | done |
 | 3 Change, pause, resume, delete, cancel paths | `V2_RECURRING_005` (cancel half), `V2_RECURRING_007`, `V2_RECURRING_008`, `V2_RECURRING_009` (delete half) | API + UI + e2e | todo |
 | 4 Record actual expense: review, early payment, next due, cancel | `V2_RECURRING_003`, `V2_RECURRING_004` | API + UI + e2e | todo |
 | 5 Overdue: status, reschedule, dismiss one occurrence | `V2_RECURRING_010` | API + UI + e2e | todo |

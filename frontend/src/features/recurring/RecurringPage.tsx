@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react'
-import type { Schedule } from '../../api/recurring'
+import type { Schedule, Suggestion } from '../../api/recurring'
 import { Badge, Button, Card, CardTitle, PageHeader } from '../../design-system'
-import { useCreateSchedule, useRecurring } from '../../hooks/useRecurring'
+import { useCreateSchedule, useDismissSuggestion, useRecurring } from '../../hooks/useRecurring'
+import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney } from '../../lib/money'
 import { useAccountContext } from '../accounts/useAccountContext'
 import { useStateChangeFocus } from '../accounts/useStateChangeFocus'
+import { ActionPanel } from './ActionPanel'
+import { Bills } from './Bills'
 import { ScheduleForm } from './ScheduleForm'
+import { SuggestionItem } from './SuggestionItem'
 import { FREQUENCY_LABEL, overdueText, stateLabel } from './recurringText'
 
-type Mode = { kind: 'create' }
+type Mode =
+  | { kind: 'create' }
+  | { kind: 'confirm'; suggestion: Suggestion }
+  | { kind: 'dismiss'; suggestion: Suggestion }
 
 /**
  * Recurring bills (slice 14): schedules and expected amounts. A schedule is an estimate, not a recorded expense: it
@@ -28,6 +35,8 @@ export function RecurringPage() {
     statusRef.current?.focus({ preventScroll: true })
   }, [confirmed, statusRef])
   const create = useCreateSchedule()
+  const dismiss = useDismissSuggestion()
+  const dismissing = useEnteringAs(members)
 
   const open = (next: Mode) => {
     begin()
@@ -54,6 +63,74 @@ export function RecurringPage() {
         >
           {message}
         </p>
+      )}
+      {recurring.data && recurring.data.suggestions.length > 0 && (
+        <Card aria-labelledby="suggestions-heading">
+          <CardTitle id="suggestions-heading" className="text-lg">
+            Suggestions
+          </CardTitle>
+          <p className="mt-1 text-sm text-ink-muted">
+            Found in the bills you recorded. Confirm one to schedule it, or dismiss it: either way
+            no recorded bill changes.
+          </p>
+          <ul className="mt-3 flex flex-col gap-4">
+            {recurring.data.suggestions.map((suggestion) => (
+              <SuggestionItem
+                key={`${suggestion.accountId}-${suggestion.categoryId}-${suggestion.description}`}
+                suggestion={suggestion}
+                onConfirm={() => open({ kind: 'confirm', suggestion })}
+                onDismiss={() => open({ kind: 'dismiss', suggestion })}
+              />
+            ))}
+          </ul>
+          {mode?.kind === 'confirm' && (
+            <ScheduleForm
+              heading={`Confirm the ${mode.suggestion.description} estimate`}
+              start={{
+                description: mode.suggestion.description,
+                amount: mode.suggestion.amount,
+                frequency: mode.suggestion.frequency,
+                nextDueOn: mode.suggestion.nextExpectedOn,
+                accountId: mode.suggestion.accountId,
+                categoryId: mode.suggestion.categoryId,
+              }}
+              members={members ?? []}
+              save={create}
+              confirmLabel="Confirm saving the schedule"
+              savedMessage={saved}
+              onSaved={done}
+              onCancel={() => setMode(null)}
+            />
+          )}
+          {mode?.kind === 'dismiss' && (
+            <ActionPanel
+              heading={`Review dismissing the ${mode.suggestion.description} suggestion`}
+              members={members ?? []}
+              member={dismissing.member}
+              setMemberId={dismissing.setMemberId}
+              error={dismiss.error?.message}
+              pending={dismiss.isPending}
+              confirmLabel="Confirm dismissing the suggestion"
+              onConfirm={() =>
+                dismiss.mutate(
+                  { suggestion: mode.suggestion, memberId: dismissing.member!.id },
+                  {
+                    onSuccess: () =>
+                      done(
+                        `The ${mode.suggestion.description} suggestion is dismissed. All ${mode.suggestion.bills.length} recorded bills are unchanged.`,
+                      ),
+                  },
+                )
+              }
+              onCancel={() => setMode(null)}
+            >
+              <p className="text-sm">
+                The suggestion leaves this list. The {mode.suggestion.bills.length} recorded bills
+                stay as they are, and no schedule is created.
+              </p>
+            </ActionPanel>
+          )}
+        </Card>
       )}
       <Card aria-labelledby="schedules-heading">
         <CardTitle id="schedules-heading" className="text-lg">
@@ -84,9 +161,7 @@ export function RecurringPage() {
             members={members ?? []}
             save={create}
             confirmLabel="Confirm saving the schedule"
-            savedMessage={(saved) =>
-              `Saved ${saved.description}: expected ${formatMoney(Number(saved.amount))} ${FREQUENCY_LABEL[saved.frequency].toLowerCase()}, next due ${saved.nextDueOn}, then ${saved.followingDueOn}. Balance and spending are unchanged.`
-            }
+            savedMessage={saved}
             onSaved={done}
             onCancel={() => setMode(null)}
           />
@@ -95,6 +170,10 @@ export function RecurringPage() {
     </div>
   )
 }
+
+/** What a saved schedule says, in one line; a schedule changes no Balance and no spending. */
+const saved = (schedule: Schedule) =>
+  `Saved ${schedule.description}: expected ${formatMoney(Number(schedule.amount))} ${FREQUENCY_LABEL[schedule.frequency].toLowerCase()}, next due ${schedule.nextDueOn}, then ${schedule.followingDueOn}. Balance and spending are unchanged.`
 
 function ScheduleItem({ schedule }: { schedule: Schedule }) {
   return (
@@ -118,6 +197,7 @@ function ScheduleItem({ schedule }: { schedule: Schedule }) {
           {overdueText(schedule.overdueDays)}
         </p>
       )}
+      <Bills bills={schedule.bills} />
     </li>
   )
 }

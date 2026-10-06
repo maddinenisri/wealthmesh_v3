@@ -165,6 +165,19 @@ function parseOverview(value: unknown): Overview {
   }
 }
 
+/** Dismiss a suggestion: no bill changes. Answers with the list as it is now. */
+export const dismissSuggestion = (suggestion: Suggestion, enteredByMemberId: string) =>
+  request('/recurring/suggestions/dismiss', {
+    method: 'POST',
+    body: {
+      accountId: suggestion.accountId,
+      categoryId: suggestion.categoryId,
+      description: suggestion.description,
+      enteredByMemberId,
+    },
+    parse: parseOverview,
+  })
+
 export const getRecurring = () => request('/recurring', { parse: parseOverview })
 
 /** What the schedule would look like if saved: the same checks, nothing is written. */

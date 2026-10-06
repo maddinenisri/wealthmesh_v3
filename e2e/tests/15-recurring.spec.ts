@@ -158,3 +158,113 @@ for (const [width, account, name, frequency, amount, due, following] of [
     })
   })
 }
+
+async function makeBills(page: Page, account: string, description: string): Promise<string> {
+  const owner = await ownerId(page)
+  const id = await makeAccount(page, account)
+  for (const [index, date] of ['2026-07-05', '2026-08-05', '2026-09-05'].entries()) {
+    const saved = await page.request.post(`/api/v1/accounts/${id}/expenses`, {
+      headers: { 'Idempotency-Key': `e2e-rec-${account}-${index}` },
+      data: {
+        description,
+        amount: '180.00',
+        occurredOn: date,
+        category: 'Utilities',
+        enteredByMemberId: owner,
+      },
+    })
+    expect(saved.ok()).toBeTruthy()
+  }
+  return id
+}
+
+for (const [width, account, description] of [
+  [710, 'Recurring Suggest 710', 'Electricity 710'],
+  [1280, 'Recurring Suggest 1280', 'Electricity 1280'],
+] as const) {
+  test.describe.serial(`Recurring suggestions at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+
+    test(`V2_RECURRING_001 a monthly suggestion shows its estimate, its next bill and its three bills (${width}px)`, async ({
+      page,
+    }) => {
+      const id = await makeBills(page, account, description)
+      await page.goto('/recurring')
+      const item = page.getByRole('listitem').filter({ hasText: description })
+      await expect(item).toContainText('Expected $180.00, Monthly')
+      await expect(item).toContainText('Last recorded bill 2026-09-05')
+      await expect(item).toContainText('Next expected bill 2026-10-05')
+      await expect(item).toContainText('Estimate, not a recorded expense')
+      await item.getByText('Supporting bills (3)').click()
+      await expect(item.getByRole('link')).toHaveCount(3)
+      await expectNoSidewaysScroll(page)
+      const entries = (await (
+        await page.request.get(`/api/v1/accounts/${id}/activity`)
+      ).json()) as unknown[]
+      expect(entries).toHaveLength(3)
+    })
+
+    if (width === 710) {
+      test(`V2_RECURRING_002 confirming a suggestion saves the schedule without paying its next bill (${width}px)`, async ({
+        page,
+      }) => {
+        await page.goto('/recurring')
+        const item = page.getByRole('listitem').filter({ hasText: description })
+        const opener = item.getByRole('button', { name: 'Review and confirm' })
+        await opener.click()
+        await expect(page.getByLabel('Expected amount')).toHaveValue('180.00')
+        await expect(page.getByLabel('First due date')).toHaveValue('2026-10-05')
+        await page.getByRole('button', { name: 'Review', exact: true }).click()
+        const review = page.getByRole('region', { name: new RegExp(`Review: ${description}`) })
+        await expectFocusInside(review)
+        await review.getByRole('button', { name: 'Cancel' }).click()
+        await expect(opener).toBeFocused()
+
+        await opener.click()
+        await page.getByRole('button', { name: 'Review', exact: true }).click()
+        await page.getByRole('button', { name: 'Confirm saving the schedule' }).click()
+        const status = page.getByRole('status')
+        await expect(status).toContainText('next due 2026-10-05')
+        await expect(status).toBeFocused()
+        await expect(status).toBeInViewport({ ratio: 1 })
+        const schedule = page
+          .getByRole('region', { name: 'Schedules' })
+          .getByRole('listitem')
+          .filter({ hasText: description })
+        await expect(schedule).toContainText('Next due 2026-10-05')
+        await expect(schedule.getByText('Supporting bills (3)')).toBeVisible()
+        await expect(
+          page.getByRole('listitem').filter({ hasText: 'Review and confirm' }),
+        ).toHaveCount(0)
+        const accounts = (await (await page.request.get('/api/v1/accounts')).json()) as {
+          name: string
+          balance: { amount: string }
+        }[]
+        // 5000.00 opening minus three 180.00 bills: the schedule paid nothing.
+        expect(accounts.find((a) => a.name === account)!.balance.amount).toBe('4460.00')
+      })
+    } else {
+      test(`V2_RECURRING_009 dismissing a suggestion needs a review, Cancel keeps it, Confirm removes it and keeps every bill (${width}px)`, async ({
+        page,
+      }) => {
+        await page.goto('/recurring')
+        const item = page.getByRole('listitem').filter({ hasText: description })
+        const opener = item.getByRole('button', { name: 'Dismiss suggestion' })
+        await opener.click()
+        const review = page.getByRole('region', { name: /Review dismissing/ })
+        await expectFocusInside(review)
+        await review.getByRole('button', { name: 'Cancel' }).click()
+        await expect(opener).toBeFocused()
+        await expect(item).toBeVisible()
+
+        await opener.click()
+        await page.getByRole('button', { name: 'Confirm dismissing the suggestion' }).click()
+        const status = page.getByRole('status')
+        await expect(status).toContainText('All 3 recorded bills are unchanged')
+        await expect(status).toBeFocused()
+        await expect(page.getByRole('listitem').filter({ hasText: description })).toHaveCount(0)
+        await expectNoSidewaysScroll(page)
+      })
+    }
+  })
+}

@@ -6,9 +6,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -20,15 +23,19 @@ import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
+import com.mdstech.wealthmesh.activity.repository.ActivityStore.Candidate;
 import com.mdstech.wealthmesh.activity.service.EntryValidator;
 import com.mdstech.wealthmesh.category.domain.Category;
 import com.mdstech.wealthmesh.household.repository.HouseholdLock;
 import com.mdstech.wealthmesh.money.Money;
+import com.mdstech.wealthmesh.recurring.dto.DismissSuggestionRequest;
 import com.mdstech.wealthmesh.recurring.dto.RecurringOverview;
 import com.mdstech.wealthmesh.recurring.dto.ScheduleRequest;
 import com.mdstech.wealthmesh.recurring.dto.ScheduleView;
+import com.mdstech.wealthmesh.recurring.dto.SuggestionView;
 import com.mdstech.wealthmesh.recurring.repository.RecurringStore;
 
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -68,8 +75,56 @@ public class RecurringService {
 
     /** Today, the suggestions awaiting review and the saved schedules. */
     public Mono<RecurringOverview> overview() {
-        return store.schedules().concatMap(this::view).collectList()
-                .map(schedules -> new RecurringOverview(LocalDate.now(clock), List.of(), schedules));
+        return Mono.zip(suggestions(), store.schedules().concatMap(this::view).collectList())
+                .map(parts -> new RecurringOverview(LocalDate.now(clock), parts.getT1(), parts.getT2()));
+    }
+
+    /**
+     * The monthly suggestions awaiting review: found in recorded expenses, not yet scheduled (an active or paused
+     * schedule with the same account, category and description) and not dismissed (RECURRING_001, 009).
+     */
+    private Mono<List<SuggestionView>> suggestions() {
+        return Mono.zip(activity.expenseCandidates().collectList(), store.schedules().collectList(),
+                        store.dismissedKeys().collectList())
+                .flatMap(parts -> {
+                    Set<String> excluded = new HashSet<>(parts.getT3());
+                    parts.getT2().forEach(s -> excluded.add(Suggestions.key(s.accountId(), s.categoryId(),
+                            s.description())));
+                    return Flux.fromIterable(Suggestions.find(parts.getT1(), excluded)).concatMap(this::shown)
+                            .collectList();
+                });
+    }
+
+    private Mono<SuggestionView> shown(Suggestions.Found found) {
+        Set<UUID> ids = found.bills().stream().map(Candidate::id).collect(Collectors.toSet());
+        return activity.billsOf(found.accountId(), found.categoryId(), descriptionKey(found.description()))
+                .filter(bill -> ids.contains(bill.id())).collectList().map(bills -> {
+                    Candidate latest = found.latest();
+                    return new SuggestionView(found.accountId(), latest.accountName(), found.categoryId(),
+                            latest.categoryName(), found.description(), Money.format(latest.amount()),
+                            Recurrence.MONTHLY, latest.occurredOn(),
+                            Recurrence.following(latest.occurredOn(), Recurrence.MONTHLY,
+                                    latest.occurredOn().getDayOfMonth()), bills);
+                });
+    }
+
+    /** Dismisses a suggestion: it leaves the list and no bill changes. A repeat is the same result (200). */
+    public Mono<RecurringOverview> dismissSuggestion(DismissSuggestionRequest request) {
+        return Mono.fromCallable(() -> {
+            if (request == null || request.accountId() == null || request.categoryId() == null
+                    || request.description() == null || request.description().isBlank()) {
+                throw bad("Choose the suggestion to dismiss");
+            }
+            return request;
+        }).flatMap(r -> transactions.transactional(householdLock.lock()
+                .flatMap(householdId -> validator.memberLocked(householdId, r.enteredByMemberId()))
+                .flatMap(memberId -> accounts.findById(r.accountId())
+                        .switchIfEmpty(Mono.error(notFound("Account not found: " + r.accountId())))
+                        .then(Mono.defer(() -> store.dismiss(r.accountId(), r.categoryId(),
+                                descriptionKey(r.description()), memberId, clock.instant()))))))
+                .onErrorMap(org.springframework.dao.DataIntegrityViolationException.class,
+                        e -> bad("Choose the suggestion to dismiss"))
+                .then(Mono.defer(this::overview));
     }
 
     /** One saved schedule with its supporting bills, occurrences and history. */

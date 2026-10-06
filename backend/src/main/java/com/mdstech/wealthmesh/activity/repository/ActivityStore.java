@@ -134,6 +134,33 @@ public class ActivityStore {
      * category and one description (compared without case or edge spaces), not removed or replaced, oldest first.
      * A split payment has no category of its own, so it is never one of them.
      */
+    /** An expense a monthly suggestion may be found in: one account, one effective category, one description. */
+    public record Candidate(UUID id, UUID accountId, String accountName, UUID categoryId, String categoryName,
+            String description, BigDecimal amount, LocalDate occurredOn) {
+    }
+
+    /**
+     * Every expense with a category and a description on an active account, oldest first: the rows recurring
+     * suggestions are read from (RECURRING_001). Removed and replaced rows, split payments (no category of their own),
+     * refunds and income are not among them.
+     */
+    public Flux<Candidate> expenseCandidates() {
+        return client.sql("""
+                        SELECT a.id, a.account_id, ac.name AS account_name, c.id AS category_id,
+                               c.name AS category_name, a.description, a.amount, a.occurred_on
+                        FROM activity a
+                        JOIN account ac ON ac.id = a.account_id AND ac.deleted_at IS NULL AND ac.status = 'active'
+                        JOIN category oc ON oc.id = a.category_id
+                        JOIN category c ON c.id = COALESCE(oc.merged_into_id, oc.id)
+                        WHERE a.removed_at IS NULL AND a.kind = 'expense' AND btrim(a.description) <> ''
+                        ORDER BY a.occurred_on, a.created_at""")
+                .map((row, meta) -> new Candidate(row.get("id", UUID.class), row.get("account_id", UUID.class),
+                        row.get("account_name", String.class), row.get("category_id", UUID.class),
+                        row.get("category_name", String.class), row.get("description", String.class),
+                        row.get("amount", BigDecimal.class), row.get("occurred_on", LocalDate.class)))
+                .all();
+    }
+
     public Flux<ActivityResponse> billsOf(UUID accountId, UUID categoryId, String descriptionKey) {
         return withPortions(client.sql(ENTRY_COLUMNS + " AND a.kind = 'expense' AND a.account_id = :account "
                         + "AND c.id = :category AND lower(btrim(a.description)) = :description "

@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { mockApi, type MockAccount } from '../../test/mockApi'
+import { CATEGORIES, mockApi, type MockAccount } from '../../test/mockApi'
 import { renderRoute } from '../../test/render'
 
 const household = { id: '11111111-1111-4111-8111-111111111111', name: 'Maya and Sam' }
@@ -120,5 +120,97 @@ describe('recurring bills: create', () => {
     expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add recurring bill' })).toHaveFocus()
     expect(api.schedules).toHaveLength(0)
+  })
+})
+
+describe('recurring bills: suggestions', () => {
+  const electricity = () =>
+    ['2026-07-05', '2026-08-05', '2026-09-05'].map((date, index) => ({
+      id: `55555555-5555-4555-8555-00000000000${index}`,
+      accountId: checking.id,
+      kind: 'expense',
+      amount: '180.00',
+      occurredOn: date,
+      description: 'Electricity',
+      categoryId: CATEGORIES.find((c) => c.name === 'Utilities')!.id,
+      enteredByMemberId: maya.id,
+    }))
+  const withBills = () => {
+    const base = seed()
+    return {
+      ...base,
+      accounts: [{ ...checking, balance: { amount: '4820.00', asOf: '2026-09-05' } }],
+      activity: electricity(),
+      suggestions: [
+        {
+          accountId: checking.id,
+          categoryId: CATEGORIES.find((c) => c.name === 'Utilities')!.id,
+          description: 'Electricity',
+        },
+      ],
+    }
+  }
+
+  it('V2_RECURRING_001 shows the monthly suggestion with its three supporting bills and says it is an estimate', async () => {
+    const api = mockApi(withBills())
+    renderRoute('/recurring')
+    const card = await screen.findByRole('region', { name: 'Suggestions' })
+    expect(card).toHaveTextContent('Electricity')
+    expect(card).toHaveTextContent('Expected $180.00, Monthly')
+    expect(card).toHaveTextContent('Last recorded bill 2026-09-05')
+    expect(card).toHaveTextContent('Next expected bill 2026-10-05')
+    expect(card).toHaveTextContent('Estimate, not a recorded expense')
+    expect(card).toHaveTextContent('cannot always be detected')
+    const bills = within(card).getByText('Supporting bills (3)')
+    expect(bills).toBeInTheDocument()
+    expect(within(card).getAllByRole('link')).toHaveLength(3)
+    expect(api.activity).toHaveLength(3)
+    expect(api.schedules).toHaveLength(0)
+  })
+
+  it('V2_RECURRING_002 confirming the suggestion saves the schedule with its bills and changes no money', async () => {
+    const api = mockApi(withBills())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    await user.click(await screen.findByRole('button', { name: 'Review and confirm' }))
+    expect(await screen.findByLabelText('Expected amount')).toHaveValue('180.00')
+    expect(screen.getByLabelText('First due date')).toHaveValue('2026-10-05')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    const review = await screen.findByRole('region', { name: /Review: Electricity/ })
+    expect(review).toHaveTextContent('2026-10-05')
+    await user.click(within(review).getByRole('button', { name: 'Confirm saving the schedule' }))
+
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('next due 2026-10-05')
+    const list = await screen.findByRole('region', { name: 'Schedules' })
+    expect(list).toHaveTextContent('Expected $180.00')
+    expect(list).toHaveTextContent('Next due 2026-10-05')
+    expect(within(list).getByText('Supporting bills (3)')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Suggestions' })).not.toBeInTheDocument()
+    expect(api.accounts[0].balance.amount).toBe('4820.00')
+    expect(api.activity).toHaveLength(3)
+  })
+
+  it('V2_RECURRING_009 dismissing needs a review; Cancel keeps the suggestion; Confirm removes it and keeps the bills', async () => {
+    const api = mockApi(withBills())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
+    const opener = await screen.findByRole('button', { name: 'Dismiss suggestion' })
+    await user.click(opener)
+    const review = await screen.findByRole('region', { name: /Review dismissing/ })
+    await user.click(within(review).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('region', { name: /Review dismissing/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Dismiss suggestion' })).toHaveFocus()
+    expect(screen.getByRole('region', { name: 'Suggestions' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss suggestion' }))
+    await user.click(
+      await screen.findByRole('button', { name: 'Confirm dismissing the suggestion' }),
+    )
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('All 3 recorded bills are unchanged')
+    expect(status).toHaveFocus()
+    expect(screen.queryByRole('region', { name: 'Suggestions' })).not.toBeInTheDocument()
+    expect(api.activity).toHaveLength(3)
   })
 })

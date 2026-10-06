@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.mdstech.wealthmesh.recurring.dto.DismissSuggestionRequest;
 import com.mdstech.wealthmesh.recurring.dto.RecurringOverview;
 import com.mdstech.wealthmesh.recurring.dto.ScheduleRequest;
 import com.mdstech.wealthmesh.recurring.dto.ScheduleView;
@@ -30,6 +31,12 @@ public class RecurringController {
     @GetMapping
     public Mono<RecurringOverview> overview() {
         return service.overview();
+    }
+
+    /** Dismisses a suggestion without touching any bill; the same request again returns the same list. */
+    @PostMapping("/suggestions/dismiss")
+    public Mono<RecurringOverview> dismiss(@RequestBody DismissSuggestionRequest request) {
+        return service.dismissSuggestion(request);
     }
 
     /** The review before Confirm: the schedule as it would be saved. Writes nothing. */
