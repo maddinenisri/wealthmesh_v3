@@ -23,6 +23,7 @@ import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.activity.service.EntryValidator;
 import com.mdstech.wealthmesh.money.Money;
+import com.mdstech.wealthmesh.value.dto.ExtensionReview;
 import com.mdstech.wealthmesh.value.dto.ValueHistory;
 import com.mdstech.wealthmesh.value.dto.ValueRequest;
 import com.mdstech.wealthmesh.value.dto.ValueResult;
@@ -249,6 +250,99 @@ public class ValueService {
                 .flatMap(restored -> Mono.zip(currentBalance(account, null), shown(account.id(), restored)).map(
                         both -> new ValueResult(both.getT2(), Money.format(before.amount()),
                                 Money.format(both.getT1().amount()), both.getT1().on()))));
+    }
+
+    // ---- moving the start earlier ----
+
+    /** What moving the start earlier would do (DATED_VALUE_002). Nothing is written. */
+    public Mono<ExtensionReview> reviewExtension(UUID accountId, ValueRequest request) {
+        return loadValued(accountId).flatMap(account -> Mono.fromCallable(() -> parseExtension(account, request, false))
+                .flatMap(parsed -> values.rowsOf(accountId).filter(Row::effective).collectList().map(rows -> {
+                    List<ExtensionReview.Point> timeline = new java.util.ArrayList<>();
+                    timeline.add(new ExtensionReview.Point("opening", parsed.valueOn(), Money.format(parsed.amount())));
+                    timeline.add(new ExtensionReview.Point("value", account.openedOn(),
+                            Money.format(account.openingAmount())));
+                    rows.stream().sorted(Comparator.comparing(Row::valueOn).thenComparing(Row::createdAt))
+                            .forEach(r -> timeline.add(new ExtensionReview.Point("value", r.valueOn(),
+                                    Money.format(r.amount()))));
+                    return timeline;
+                }).flatMap(timeline -> currentBalance(account, null).map(now -> new ExtensionReview(account.name(),
+                        account.type(), Money.format(parsed.amount()), parsed.valueOn(),
+                        Money.format(account.openingAmount()), account.openedOn(), timeline,
+                        Money.format(now.amount()), now.on())))));
+    }
+
+    /**
+     * Moves the start earlier: the new opening is stored on the account, the old opening becomes a dated value on its
+     * own date, and what it replaced is kept in `opening_revision`. No income, spending or transfer. A retry of the
+     * same key replays (D-024); the account row is locked first and the key read under that lock.
+     */
+    public Mono<ExtensionReview> extendStart(UUID accountId, String key, ValueRequest request) {
+        Instant now = clock.instant();
+        Instant cutoff = now.minus(KEY_LIFETIME);
+        return Mono.fromCallable(() -> requireKey(key))
+                .then(Mono.defer(() -> transactions.transactional(lockedValued(accountId)
+                        .flatMap(account -> values.expireMoveKey(key, cutoff)
+                                .then(Mono.defer(() -> values.moveByKey(key, cutoff)))
+                                .flatMap(existing -> replayMove(account, existing, request))
+                                .switchIfEmpty(Mono.defer(() -> moveStart(account, key, request, now)))))))
+                .onErrorMap(DuplicateKeyException.class,
+                        e -> conflict("This save was already used. Start a new entry."))
+                .flatMap(account -> reviewExtensionAfter(account));
+    }
+
+    private Mono<ExtensionReview> reviewExtensionAfter(Account account) {
+        return values.rowsOf(account.id()).filter(Row::effective).collectList().flatMap(rows -> {
+            List<ExtensionReview.Point> timeline = new java.util.ArrayList<>();
+            timeline.add(new ExtensionReview.Point("opening", account.openedOn(),
+                    Money.format(account.openingAmount())));
+            rows.stream().sorted(Comparator.comparing(Row::valueOn).thenComparing(Row::createdAt)).forEach(
+                    r -> timeline.add(new ExtensionReview.Point("value", r.valueOn(), Money.format(r.amount()))));
+            return currentBalance(account, null).map(now -> new ExtensionReview(account.name(), account.type(),
+                    Money.format(account.openingAmount()), account.openedOn(), null, null, timeline,
+                    Money.format(now.amount()), now.on()));
+        });
+    }
+
+    private Mono<Account> moveStart(Account account, String key, ValueRequest request, Instant now) {
+        AccountState.requireNotClosed(account);
+        Parsed parsed = parseExtension(account, request, true);
+        return validator.memberLocked(account, request.enteredByMemberId()).flatMap(member -> values.moveStart(
+                        account.id(), account.openingAmount(), account.openedOn(), parsed.amount(), parsed.valueOn(),
+                        parsed.reason(), member, key, now)
+                .then(Mono.defer(() -> values.insert(account.id(), account.openedOn(), account.openingAmount(),
+                        "Value when tracking began", false, member, null, null,
+                        "start|" + account.id(), now)))
+                .flatMap(id -> values.recordEvent(account.id(), id, "start_moved", member, now,
+                        "Start moved from " + account.openedOn() + " to " + parsed.valueOn() + ": "
+                                + parsed.reason()))
+                .then(Mono.defer(() -> accounts.findById(account.id()))));
+    }
+
+    private Mono<Account> replayMove(Account account, ValueStore.Move existing, ValueRequest request) {
+        boolean same = account.id().equals(existing.accountId()) && request != null
+                && request.amount() instanceof String text && Money.parse(text)
+                        .filter(a -> a.compareTo(existing.amount()) == 0).isPresent()
+                && existing.openedOn().equals(request.valueOn())
+                && Objects.equals(existing.reason(), request.reason() == null ? null : request.reason().strip())
+                && existing.memberId().equals(request.enteredByMemberId());
+        return same ? Mono.just(account)
+                : Mono.error(conflict("This save was already used with different details. Start a new entry."));
+    }
+
+    /** The new start must be earlier than the current one; a reason is required to save it. */
+    private Parsed parseExtension(Account account, ValueRequest request, boolean saving) {
+        if (request == null) {
+            throw EntryValidator.bad("Enter a value");
+        }
+        BigDecimal amount = amountOf(account, request);
+        if (request.valueOn() == null) {
+            throw EntryValidator.bad("Enter a date");
+        }
+        if (!request.valueOn().isBefore(account.openedOn())) {
+            throw EntryValidator.bad("The new start must be before the current start (" + account.openedOn() + ")");
+        }
+        return new Parsed(amount, request.valueOn(), reasonOf(request, saving), false);
     }
 
     // ---- rules ----

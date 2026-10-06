@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   changeValue,
   correctValue,
+  extendStart,
   getValues,
+  reviewExtension,
   reviewValue,
   reviewValueRemoval,
   saveValue,
@@ -39,6 +41,20 @@ export function useSaveValue(accountId: string, replacesId?: string) {
   return useMutation({
     mutationFn: ({ key, body }: { key: string; body: NewValue }) =>
       replacesId ? correctValue(accountId, replacesId, key, body) : saveValue(accountId, key, body),
+    onSuccess: refresh,
+  })
+}
+
+/** A review of moving the start earlier writes nothing. */
+export function useReviewExtension(accountId: string) {
+  return useMutation({ mutationFn: (body: NewValue) => reviewExtension(accountId, body) })
+}
+
+export function useExtendStart(accountId: string) {
+  const refresh = useRefreshValues(accountId)
+  return useMutation({
+    mutationFn: ({ key, body }: { key: string; body: NewValue }) =>
+      extendStart(accountId, key, body),
     onSuccess: refresh,
   })
 }

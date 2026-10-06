@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.mdstech.wealthmesh.value.dto.ExtensionReview;
 import com.mdstech.wealthmesh.value.dto.ValueHistory;
 import com.mdstech.wealthmesh.value.dto.ValueRequest;
 import com.mdstech.wealthmesh.value.dto.ValueResult;
@@ -61,6 +62,20 @@ public class ValueController {
             @RequestHeader(name = "Idempotency-Key", required = false) String key,
             @RequestBody ValueRequest request) {
         return service.correct(accountId, valueId, key, request).map(ValueController::answer);
+    }
+
+    /** What moving the start earlier would do (DATED_VALUE_002). */
+    @PostMapping("/start-extension/review")
+    public Mono<ExtensionReview> reviewExtension(@PathVariable UUID accountId, @RequestBody ValueRequest request) {
+        return service.reviewExtension(accountId, request);
+    }
+
+    /** Moves the start earlier: the old opening becomes a dated value. A repeated key returns the same result. */
+    @PostMapping("/start-extension")
+    public Mono<ExtensionReview> extend(@PathVariable UUID accountId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String key,
+            @RequestBody ValueRequest request) {
+        return service.extendStart(accountId, key, request);
     }
 
     @GetMapping("/{valueId}/removal/review")

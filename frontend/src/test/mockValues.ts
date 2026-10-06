@@ -145,6 +145,40 @@ export function valueHandlers(ctx: Context) {
         : { amount: parsed.amount, on: parsed.valueOn }
     return { now, earlier: earlierPoint, after }
   }
+  const extension = (account: MockAccount, body: Record<string, unknown>, saving: boolean) => {
+    const amount = typeof body.amount === 'string' ? body.amount : ''
+    if (!/^-?\d+(\.\d{1,2})?$/.test(amount)) return { error: problem(400, 'Enter a valid amount') }
+    const valueOn = body.valueOn as string | undefined
+    if (!valueOn || valueOn >= account.openedOn)
+      return {
+        error: problem(400, `The new start must be before the current start (${account.openedOn})`),
+      }
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+    if (saving && !reason) return { error: problem(400, 'Enter a reason') }
+    return { amount: Number(amount).toFixed(2), valueOn }
+  }
+  /** The values as they read once the start is at (amount, on); before saving, the old opening is a value. */
+  const timeline = (account: MockAccount, amount: string, on: string, preview: boolean) => {
+    const now = point(account)
+    const points = [
+      { kind: 'opening', on, amount },
+      ...(preview ? [{ kind: 'value', on: account.openedOn, amount: account.openingAmount }] : []),
+      ...effective(account.id)
+        .sort((a, b) => a.valueOn.localeCompare(b.valueOn))
+        .map((v) => ({ kind: 'value', on: v.valueOn, amount: v.amount })),
+    ]
+    return {
+      accountName: account.name,
+      type: account.type,
+      amount,
+      openedOn: on,
+      previousAmount: preview ? account.openingAmount : null,
+      previousOn: preview ? account.openedOn : null,
+      timeline: points,
+      balance: now.amount,
+      balanceOn: now.on,
+    }
+  }
   const result = (account: MockAccount, v: MockValue, before: string) => {
     const now = point(account)
     return HttpResponse.json({
@@ -314,6 +348,51 @@ export function valueHandlers(ctx: Context) {
       refresh(account)
       const res = result(account, saved, before)
       return new HttpResponse(res.body, { status: 201, headers: res.headers })
+    }),
+    http.post(
+      '*/api/v1/accounts/:id/values/start-extension/review',
+      async ({ request, params }) => {
+        ctx.log(request)
+        const account = find(params.id)
+        if (!account) return problem(404, 'Account not found')
+        const body = (await request.json()) as Record<string, unknown>
+        const failure = extension(account, body, false)
+        if ('error' in failure) return failure.error
+        return HttpResponse.json(timeline(account, failure.amount, failure.valueOn, true))
+      },
+    ),
+    http.post('*/api/v1/accounts/:id/values/start-extension', async ({ request, params }) => {
+      ctx.log(request)
+      const account = find(params.id)
+      if (!account) return problem(404, 'Account not found')
+      if (account.status === 'closed')
+        return problem(409, `${account.name} is closed. Reopen it first.`)
+      const body = (await request.json()) as Record<string, unknown>
+      const key = request.headers.get('Idempotency-Key') ?? ''
+      if (ctx.keys.has(key))
+        return HttpResponse.json(timeline(account, account.openingAmount, account.openedOn, false))
+      const parsed = extension(account, body, true)
+      if ('error' in parsed) return parsed.error
+      const previous = { amount: account.openingAmount, on: account.openedOn }
+      values.push({
+        id: ctx.newId(),
+        accountId: account.id,
+        valueOn: previous.on,
+        amount: previous.amount,
+        reason: 'Value when tracking began',
+        planned: false,
+        enteredBy: body.enteredByMemberId as string,
+        replacesId: null,
+        replaced: false,
+        removedAt: null,
+        removedBy: null,
+        createdAt: stamp(),
+      })
+      account.openingAmount = parsed.amount
+      account.openedOn = parsed.valueOn
+      ctx.keys.set(key, 'moved')
+      refresh(account)
+      return HttpResponse.json(timeline(account, parsed.amount, parsed.valueOn, false))
     }),
     http.get('*/api/v1/accounts/:id/values/:valueId/removal/review', ({ request, params }) => {
       ctx.log(request)

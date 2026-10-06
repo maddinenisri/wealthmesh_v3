@@ -30,6 +30,8 @@ export function ValueForm({
   today,
   mode: initialMode,
   editing,
+  initial,
+  onBeforeStart,
   onDone,
 }: {
   account: Account
@@ -37,6 +39,10 @@ export function ValueForm({
   today: string
   mode: 'new' | 'plan' | 'correct'
   editing?: ValueRow
+  /** Figures to start from (coming Back from the review of an earlier start). */
+  initial?: { amount: string; valueOn: string; reason: string }
+  /** A date before the account's start is a reviewed move of the start, not a plain value. */
+  onBeforeStart?: (draft: { amount: string; valueOn: string; reason: string }) => void
   /** Called with a sentence saying what was saved, or nothing when the form is cancelled. */
   onDone: (message?: string) => void
 }) {
@@ -53,9 +59,9 @@ export function ValueForm({
   const save = useSaveValue(account.id, replacesId)
   const { control, handleSubmit, setFocus, getValues } = useForm<Values>({
     defaultValues: {
-      amount: editing ? editing.amount : '',
-      valueOn: editing?.valueOn ?? (initialMode === 'plan' ? '' : today),
-      reason: '',
+      amount: initial?.amount ?? (editing ? editing.amount : ''),
+      valueOn: initial?.valueOn ?? editing?.valueOn ?? (initialMode === 'plan' ? '' : today),
+      reason: initial?.reason ?? '',
     },
   })
   const planning = mode === 'plan'
@@ -74,6 +80,10 @@ export function ValueForm({
 
   const submit = handleSubmit((values) => {
     setFuture(false)
+    if (onBeforeStart && mode === 'new' && values.valueOn < account.openedOn) {
+      onBeforeStart({ ...values, amount: parseAmount(values.amount)! })
+      return
+    }
     if (mode !== 'plan' && values.valueOn > today) {
       setFuture(true)
       return
@@ -233,6 +243,7 @@ export function ValueForm({
                 planning
                   ? value > today || 'A plan is dated after today'
                   : value >= account.openedOn ||
+                    !!onBeforeStart ||
                     `This date is before the account's start (${account.openedOn})`,
             }}
           />

@@ -95,4 +95,14 @@ abstract class ValuedTestBase extends RecurringTestBase {
     }
 
     protected static final String CURRENT_BY_STATUS = "$.values[?(@.status=='%s')]";
+
+    protected WebTestClient.ResponseSpec reviewExtension(String account, String body) {
+        return webTestClient.post().uri("/api/v1/accounts/{id}/values/start-extension/review", account)
+                .contentType(MediaType.APPLICATION_JSON).bodyValue(body).exchange();
+    }
+
+    protected WebTestClient.ResponseSpec extendStart(String account, String key, String body) {
+        return webTestClient.post().uri("/api/v1/accounts/{id}/values/start-extension", account)
+                .contentType(MediaType.APPLICATION_JSON).header("Idempotency-Key", key).bodyValue(body).exchange();
+    }
 }

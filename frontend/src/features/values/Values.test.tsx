@@ -323,3 +323,75 @@ describe('state of the account', () => {
     expect(screen.getByRole('main')).toHaveTextContent('Reopen it to record or change a value')
   })
 })
+
+describe('moving the start earlier', () => {
+  const sold = () =>
+    seed({ ...car(), balance: { amount: '28000.00', asOf: '2026-09-30' } }, [value({})])
+
+  it('V2_DATED_VALUE_002 a date before the start is reviewed as an earlier start; Cancel changes nothing', async () => {
+    const api = mockApi(sold())
+    const { user } = renderRoute(ACCOUNT)
+
+    await fillValue(user, '31,000.00', '2026-08-01')
+    const review = await screen.findByRole('region', { name: 'Review earlier start' })
+    expect(review).toHaveTextContent('2026-08-01 is before Family Car began tracking (2026-09-01)')
+    const timeline = within(review).getByRole('list', { name: 'Values after the change' })
+    expect(
+      within(timeline)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual([
+      '2026-08-01: opening $31,000.00',
+      '2026-09-01: value $30,000.00',
+      '2026-09-30: value $28,000.00',
+    ])
+    expect(review).toHaveTextContent('Balance stays $28,000.00, dated 2026-09-30')
+    expect(review).toHaveTextContent('no income, spending or transfer is created')
+
+    await user.click(within(review).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('region', { name: 'Review earlier start' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Record new value' })).toHaveFocus()
+    expect(post(api)).toHaveLength(0)
+    expect(screen.getByRole('table')).toHaveTextContent('$30,000.00')
+    expect(screen.getByRole('table')).not.toHaveTextContent('$31,000.00')
+  })
+
+  it('V2_DATED_VALUE_002 Confirm needs a reason, then adds the earlier start and keeps both values', async () => {
+    const api = mockApi(sold())
+    const { user } = renderRoute(ACCOUNT)
+
+    await fillValue(user, '31,000.00', '2026-08-01')
+    await screen.findByRole('region', { name: 'Review earlier start' })
+    await user.click(screen.getByRole('button', { name: 'Confirm earlier start' }))
+    expect(await screen.findByText('Enter a reason')).toBeInTheDocument()
+    expect(post(api).filter((r) => r.endsWith('/start-extension'))).toHaveLength(0)
+
+    await user.type(screen.getByLabelText('Reason'), 'Add an earlier car estimate')
+    await user.click(screen.getByRole('button', { name: 'Confirm earlier start' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Family Car now starts at $31,000.00 on 2026-08-01. Balance is $28,000.00, dated 2026-09-30.',
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Value history' })).toHaveFocus(),
+    )
+    const table = screen.getByRole('table')
+    expect(within(table).getByText('2026-08-01').closest('tr')).toHaveTextContent('$31,000.00')
+    expect(within(table).getByText('2026-09-01').closest('tr')).toHaveTextContent('$30,000.00')
+    expect(within(table).getByText('2026-09-30').closest('tr')).toHaveTextContent('$28,000.00')
+    expect(post(api).filter((r) => r.endsWith('/start-extension'))).toHaveLength(1)
+  })
+
+  it('V2_DATED_VALUE_002 Back from the review returns to the form with what was typed', async () => {
+    mockApi(sold())
+    const { user } = renderRoute(ACCOUNT)
+
+    await fillValue(user, '31,000.00', '2026-08-01', 'Resale site')
+    await screen.findByRole('region', { name: 'Review earlier start' })
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+
+    expect(await screen.findByLabelText('Value')).toHaveValue('31000.00')
+    expect(screen.getByLabelText('Date')).toHaveValue('2026-08-01')
+    expect(screen.getByLabelText('Reason (optional)')).toHaveValue('Resale site')
+  })
+})

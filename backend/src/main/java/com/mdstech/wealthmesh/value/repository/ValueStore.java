@@ -101,6 +101,43 @@ public class ValueStore {
                 .one();
     }
 
+    /** Moves the account's start earlier: keeps what it replaced in `opening_revision`, then writes the new opening. */
+    public Mono<UUID> moveStart(UUID accountId, BigDecimal previousAmount, LocalDate previousOn, BigDecimal amount,
+            LocalDate openedOn, String reason, UUID memberId, String key, Instant now) {
+        return client.sql("INSERT INTO opening_revision (account_id, previous_amount, previous_on, opening_amount, "
+                        + "opened_on, reason, entered_by_member_id, idempotency_key, created_at) VALUES (:account, "
+                        + ":previousAmount, :previousOn, :amount, :on, :reason, :member, :key, :now) RETURNING id")
+                .bind("account", accountId).bind("previousAmount", previousAmount).bind("previousOn", previousOn)
+                .bind("amount", amount).bind("on", openedOn).bind("reason", reason).bind("member", memberId)
+                .bind("key", key).bind("now", now).map((r, meta) -> r.get("id", UUID.class)).one()
+                .flatMap(id -> client.sql("UPDATE account SET opening_amount = :amount, opened_on = :on, "
+                                + "updated_at = :now WHERE id = :account")
+                        .bind("amount", amount).bind("on", openedOn).bind("now", now).bind("account", accountId)
+                        .fetch().rowsUpdated().thenReturn(id));
+    }
+
+    /** The start move saved under a key that is still alive (a retry), or empty. */
+    public Mono<Move> moveByKey(String key, Instant cutoff) {
+        return client.sql("SELECT account_id, opening_amount, opened_on, reason, entered_by_member_id "
+                        + "FROM opening_revision WHERE idempotency_key = :key AND created_at > :cutoff")
+                .bind("key", key).bind("cutoff", cutoff)
+                .map((r, meta) -> new Move(r.get("account_id", UUID.class), r.get("opening_amount", BigDecimal.class),
+                        r.get("opened_on", LocalDate.class), r.get("reason", String.class),
+                        r.get("entered_by_member_id", UUID.class)))
+                .one();
+    }
+
+    /** The saved figures of a start move. */
+    public record Move(UUID accountId, BigDecimal amount, LocalDate openedOn, String reason, UUID memberId) {
+    }
+
+    /** Frees the key of a start move once it is past its lifetime. */
+    public Mono<Long> expireMoveKey(String key, Instant cutoff) {
+        return client.sql("UPDATE opening_revision SET idempotency_key = NULL "
+                        + "WHERE idempotency_key = :key AND created_at <= :cutoff")
+                .bind("key", key).bind("cutoff", cutoff).fetch().rowsUpdated();
+    }
+
     public Mono<UUID> insert(UUID accountId, LocalDate valueOn, BigDecimal amount, String reason, boolean planned,
             UUID memberId, UUID replacesId, String key, String fingerprint, Instant now) {
         DatabaseClient.GenericExecuteSpec spec = client.sql("INSERT INTO account_value (account_id, value_on, amount, "

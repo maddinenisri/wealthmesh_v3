@@ -7,10 +7,17 @@ import { useToday } from '../../hooks/useAccounts'
 import { useValueHistory } from '../../hooks/useValues'
 import { formatMoney } from '../../lib/money'
 import { useReturnFocus } from '../activity/useReturnFocus'
+import { ExtendStart } from './ExtendStart'
 import { ValueChange } from './ValueChange'
 import { ValueForm } from './ValueForm'
 
-type Panel = { kind: 'new' | 'plan' } | { kind: 'correct' | 'remove' | 'undo'; row: ValueRow }
+type Draft = { amount: string; valueOn: string; reason: string }
+
+type Panel =
+  | { kind: 'new'; draft?: Draft }
+  | { kind: 'plan' }
+  | { kind: 'extend'; draft: Draft }
+  | { kind: 'correct' | 'remove' | 'undo'; row: ValueRow }
 
 const STATUS: Record<ValueRow['status'], string> = {
   current: 'Current',
@@ -69,6 +76,17 @@ export function ValuedAccount({
               members={members}
               today={today.data}
               mode={panel.kind}
+              initial={panel.kind === 'new' ? panel.draft : undefined}
+              onBeforeStart={(draft) => setPanel({ kind: 'extend', draft })}
+              onDone={finish}
+            />
+          )}
+          {panel.kind === 'extend' && (
+            <ExtendStart
+              account={account}
+              members={members}
+              draft={panel.draft}
+              onBack={(draft) => setPanel({ kind: 'new', draft })}
               onDone={finish}
             />
           )}

@@ -55,6 +55,19 @@ export type ValueResult = {
   balanceAfterOn: string
 }
 
+/** What moving the start earlier would do: the values as they will read afterwards, the new opening first. */
+export type ExtensionReview = {
+  accountName: string
+  type: string
+  amount: string
+  openedOn: string
+  previousAmount: string | null
+  previousOn: string | null
+  timeline: { kind: 'opening' | 'value'; on: string; amount: string }[]
+  balance: string
+  balanceOn: string
+}
+
 export type NewValue = {
   amount: string
   valueOn?: string
@@ -144,6 +157,25 @@ function parseResult(value: unknown): ValueResult {
   }
 }
 
+function parseExtension(value: unknown): ExtensionReview {
+  const d = record(value)
+  if (!Array.isArray(d.timeline)) throw new Error('Unexpected response from the server.')
+  return {
+    accountName: text(d.accountName),
+    type: text(d.type),
+    amount: text(d.amount),
+    openedOn: text(d.openedOn),
+    previousAmount: maybe(d.previousAmount),
+    previousOn: maybe(d.previousOn),
+    timeline: d.timeline.map((point) => {
+      const p = record(point)
+      return { kind: text(p.kind) as 'opening' | 'value', on: text(p.on), amount: text(p.amount) }
+    }),
+    balance: text(d.balance),
+    balanceOn: text(d.balanceOn),
+  }
+}
+
 export const getValues = (accountId: string) =>
   request(`/accounts/${accountId}/values`, { parse: parseHistory })
 
@@ -185,4 +217,20 @@ export const changeValue = (
     method: 'POST',
     body: { enteredByMemberId: memberId },
     parse: parseResult,
+  })
+
+export const reviewExtension = (accountId: string, body: NewValue) =>
+  request(`/accounts/${accountId}/values/start-extension/review`, {
+    method: 'POST',
+    body,
+    parse: parseExtension,
+  })
+
+/** Moves the start earlier; a repeat with the same key changes nothing twice (D-024). */
+export const extendStart = (accountId: string, key: string, body: NewValue) =>
+  request(`/accounts/${accountId}/values/start-extension`, {
+    method: 'POST',
+    body,
+    headers: { 'Idempotency-Key': key },
+    parse: parseExtension,
   })

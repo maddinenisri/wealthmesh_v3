@@ -241,3 +241,62 @@ for (const [width, name, first, second] of [
     })
   })
 }
+
+for (const [width, name] of [
+  [710, 'Start Car 710'],
+  [1280, 'Start Car 1280'],
+] as const) {
+  test.describe.serial(`Earlier start at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+    let id = ''
+
+    test(`V2_DATED_VALUE_002 an earlier date is reviewed as a new start; Cancel keeps the start, Confirm needs a reason and takes focus (${width}px)`, async ({
+      page,
+    }) => {
+      id = await makeAsset(page, 'other_asset', name, '30000.00')
+      const saved = await page.request.post(`/api/v1/accounts/${id}/values`, {
+        headers: { 'Idempotency-Key': `start-${width}` },
+        data: {
+          amount: '28000.00',
+          valueOn: '2026-09-30',
+          reason: 'Updated resale estimate',
+          enteredByMemberId: await ownerId(page),
+        },
+      })
+      expect(saved.ok()).toBeTruthy()
+      await page.goto(`/accounts/${id}`)
+      await enter(page, '31,000.00', '2026-08-01')
+      const review = page.getByRole('region', { name: 'Review earlier start' })
+      await expectFocusInside(review)
+      await expect(review).toContainText('2026-08-01: opening $31,000.00')
+      await expect(review).toContainText('2026-09-01: value $30,000.00')
+      await expect(review).toContainText('2026-09-30: value $28,000.00')
+      await expectNoSidewaysScroll(page)
+
+      await review.getByRole('button', { name: 'Cancel' }).click()
+      await expect(review).toBeHidden()
+      await expect(page.getByRole('button', { name: 'Record new value' })).toBeFocused()
+      const kept = (await (await page.request.get(`/api/v1/accounts/${id}`)).json()) as {
+        openedOn: string
+      }
+      expect(kept.openedOn).toBe('2026-09-01')
+
+      await enter(page, '31,000.00', '2026-08-01')
+      await page.getByRole('button', { name: 'Confirm earlier start' }).click()
+      await expect(page.getByText('Enter a reason')).toBeInViewport({ ratio: 1 })
+      await page.getByLabel('Reason', { exact: true }).fill('Add an earlier car estimate')
+      await page.getByRole('button', { name: 'Confirm earlier start' }).click()
+      await expect(page.getByRole('status')).toContainText('now starts at $31,000.00 on 2026-08-01')
+      await expect(page.getByRole('heading', { name: 'Value history' })).toBeFocused()
+      await expect(page.getByRole('table')).toContainText('$31,000.00')
+      await expect(page.getByRole('table')).toContainText('$30,000.00')
+      await expectNoSidewaysScroll(page)
+      const moved = (await (await page.request.get(`/api/v1/accounts/${id}`)).json()) as {
+        openedOn: string
+        balance: { amount: string }
+      }
+      expect(moved.openedOn).toBe('2026-08-01')
+      expect(moved.balance.amount).toBe('28000.00')
+    })
+  })
+}
