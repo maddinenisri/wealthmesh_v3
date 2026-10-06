@@ -192,14 +192,16 @@ public class AccountLifecycleService {
     private static List<String> blockers(Account account, Usage found) {
         List<String> reasons = new ArrayList<>();
         if (found.entries() > 0) {
-            reasons.add(found.entries() + (found.entries() == 1 ? " saved entry" : " saved entries")
-                    + " (removed ones count)");
+            reasons.add(counted(found.entries(), "saved entry", "saved entries") + " (removed ones count)");
         }
         if (found.reminders() > 0) {
-            reasons.add(found.reminders() + (found.reminders() == 1 ? " reminder" : " reminders"));
+            reasons.add(counted(found.reminders(), "reminder", "reminders"));
         }
         if (found.statements() > 0) {
-            reasons.add(found.statements() + (found.statements() == 1 ? " statement" : " statements"));
+            reasons.add(counted(found.statements(), "statement", "statements"));
+        }
+        if (found.schedules() > 0) {
+            reasons.add(counted(found.schedules(), "recurring bill", "recurring bills"));
         }
         if (found.revisions() > 0) {
             reasons.add("a starting-balance correction");
@@ -208,6 +210,10 @@ public class AccountLifecycleService {
             reasons.add("a starting Balance of " + dollars(account.openingAmount()));
         }
         return reasons;
+    }
+
+    private static String counted(long count, String one, String many) {
+        return count + " " + (count == 1 ? one : many);
     }
 
     /** "$1,000.00" or "-$30.00": the way a person reads an amount in a sentence. */

@@ -36,6 +36,7 @@ import com.mdstech.wealthmesh.budget.repository.BudgetStore;
 import com.mdstech.wealthmesh.category.domain.Category;
 import com.mdstech.wealthmesh.category.repository.CategoryRepository;
 import com.mdstech.wealthmesh.category.repository.CategoryStore;
+import com.mdstech.wealthmesh.household.repository.HouseholdLock;
 import com.mdstech.wealthmesh.money.Money;
 
 import reactor.core.publisher.Flux;
@@ -59,6 +60,7 @@ public class BudgetService {
     }
 
     private final BudgetStore store;
+    private final HouseholdLock householdLock;
     private final ActivityStore activity;
     private final CategoryStore categories;
     private final CategoryRepository categoryRepository;
@@ -66,10 +68,12 @@ public class BudgetService {
     private final TransactionalOperator transactions;
     private final Clock clock;
 
-    public BudgetService(BudgetStore store, ActivityStore activity, CategoryStore categories,
+    public BudgetService(BudgetStore store, HouseholdLock householdLock, ActivityStore activity,
+            CategoryStore categories,
             CategoryRepository categoryRepository, EntryValidator validator, TransactionalOperator transactions,
             Clock clock) {
         this.store = store;
+        this.householdLock = householdLock;
         this.activity = activity;
         this.categories = categories;
         this.categoryRepository = categoryRepository;
@@ -301,7 +305,7 @@ public class BudgetService {
 
     /** Removes a month's Budget (soft); a repeat returns the same result. Spending is untouched. */
     public Mono<BudgetView> remove(String month, UUID memberId) {
-        return Mono.fromCallable(() -> parse(month)).flatMap(ym -> transactions.transactional(store.lockHousehold()
+        return Mono.fromCallable(() -> parse(month)).flatMap(ym -> transactions.transactional(householdLock.lock()
                 .flatMap(householdId -> validator.memberLocked(householdId, memberId))
                 .then(Mono.defer(() -> store.active(ym.atDay(1)).map(Optional::of).defaultIfEmpty(Optional.empty())))
                 .flatMap(active -> {
@@ -322,7 +326,7 @@ public class BudgetService {
 
     /** Brings back the month's removed Budget with its original targets; a repeat Undo returns the same result. */
     public Mono<BudgetView> undo(String month, UUID memberId) {
-        return Mono.fromCallable(() -> parse(month)).flatMap(ym -> transactions.transactional(store.lockHousehold()
+        return Mono.fromCallable(() -> parse(month)).flatMap(ym -> transactions.transactional(householdLock.lock()
                 .flatMap(householdId -> validator.memberLocked(householdId, memberId))
                 .then(Mono.defer(() -> store.active(ym.atDay(1)).map(Optional::of).defaultIfEmpty(Optional.empty())))
                 .flatMap(active -> {
@@ -352,7 +356,7 @@ public class BudgetService {
      */
     private Mono<Saved> locked(String key, Instant cutoff, YearMonth month, String fingerprint, UUID memberId,
             java.util.function.Function<UUID, Mono<Void>> apply) {
-        return transactions.transactional(store.lockHousehold()
+        return transactions.transactional(householdLock.lock()
                 .flatMap(householdId -> store.expireKey(key, cutoff)
                         .then(Mono.defer(() -> store.findKey(key)))
                         .flatMap(hit -> hit.fingerprint().equals(fingerprint)

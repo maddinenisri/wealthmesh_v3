@@ -13,7 +13,7 @@ import com.mdstech.wealthmesh.budget.dto.BudgetEventView;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-/** Plain SQL over the budget tables (slice 13). Every write runs under {@link #lockHousehold}. */
+/** Plain SQL over the budget tables (slice 13). Every write runs under {@code HouseholdLock.lock()}. */
 @Repository
 public class BudgetStore {
 
@@ -33,11 +33,6 @@ public class BudgetStore {
 
     public BudgetStore(DatabaseClient client) {
         this.client = client;
-    }
-
-    /** Every Budget write waits here first, so two first saves of a month cannot race the unique index. */
-    public Mono<UUID> lockHousehold() {
-        return client.sql("SELECT id FROM household FOR UPDATE").map((row, meta) -> row.get("id", UUID.class)).one();
     }
 
     public Mono<Row> active(LocalDate month) {

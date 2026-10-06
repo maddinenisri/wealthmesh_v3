@@ -20,7 +20,14 @@ describe('AppLayout', () => {
       within(nav)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['Household', 'Accounts', 'Spending', 'Categories', 'Design system'])
+    ).toEqual([
+      'Household',
+      'Accounts',
+      'Spending',
+      'Recurring bills',
+      'Categories',
+      'Design system',
+    ])
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main')
   })
 

@@ -85,6 +85,41 @@ export type MockBudget = {
   events?: { action: string; memberId: string | null; at: string }[]
 }
 
+export type MockSchedule = {
+  id: string
+  accountId: string
+  description: string
+  categoryId: string
+  amount: string
+  frequency: 'weekly' | 'monthly' | 'yearly'
+  status: 'active' | 'paused'
+  nextDueOn: string
+  anchorDay: number
+  occurrences: {
+    dueOn: string
+    outcome: 'paid' | 'dismissed'
+    paidOn: string | null
+    activityId: string | null
+  }[]
+  events: { action: string; memberId: string | null; at: string; detail: string | null }[]
+  key?: string
+  removed?: boolean
+}
+
+/** The occurrence after `due`: weekly adds seven days; monthly and yearly return to the anchor day. */
+export function followingDue(due: string, frequency: string, anchor: number): string {
+  const [y, m, d] = due.split('-').map(Number)
+  if (frequency === 'weekly') {
+    const next = new Date(Date.UTC(y, m - 1, d + 7))
+    return next.toISOString().slice(0, 10)
+  }
+  const months = frequency === 'yearly' ? 12 : 1
+  const target = new Date(Date.UTC(y, m - 1 + months, 1))
+  const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate()
+  target.setUTCDate(Math.min(anchor, last))
+  return target.toISOString().slice(0, 10)
+}
+
 type MockReminder = {
   id: string
   accountId: string
@@ -93,6 +128,16 @@ type MockReminder = {
   amount: string
   dueOn: string
   description: string | null
+  categoryId: string
+  enteredByMemberId: string
+}
+
+type MockScheduleBody = {
+  description: string
+  amount: string
+  frequency: 'weekly' | 'monthly' | 'yearly'
+  nextDueOn: string
+  accountId: string
   categoryId: string
   enteredByMemberId: string
 }
@@ -283,6 +328,8 @@ export function mockApi(
     statements?: MockStatement[]
     /** Monthly Budgets already saved. */
     budgets?: MockBudget[]
+    /** Recurring schedules already saved. */
+    schedules?: MockSchedule[]
   } = {},
 ) {
   CATEGORIES.splice(0, CATEGORIES.length, ...SEEDED.map((c) => ({ ...c })))
@@ -295,6 +342,7 @@ export function mockApi(
     reminders: [] as MockReminder[],
     statements: [...(seed.statements ?? [])],
     budgets: (seed.budgets ?? []).map((b) => ({ ...b, events: b.events ?? [] })) as MockBudget[],
+    schedules: (seed.schedules ?? []).map((s) => ({ ...s })) as MockSchedule[],
     openingRevisions: [] as MockOpeningRevision[],
     /** Save keys seen on POST expenses, in order. */
     keys: [] as string[],
@@ -995,8 +1043,124 @@ export function mockApi(
     }),
   ]
 
+  const scheduleView = (s: MockSchedule | (Omit<MockSchedule, 'id'> & { id: null })) => {
+    const account = state.accounts.find((a) => a.id === s.accountId)
+    const category = CATEGORIES.find((c) => c.id === effectiveId(s.categoryId))
+    const key = s.description.trim().toLowerCase()
+    const overdue =
+      s.status === 'active' && s.nextDueOn < today
+        ? Math.round((Date.parse(today) - Date.parse(s.nextDueOn)) / 86_400_000)
+        : null
+    return {
+      id: s.id,
+      accountId: s.accountId,
+      accountName: account?.name ?? '',
+      accountStatus: account?.status ?? 'active',
+      description: s.description,
+      categoryId: category?.id ?? s.categoryId,
+      categoryName: category?.name ?? '',
+      categoryArchived: category?.archived ?? false,
+      amount: Number(s.amount).toFixed(2),
+      frequency: s.frequency,
+      status: s.status,
+      nextDueOn: s.nextDueOn,
+      followingDueOn: followingDue(s.nextDueOn, s.frequency, s.anchorDay),
+      overdueDays: overdue,
+      occurrences: s.occurrences,
+      history: s.events,
+      bills: state.activity
+        .filter(
+          (a) =>
+            !a.removedAt &&
+            a.kind === 'expense' &&
+            a.accountId === s.accountId &&
+            effectiveId(a.categoryId) === (category?.id ?? s.categoryId) &&
+            (a.description ?? '').trim().toLowerCase() === key,
+        )
+        .map((a) => decorate(a, state.accounts, state.activity)),
+    }
+  }
+  const checkSchedule = (body: {
+    description?: string
+    amount: string
+    nextDueOn?: string
+    accountId: string
+    categoryId: string
+  }) => {
+    if (!(Number(body.amount) > 0)) return problem(400, 'Enter an amount greater than zero')
+    if (!(body.description ?? 'x').trim()) return problem(400, 'Enter what this bill is')
+    return null
+  }
+  const recurringHandlers = () => [
+    http.get('*/api/v1/recurring', ({ request }) => {
+      log(request)
+      return HttpResponse.json({
+        today,
+        suggestions: [],
+        schedules: state.schedules
+          .filter((s) => !s.removed)
+          .sort((a, b) => a.nextDueOn.localeCompare(b.nextDueOn))
+          .map(scheduleView),
+      })
+    }),
+    http.post('*/api/v1/recurring/review', async ({ request }) => {
+      log(request)
+      const body = (await request.json()) as MockScheduleBody
+      const refused = checkSchedule(body)
+      if (refused) return refused
+      return HttpResponse.json(
+        scheduleView({
+          id: null,
+          accountId: body.accountId,
+          description: body.description.trim(),
+          categoryId: body.categoryId,
+          amount: body.amount,
+          frequency: body.frequency,
+          status: 'active',
+          nextDueOn: body.nextDueOn,
+          anchorDay: Number(body.nextDueOn.slice(8)),
+          occurrences: [],
+          events: [],
+        }),
+      )
+    }),
+    http.post('*/api/v1/recurring', async ({ request }) => {
+      log(request)
+      const key = request.headers.get('Idempotency-Key') ?? ''
+      const body = (await request.json()) as MockScheduleBody
+      const existing = state.schedules.find((s) => s.key === key)
+      if (existing) return HttpResponse.json(scheduleView(existing))
+      const refused = checkSchedule(body)
+      if (refused) return refused
+      const schedule: MockSchedule = {
+        id: newId(),
+        key,
+        accountId: body.accountId,
+        description: body.description.trim(),
+        categoryId: body.categoryId,
+        amount: body.amount,
+        frequency: body.frequency,
+        status: 'active',
+        nextDueOn: body.nextDueOn,
+        anchorDay: Number(body.nextDueOn.slice(8)),
+        occurrences: [],
+        events: [
+          {
+            action: 'created',
+            memberId: body.enteredByMemberId,
+            at: '2026-10-06T09:00:00Z',
+            detail: `Expected $${Number(body.amount).toFixed(2)} ${body.frequency}, first due ${body.nextDueOn}`,
+          },
+        ],
+      }
+      state.schedules.push(schedule)
+      return HttpResponse.json(scheduleView(schedule), { status: 201 })
+    }),
+  ]
+
   server.use(
     ...budgetHandlers(),
+    ...recurringHandlers(),
     http.get('*/api/v1/household', ({ request }) => {
       log(request)
       return state.household

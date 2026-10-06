@@ -129,6 +129,19 @@ public class ActivityStore {
                 .bind("account", accountId).map(ActivityStore::entry).all());
     }
 
+    /**
+     * The actual expenses that support a recurring schedule or suggestion (RECURRING_001): one account, one effective
+     * category and one description (compared without case or edge spaces), not removed or replaced, oldest first.
+     * A split payment has no category of its own, so it is never one of them.
+     */
+    public Flux<ActivityResponse> billsOf(UUID accountId, UUID categoryId, String descriptionKey) {
+        return withPortions(client.sql(ENTRY_COLUMNS + " AND a.kind = 'expense' AND a.account_id = :account "
+                        + "AND c.id = :category AND lower(btrim(a.description)) = :description "
+                        + "ORDER BY a.occurred_on, a.created_at")
+                .bind("account", accountId).bind("category", categoryId).bind("description", descriptionKey)
+                .map(ActivityStore::entry).all());
+    }
+
     public Mono<ActivityResponse> byId(UUID id) {
         return withPortions(client.sql(ENTRY_COLUMNS + " AND a.id = :id").bind("id", id)
                 .map(ActivityStore::entry).all()).next();

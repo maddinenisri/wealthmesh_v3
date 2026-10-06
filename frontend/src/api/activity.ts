@@ -206,7 +206,7 @@ function parsePortion(value: unknown): Portion {
   }
 }
 
-function parseActivity(value: unknown): Activity {
+export function parseActivity(value: unknown): Activity {
   const data = record(value)
   return {
     id: str(data.id),

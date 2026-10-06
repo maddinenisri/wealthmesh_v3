@@ -386,6 +386,12 @@ public class EntryValidator {
                 .map(java.util.Optional::of);
     }
 
+    /** The spending category a recurring schedule names, read under a share lock and not archived (D-034). */
+    public Mono<Category> scheduleCategory(String name, UUID id) {
+        return category("expense", new ExpenseRequest(null, null, null, name, id, null, null, null), true, Set.of())
+                .map(java.util.Optional::orElseThrow);
+    }
+
     /** Read under a share lock inside the save's transaction, so an archive or merge cannot slip in (D-034). */
     private Mono<Category> find(String categoryKind, ExpenseRequest request, boolean named) {
         if (request.categoryId() != null) {

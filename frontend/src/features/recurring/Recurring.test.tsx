@@ -1,0 +1,124 @@
+import { fireEvent, screen, within } from '@testing-library/react'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { mockApi, type MockAccount } from '../../test/mockApi'
+import { renderRoute } from '../../test/render'
+
+const household = { id: '11111111-1111-4111-8111-111111111111', name: 'Maya and Sam' }
+const maya = {
+  id: '22222222-2222-4222-8222-222222222222',
+  householdId: household.id,
+  name: 'Maya',
+  label: null,
+}
+const sam = {
+  id: '33333333-3333-4333-8333-333333333333',
+  householdId: household.id,
+  name: 'Sam',
+  label: null,
+}
+const checking: MockAccount = {
+  id: '44444444-4444-4444-8444-444444444444',
+  type: 'checking',
+  name: 'Everyday Checking',
+  institution: 'Harbor Bank',
+  ownerMemberIds: [maya.id],
+  openedOn: '2026-09-01',
+  openingAmount: '5000.00',
+  balance: { amount: '5000.00', asOf: '2026-09-01' },
+  status: 'active',
+}
+const seed = () => ({
+  household,
+  members: [maya, sam],
+  accounts: [{ ...checking }],
+  today: '2026-09-30',
+})
+
+beforeEach(() => window.localStorage.clear())
+
+type User = ReturnType<typeof renderRoute>['user']
+
+async function fill(
+  user: User,
+  fields: { name: string; amount: string; frequency: string; due: string },
+) {
+  await user.click(await screen.findByRole('button', { name: 'Add recurring bill' }))
+  await user.type(await screen.findByLabelText('Name'), fields.name)
+  await user.type(screen.getByLabelText('Expected amount'), fields.amount)
+  await user.selectOptions(screen.getByLabelText('Frequency'), fields.frequency)
+  fireEvent.change(screen.getByLabelText('First due date'), { target: { value: fields.due } })
+  await user.selectOptions(screen.getByLabelText('Paid from'), 'Everyday Checking')
+  await user.selectOptions(screen.getByLabelText('Category'), 'Utilities')
+}
+
+describe('recurring bills: create', () => {
+  it.each([
+    ['45.00', 'Weekly', '2026-10-09', '2026-10-16'],
+    ['180.00', 'Monthly', '2026-10-05', '2026-11-05'],
+    ['120.00', 'Yearly', '2026-10-20', '2027-10-20'],
+  ])(
+    'V2_RECURRING_006 reviews and saves a %s %s Gym membership due %s, following %s, with no money change',
+    async (amount, frequency, due, following) => {
+      const api = mockApi(seed())
+      const { user } = renderRoute('/recurring')
+      await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+      await fill(user, { name: 'Gym membership', amount, frequency, due })
+      await user.click(screen.getByRole('button', { name: 'Review' }))
+
+      const review = await screen.findByRole('region', { name: /Review: Gym membership/ })
+      expect(review).toHaveTextContent(frequency)
+      expect(review).toHaveTextContent(due)
+      expect(review).toHaveTextContent(following)
+      expect(review).toHaveTextContent('Estimate, not a recorded expense')
+      expect(api.schedules).toHaveLength(0)
+
+      await user.click(within(review).getByRole('button', { name: 'Confirm saving the schedule' }))
+      const status = await screen.findByRole('status')
+      expect(status).toHaveTextContent(`next due ${due}, then ${following}`)
+      expect(status).toHaveTextContent('Balance and spending are unchanged')
+      expect(status).toHaveFocus()
+      const list = await screen.findByRole('region', { name: 'Schedules' })
+      expect(list).toHaveTextContent(`Next due ${due}. Following ${following}.`)
+      expect(list).toHaveTextContent('Active')
+      expect(api.schedules).toHaveLength(1)
+      expect(api.activity).toHaveLength(0)
+      expect(api.accounts[0].balance.amount).toBe('5000.00')
+      expect(api.requests).not.toContain(`POST /api/v1/accounts/${checking.id}/expenses`)
+    },
+  )
+
+  it('V2_RECURRING_005 an estimate of zero or less is refused in the form and saved nowhere', async () => {
+    const api = mockApi(seed())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
+    await fill(user, {
+      name: 'Electricity',
+      amount: '-180.00',
+      frequency: 'Monthly',
+      due: '2026-10-05',
+    })
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    expect(await screen.findByText('Enter an amount greater than zero')).toBeInTheDocument()
+    expect(api.schedules).toHaveLength(0)
+  })
+
+  it('V2_RECURRING_006 Cancel and Back from the review save nothing and Back keeps the values', async () => {
+    const api = mockApi(seed())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    await fill(user, {
+      name: 'Gym membership',
+      amount: '45.00',
+      frequency: 'Weekly',
+      due: '2026-10-09',
+    })
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    await user.click(await screen.findByRole('button', { name: 'Back' }))
+    expect(await screen.findByLabelText('Name')).toHaveValue('Gym membership')
+    expect(screen.getByLabelText('Expected amount')).toHaveValue('45.00')
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add recurring bill' })).toHaveFocus()
+    expect(api.schedules).toHaveLength(0)
+  })
+})

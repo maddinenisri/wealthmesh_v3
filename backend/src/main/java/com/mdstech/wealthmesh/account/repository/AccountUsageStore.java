@@ -19,10 +19,10 @@ import reactor.core.publisher.Mono;
 public class AccountUsageStore {
 
     /** Saved history by kind. `entries` counts every activity row, removed and replaced ones too. */
-    public record Usage(long entries, long reminders, long statements, long revisions) {
+    public record Usage(long entries, long reminders, long statements, long revisions, long schedules) {
 
         public boolean unused() {
-            return entries == 0 && reminders == 0 && statements == 0 && revisions == 0;
+            return entries == 0 && reminders == 0 && statements == 0 && revisions == 0 && schedules == 0;
         }
     }
 
@@ -37,10 +37,13 @@ public class AccountUsageStore {
                         SELECT (SELECT COUNT(*) FROM activity WHERE account_id = :id) AS entries,
                                (SELECT COUNT(*) FROM reminder WHERE account_id = :id) AS reminders,
                                (SELECT COUNT(*) FROM statement WHERE account_id = :id) AS statements,
-                               (SELECT COUNT(*) FROM opening_revision WHERE account_id = :id) AS revisions""")
+                               (SELECT COUNT(*) FROM opening_revision WHERE account_id = :id) AS revisions,
+                               (SELECT COUNT(*) FROM recurring_schedule
+                                WHERE account_id = :id AND removed_at IS NULL) AS schedules""")
                 .bind("id", accountId)
                 .map((row, meta) -> new Usage(row.get("entries", Long.class), row.get("reminders", Long.class),
-                        row.get("statements", Long.class), row.get("revisions", Long.class)))
+                        row.get("statements", Long.class), row.get("revisions", Long.class),
+                        row.get("schedules", Long.class)))
                 .one();
     }
 
