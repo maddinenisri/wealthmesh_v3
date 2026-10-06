@@ -75,6 +75,29 @@ class AccountEventsApiTests extends LifecycleTestBase {
                 .jsonPath("$.length()").isEqualTo(6);
     }
 
+    @Order(5)
+    @Test
+    @DisplayName("V2_ACCOUNT_LIFECYCLE_001 a member deactivated by a change that has not committed yet is refused: "
+            + "the lifecycle write reads the member under a share lock")
+    void memberReadUnderShareLock() throws Exception {
+        webTestClient.post().uri("/api/v1/household-members/{id}/restore", samId).exchange().expectStatus().isOk();
+        io.r2dbc.spi.Connection held = holdUncommitted(
+                "UPDATE wealthmesh.household_member SET active = false WHERE id = $1", samId);
+        try {
+            java.util.concurrent.CompletableFuture<Integer> call = async(() -> statusOf(actBy("archive", samId)));
+            Thread.sleep(600);
+            org.assertj.core.api.Assertions.assertThat(call).as("waits for the member row").isNotDone();
+            commit(held);
+            org.assertj.core.api.Assertions.assertThat(call.get(10, java.util.concurrent.TimeUnit.SECONDS))
+                    .isEqualTo(400);
+        } finally {
+            close(held);
+        }
+        assertStatus(account, "active");
+        webTestClient.get().uri("/api/v1/accounts/{id}/events", account).exchange().expectBody()
+                .jsonPath("$.length()").isEqualTo(6);
+    }
+
     private static void assertRefusedBad(WebTestClient.ResponseSpec spec) {
         spec.expectStatus().isBadRequest().expectBody().jsonPath("$.message").isEqualTo("Choose an active member");
     }
