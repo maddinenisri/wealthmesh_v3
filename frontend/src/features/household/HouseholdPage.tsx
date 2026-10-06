@@ -3,6 +3,7 @@ import type { Household } from '../../api/household'
 import { Link } from 'react-router'
 import {
   Amount,
+  Badge,
   Button,
   Card,
   CardTitle,
@@ -10,10 +11,13 @@ import {
   PageHeader,
   buttonStyles,
 } from '../../design-system'
+import type { Account } from '../../api/accounts'
 import { useAccounts } from '../../hooks/useAccounts'
 import { useWealth } from '../../hooks/useWealth'
 import { accountTypeLabel } from '../accounts/accountTypes'
 import { BalanceFigure } from '../accounts/BalanceFigure'
+import { isCard } from '../accounts/cardBalance'
+import { STATUS_LABEL } from '../accounts/statusLabel'
 import { ownerNames } from '../accounts/ownerNames'
 import { useAccountContext } from '../accounts/useAccountContext'
 import { CreateHouseholdForm, RenameHouseholdForm } from './HouseholdForms'
@@ -113,37 +117,122 @@ function AccountsAndWealth() {
           <p>
             Debts <Amount value={Number(wealth.data.debts)} />
           </p>
+          <p>
+            Net worth <Amount value={Number(wealth.data.netWorth)} />
+          </p>
         </div>
       )}
       {accounts.data?.length === 0 && (
         <p className="mt-3 text-ink-muted">No accounts have been added</p>
       )}
       {accounts.data && accounts.data.length > 0 && (
-        <ul className="mt-4 divide-y divide-line border-y border-line">
-          {accounts.data.map((account) => (
-            <li key={account.id} className="flex items-baseline justify-between gap-4 py-3">
-              <span>
-                <Link
-                  to={`/accounts/${account.id}`}
-                  className="font-medium underline-offset-2 hover:underline"
-                >
-                  {account.name}
-                </Link>{' '}
-                <span className="text-sm text-ink-muted">{accountTypeLabel(account.type)}</span>{' '}
-                <span aria-hidden className="text-sm text-ink-muted">
-                  ·
-                </span>{' '}
-                <span className="text-sm text-ink-muted">
-                  {ownerNames(account.ownerMemberIds, members)}
-                </span>
-              </span>
-              <span className="text-right">
-                <BalanceFigure type={account.type} amount={account.balance.amount} />
-              </span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <AccountGroup
+            id="bank-money-heading"
+            title="Bank money"
+            total={wealth.data?.bankMoney.total}
+            accounts={accounts.data.filter((account) => !isCard(account.type))}
+            members={members}
+            note={
+              wealth.data?.debtLines.some((line) => !isCard(line.type))
+                ? 'An overdrawn account shows its negative amount here and is counted once, as debt.'
+                : undefined
+            }
+          />
+          <AccountGroup
+            id="cards-heading"
+            title="Cards"
+            total={wealth.data?.cards.total}
+            accounts={accounts.data.filter((account) => isCard(account.type))}
+            members={members}
+          />
+          {wealth.data && wealth.data.debtLines.length > 0 && (
+            <section aria-labelledby="debt-heading" className="mt-4">
+              <h3 id="debt-heading" className="font-medium">
+                What makes up debts
+              </h3>
+              <ul className="mt-2 divide-y divide-line border-y border-line">
+                {wealth.data.debtLines.map((line) => (
+                  <li
+                    key={line.accountId}
+                    className="flex items-baseline justify-between gap-4 py-2"
+                  >
+                    <span>
+                      {line.name}{' '}
+                      {line.status !== 'active' && (
+                        <Badge>{STATUS_LABEL[line.status] ?? line.status}</Badge>
+                      )}
+                    </span>
+                    <span className="text-right">
+                      <Amount value={Math.abs(Number(line.balance))} />{' '}
+                      <span className="text-sm text-ink-muted">
+                        {isCard(line.type) ? 'owed' : 'overdrawn'}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
       )}
     </Card>
+  )
+}
+
+/** One group of accounts (Bank money, Cards) with its total; archived and closed accounts stay, labeled. */
+function AccountGroup({
+  id,
+  title,
+  total,
+  accounts,
+  members,
+  note,
+}: {
+  id: string
+  title: string
+  total: string | undefined
+  accounts: Account[]
+  members: Parameters<typeof ownerNames>[1]
+  note?: string
+}) {
+  if (accounts.length === 0) return null
+  return (
+    <section aria-labelledby={id} className="mt-4">
+      <div className="flex items-baseline justify-between gap-4">
+        <h3 id={id} className="font-medium">
+          {title}
+        </h3>
+        {total !== undefined && <Amount value={Number(total)} />}
+      </div>
+      {note && <p className="text-sm text-ink-muted">{note}</p>}
+      <ul className="mt-2 divide-y divide-line border-y border-line">
+        {accounts.map((account) => (
+          <li key={account.id} className="flex items-baseline justify-between gap-4 py-3">
+            <span>
+              <Link
+                to={`/accounts/${account.id}`}
+                className="font-medium underline-offset-2 hover:underline"
+              >
+                {account.name}
+              </Link>{' '}
+              <span className="text-sm text-ink-muted">{accountTypeLabel(account.type)}</span>{' '}
+              {account.status !== 'active' && (
+                <Badge>{STATUS_LABEL[account.status] ?? account.status}</Badge>
+              )}{' '}
+              <span aria-hidden className="text-sm text-ink-muted">
+                ·
+              </span>{' '}
+              <span className="text-sm text-ink-muted">
+                {ownerNames(account.ownerMemberIds, members)}
+              </span>
+            </span>
+            <span className="text-right">
+              <BalanceFigure type={account.type} amount={account.balance.amount} />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }

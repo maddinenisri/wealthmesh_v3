@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 // Runs after 12-members.spec.ts. Archive, restore, close, reopen and delete an account (slice 12), at 710px and 1280px.
 // Each account is made through the API with an active member as owner; later specs must not rely on these accounts.
 
-type Wealth = { financialAssets: string; debts: string }
+type Wealth = { financialAssets: string; debts: string; netWorth: string }
 
 async function ownerId(page: Page): Promise<string> {
   const households = (await (await page.request.get('/api/v1/household')).json()) as { id: string }
@@ -90,7 +90,12 @@ for (const width of [710, 1280]) {
       await expect(status).toBeInViewport({ ratio: 1 })
       await expect(page.getByRole('button', { name: 'Restore account' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Add money in' })).toBeDisabled()
-      expect(await wealth(page)).toEqual(before)
+      const figures = ({ financialAssets, debts, netWorth }: Wealth) => ({
+        financialAssets,
+        debts,
+        netWorth,
+      })
+      expect(figures(await wealth(page))).toEqual(figures(before))
     })
 
     test(`V2_CHECKING_012 archived accounts leave the active list and come back with "Show archived and closed" (${width}px)`, async ({
@@ -123,6 +128,46 @@ for (const width of [710, 1280]) {
       await expect(page.getByRole('button', { name: 'Add money in' })).toBeEnabled()
       await page.goto('/accounts')
       await expect(page.getByRole('row', { name: new RegExp(name) })).toContainText('$10,000.00')
+    })
+  })
+}
+
+for (const width of [710, 1280]) {
+  test.describe.serial(`wealth groups at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+
+    test(`V2_WEALTH_011 an overdrawn account is negative in Bank money, a debt once, and net worth counts it once (${width}px)`, async ({
+      page,
+    }) => {
+      const name = `Group Overdraft ${width}`
+      const before = await wealth(page)
+      const id = await createAccount(page, name, 'checking', '0.00')
+      const owner = await ownerId(page)
+      const saved = await page.request.post(`/api/v1/accounts/${id}/expenses`, {
+        headers: { 'Idempotency-Key': `e2e-overdraft-${width}` },
+        data: {
+          description: 'Utilities',
+          amount: '100.00',
+          occurredOn: '2026-09-05',
+          category: 'Utilities',
+          enteredByMemberId: owner,
+        },
+      })
+      expect(saved.ok()).toBeTruthy()
+      const after = await wealth(page)
+      expect(Number(after.netWorth) - Number(before.netWorth)).toBe(-100)
+      expect(Number(after.debts) - Number(before.debts)).toBe(100)
+      expect(Number(after.financialAssets) - Number(before.financialAssets)).toBe(0)
+
+      await page.goto('/')
+      const bank = page.getByRole('region', { name: 'Bank money' })
+      await expect(bank.getByRole('listitem').filter({ hasText: name })).toContainText('-$100.00')
+      const debts = page.getByRole('region', { name: 'What makes up debts' })
+      await expect(debts.getByRole('listitem').filter({ hasText: name })).toContainText('overdrawn')
+      await expect(page.getByRole('region', { name: 'Accounts and wealth' })).toContainText(
+        'Net worth',
+      )
+      await expectNoSidewaysScroll(page)
     })
   })
 }

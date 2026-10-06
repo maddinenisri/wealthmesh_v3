@@ -1644,16 +1644,28 @@ export function mockApi(
     }),
     http.get('*/api/v1/wealth', ({ request }) => {
       log(request)
-      const balances = state.accounts.map((a) => Number(a.balance.amount))
+      const lines = state.accounts.map((a) => ({
+        accountId: a.id,
+        name: a.name,
+        type: a.type,
+        status: a.status,
+        balance: Number(a.balance.amount).toFixed(2),
+      }))
+      const sum = (rows: { balance: string }[]) =>
+        rows.reduce((x, row) => x + Number(row.balance), 0)
+      const bank = lines.filter((l) => l.type !== 'credit_card')
+      const cards = lines.filter((l) => l.type === 'credit_card')
+      const debtLines = lines.filter((l) => Number(l.balance) < 0)
+      const assets = lines.map((l) => Number(l.balance)).filter((b) => b > 0)
+      const financialAssets = assets.reduce((x, y) => x + y, 0)
+      const debts = -sum(debtLines)
       return HttpResponse.json({
-        financialAssets: balances
-          .filter((b) => b > 0)
-          .reduce((x, y) => x + y, 0)
-          .toFixed(2),
-        debts: balances
-          .filter((b) => b < 0)
-          .reduce((x, y) => x - y, 0)
-          .toFixed(2),
+        financialAssets: financialAssets.toFixed(2),
+        debts: debts.toFixed(2),
+        netWorth: (financialAssets - debts).toFixed(2),
+        bankMoney: { total: sum(bank).toFixed(2), accounts: bank },
+        cards: { total: sum(cards).toFixed(2), accounts: cards },
+        debtLines,
       })
     }),
     http.get('*/api/v1/spending/history', ({ request }) => {

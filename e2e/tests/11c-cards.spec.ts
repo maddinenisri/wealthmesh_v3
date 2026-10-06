@@ -228,9 +228,9 @@ test.describe.serial('credit cards', () => {
       await page.getByRole('link', { name: 'Accounts', exact: true }).click()
       await expect(row(page, name)).toContainText('$1,120.00 owed')
       await page.goto('/')
-      await expect(page.getByRole('listitem').filter({ hasText: name })).toContainText(
-        '$1,120.00 owed',
-      )
+      await expect(
+        page.getByRole('region', { name: 'Cards' }).getByRole('listitem').filter({ hasText: name }),
+      ).toContainText('$1,120.00 owed')
     })
   }
   async function makeAccount(
