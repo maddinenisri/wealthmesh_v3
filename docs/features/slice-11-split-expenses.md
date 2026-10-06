@@ -75,9 +75,41 @@ Every shared row or state this slice changes, with each reader and writer (grep 
 
 ## Coverage
 
-Filled in Prove from `npm run coverage -- --slice 11`.
+`npm run coverage -- --require --slice 11`: 5/5 covered; `--require spending/categories/split-expenses` 5/5, none deferred.
+
+| ID | Tests (level) |
+| --- | --- |
+| `V2_SPLITS_001` | `SplitRulesApiTests`, `SplitReadersApiTests`, `SplitRaceApiTests` (API); `SplitEntry.test.tsx` (UI); `11g-splits.spec.ts` (e2e, 710px and 1280px) |
+| `V2_SPLITS_002` | `SplitCorrectApiTests`, `SplitReadersApiTests.correctAfterAMerge`, `SplitRaceApiTests` (API); `SplitCorrect.test.tsx` (UI); `11g-splits.spec.ts` (e2e) |
+| `V2_SPLITS_003` | `SplitRulesApiTests`, `SplitRaceApiTests` (API); `SplitEntry.test.tsx` (UI); `11g-splits.spec.ts` (e2e) |
+| `V2_SPLITS_004` | `SplitRemoveApiTests`, `RepeatUndoApiTests` (API); `SplitRemove.test.tsx` (UI); `11g-splits.spec.ts` (e2e) |
+| `V2_SPLITS_005` | `SplitCorrectApiTests.moveCarriesPortions` (API); `SplitCorrect.test.tsx` (UI); `11g-splits.spec.ts` (e2e) |
+
+Planted-defect proof (lock removed, test goes red): member share lock (`SplitRaceApiTests`, `CategoryGuardsApiTests` for Q-035), category share lock by id and by name, portion recheck in the correction, account lock in `record`, account lock in Undo. Counts at the end of Prove: 357 backend tests, 179 UI tests, 127 e2e.
+
+## Validator report (independent agent, after the build)
+
+| # | Finding | Result |
+| --- | --- | --- |
+| 1 | High: a split whose two portion categories were merged could not be corrected (duplicate check on merged ids) | Fixed: a category may repeat in a split (V17 drops the unique index); API and form no longer refuse it; test `correctAfterAMerge` |
+| 2 | Spending category list showed the full payment | Fixed: the part in the category, with "of $120.00 payment"; e2e |
+| 3 | Over-assignment sentence and Confirm-disabled untested in the UI | Fixed: UI test |
+| 4 | Reminders silently dropped `portions` | Fixed: 400 (owner may override, see checkpoint 2) |
+| 5 | Notes contradicted the code | Fixed |
+| 6 | A Balance correction may be replaced by a split fee, untested | Left: allowed, not specially tested |
+| 7 | "$X still to assign" when only the amount changes and portions are carried | Left: the message describes the carried portions |
+| 8 | Wording lost the split (history origin, Change to transfer, Undo label) | Fixed |
+| 9 | Unused `PortionStore.isSplit`; 20 portions untested | 20 portions tested; `isSplit` left (unused) |
+| - | No first-error e2e; no overdraft notice in the split form; focus lost after an edit; concurrent same-key correction | Fixed: e2e, notice, focus on the Activity heading, `sameKeyCorrection` |
+| - | "Connection reset" in `StartMoveGuardApiTests` once in a full run, green alone and on rerun | Logged as a flake, not fixed |
+
+## Dev data left (ui-checklist item 9)
+
+The dev stack was restarted on the new build (Flyway to V17, the old backend had none of it). I added one spending category, **Gifts** (default Discretionary), through the API so the scenario's Groceries and Gifts can be used. No account, entry or split was created in the dev data. My own click-through in Chrome could not be completed: the extension tab reported `visibilityState: hidden` (smooth scroll never ran) and would not resize to 710px, so the 710px and 1280px layout rests on e2e plus the Cowork pass.
 
 ## Open questions
+
+- Owner choices made without a question (override at checkpoint 2): (a) a reminder with portions is refused with a 400; (b) a category may repeat in a split, so a merge shows two lines under one name; (c) a split has no "Change to transfer" button in the UI (the API converts it, EXPENSE_008 does not reach splits from the form).
 
 - Q-036 (open, also in `questions.md`): one Undo or two for `V2_SPLITS_004`. v1 was not running, so it was not consulted.
 - The owner's "plan for slice 11, including the inventory items" is not in the repo; I used the skill's inventory. Paste the plan if it differs.

@@ -173,6 +173,34 @@ class SplitRaceApiTests extends SplitTestBase {
                 .jsonPath("$[?(@.id=='" + payment + "')].status").isEqualTo("effective");
     }
 
+    @Order(8)
+    @Test
+    @DisplayName("V2_SPLITS_002 two corrections of one split with one key wait on the account lock and save once")
+    void sameKeyCorrection() throws Exception {
+        String payment = saveSplit(account, "ck-1", split(mayaId, "Twice fixed", "20.00", "2026-09-14",
+                p("Groceries", null, "12.00"), p("Gifts", null, "8.00")));
+        String body = replacement(mayaId, "Twice fixed", "20.00", "2026-09-14", "Fix",
+                p("Groceries", null, "10.00"), p("Gifts", null, "10.00"));
+        Connection held = holdUncommitted("UPDATE wealthmesh.account SET name = name WHERE id = $1", account);
+        List<Integer> statuses;
+        try {
+            CompletableFuture<Integer> first = CompletableFuture.supplyAsync(
+                    () -> status(replace(account, payment, "ck-key", body)));
+            CompletableFuture<Integer> second = CompletableFuture.supplyAsync(
+                    () -> status(replace(account, payment, "ck-key", body)));
+            Thread.sleep(600);
+            assertThat(first).as("a correction waits for the account row").isNotDone();
+            commit(held);
+            statuses = List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+        } finally {
+            close(held);
+        }
+        assertThat(statuses).containsExactlyInAnyOrder(201, 200);
+        webTestClient.get().uri("/api/v1/accounts/{id}/activity/history", account).exchange().expectBody()
+                .jsonPath("$[?(@.replacesId=='" + payment + "')]")
+                .value(List.class, rows -> assertThat(rows).hasSize(1));
+    }
+
     @Order(7)
     @Test
     @DisplayName("V2_SPLITS_003 a split cannot be saved as a historical entry before the account's start")
