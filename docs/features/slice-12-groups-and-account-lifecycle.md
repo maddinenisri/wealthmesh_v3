@@ -96,13 +96,13 @@ Proposed, pending checkpoint 1 (to promote after approval as D-045 and D-046):
 
 | Group | Scenario IDs | Test level | Status |
 | --- | --- | --- | --- |
-| 0 Base: V18 (`deleted_at`), `AccountState` gate, every account read ignores deleted, `usableAccounts` helper | (supports all) | API + unit | todo |
-| 1 Wealth groups: Bank money, Debts, net worth, archived label | `V2_WEALTH_003`, `V2_WEALTH_011` | API + UI (MSW) + e2e | todo |
-| 2 Archive and restore: review, confirm, archived view, restore, "inactive" explanation | `V2_ACCOUNT_LIFECYCLE_001`, `V2_ACCOUNT_LIFECYCLE_002`, `V2_CHECKING_012` | API + UI + e2e | todo |
-| 3 Close and reopen: zero rule, unavailable for new entries | `V2_ACCOUNT_LIFECYCLE_003`, `V2_ACCOUNT_LIFECYCLE_004` | API + UI + e2e | todo |
-| 4 Delete and Undo: unused rule, history refusal, repeat Undo | `V2_ACCOUNT_LIFECYCLE_005`, `V2_ACCOUNT_LIFECYCLE_006` | API + UI + e2e | todo |
-| 5 Guards and races: raw-API refusal for each writer (entry, batch, historical entry, correction, reminder, statement, transfer, card payment, move target, edit, Undo) and a `holdUncommitted` race per lifecycle write against each keyed writer | cites 001, 003, 004, 005 | API | todo |
-| 6 Shared focus helper and UI exits at 710px and 1280px (Confirm, Cancel, Back, Undo, restore, reopen, delete) | cites 001 to 006 | e2e | todo |
+| 0 Base: V18 (`deleted_at`), `AccountState` gate, every account read ignores deleted, `usableAccounts` helper | (supports all) | API + unit | built |
+| 1 Wealth groups: Bank money, Debts, net worth, archived label | `V2_WEALTH_003`, `V2_WEALTH_011` | API + UI (MSW) + e2e | built |
+| 2 Archive and restore: review, confirm, archived view, restore, "inactive" explanation | `V2_ACCOUNT_LIFECYCLE_001`, `V2_ACCOUNT_LIFECYCLE_002`, `V2_CHECKING_012` | API + UI + e2e | built |
+| 3 Close and reopen: zero rule, unavailable for new entries | `V2_ACCOUNT_LIFECYCLE_003`, `V2_ACCOUNT_LIFECYCLE_004` | API + UI + e2e | built |
+| 4 Delete and Undo: unused rule, history refusal, repeat Undo | `V2_ACCOUNT_LIFECYCLE_005`, `V2_ACCOUNT_LIFECYCLE_006` | API + UI + e2e | built |
+| 5 Guards and races: raw-API refusal for each writer (entry, batch, historical entry, correction, reminder, statement, transfer, card payment, move target, edit, Undo) and a `holdUncommitted` race per lifecycle write against each keyed writer | cites 001, 003, 004, 005 | API | built |
+| 6 Shared focus helper and UI exits at 710px and 1280px (Confirm, Cancel, Back, Undo, restore, reopen, delete) | cites 001 to 006 | e2e | built |
 
 Order: 0, 5's guards with 2 (the gate is meaningless without archive), 1, 3, 4, then 6 and the rest of 5. Gap analysis: all 9 IDs are citeable now
 (card and savings exist, transfers and card payments exist, `status` exists); none blocked, none deferred. Card balances in 002 and 004 and the
@@ -125,8 +125,23 @@ Every shared row or state this slice changes, with each reader and writer (grep 
 
 ## Coverage
 
-Filled from `npm run coverage -- --slice NN`: ID, test file, level. Deferred or blocked IDs also go in
-`deferred.txt` with a reason.
+`npm run coverage -- --require --slice 12`: 9/9 covered, none deferred.
+
+| ID | API (Testcontainers) | UI (Vitest + MSW) | e2e (710px and 1280px) |
+| --- | --- | --- | --- |
+| `V2_ACCOUNT_LIFECYCLE_001` | `ArchiveRestoreApiTests`, `ArchivedAccountGuardsApiTests`, `AccountStateRaceApiTests`, `ArchivedWealthApiTests` | `AccountStatusCard.test.tsx`, `WealthGroups.test.tsx`, `accountChoice.test.ts` | `13-lifecycle.spec.ts` archive and restore |
+| `V2_ACCOUNT_LIFECYCLE_002` | `ArchiveRestoreApiTests`, `ArchivedWealthApiTests` | `WealthGroups.test.tsx` | (API and UI) |
+| `V2_ACCOUNT_LIFECYCLE_003` | `CloseReopenApiTests`, `AccountStateRaceApiTests` | `AccountStatusCard.test.tsx` | `13-lifecycle.spec.ts` close and reopen |
+| `V2_ACCOUNT_LIFECYCLE_004` | `CloseReopenApiTests` | | (API) |
+| `V2_ACCOUNT_LIFECYCLE_005` | `DeleteAccountApiTests`, `DeletedAccountReadsApiTests`, `DeletedAccountSweepApiTests` | `AccountStatusCard.test.tsx` | `13-lifecycle.spec.ts` delete and Undo |
+| `V2_ACCOUNT_LIFECYCLE_006` | `DeleteAccountApiTests` | `AccountStatusCard.test.tsx` | `13-lifecycle.spec.ts` delete refused |
+| `V2_CHECKING_012` | `ArchiveRestoreApiTests` | `AccountStatusCard.test.tsx` | `13-lifecycle.spec.ts` Show archived and closed |
+| `V2_WEALTH_003` | `WealthGroupsApiTests` | `WealthGroups.test.tsx` | (API and UI) |
+| `V2_WEALTH_011` | `OverdraftGroupsApiTests` | `WealthGroups.test.tsx` | `13-lifecycle.spec.ts` wealth groups |
+
+Mutation checks (defect planted, test went red, defect removed): `AccountState.requireOpen` switched off (guards class red); reminder read the stale
+account, expense re-read without the gate, remove without the account lock (each its race test red); close without the lock and delete without the lock
+(each its race test red); the focus helper with Confirm not focusing, Cancel not returning focus, arrival not focusing (each e2e assertion red on its own).
 
 ## Open questions
 
@@ -160,4 +175,16 @@ What the next session must know that is not in the code: what is half-built, wha
 
 ## Panel-exit backlog (slices 09 to 11, not retrofitted this session)
 
-Owner addition 3: `useStateChangeFocus` serves every new exit of this slice. These earlier exits keep their own fixes and are listed for a later pass: (filled in group 6 from a grep of `useReturnFocus`, `CategoriesPage`, `BatchEntry`, `SplitEntry`, `ChangeEntry`, `TransferChange`).
+Owner addition 3: `useStateChangeFocus` serves every new exit of this slice (archive, restore, close, reopen and delete: Confirm, Cancel, the switch from a
+refused delete to Archive or Close, and the arrival on the Accounts list after a delete). These earlier exits keep their own fixes and are listed for a later pass:
+
+| Where | Exit | Today |
+| --- | --- | --- |
+| `AccountDetailPage` `Activity` panels (add, edit, batch, split, transfer, correction) | Confirm | `announce()` focuses the Activity heading or `closeTransfer` scrolls; two ways to say the same thing |
+| same | Cancel and Back | `useReturnFocus` returns to the opener |
+| same | Removal, Undo | `ChangeEntry` and `TransferChange` call `announce` or `closeTransfer` |
+| `SplitEntry` | Back from review, Remove portion | own focus code (slice 11 fixes) |
+| `CategoriesPage` | create, rename, merge, archive, Undo of a merge | own `useReturnFocus` plus focus after a change (slice 10 fixes) |
+| `StatementsCard` | attach, revise | `useReturnFocus` only |
+| `BatchEntry` | Save and add another | own focus code |
+Candidate for a later session: route all of these through `useStateChangeFocus` (it needs a "stay on this page" variant of `changed`, which `AccountStatusCard` already is).
