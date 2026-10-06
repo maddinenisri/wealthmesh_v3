@@ -102,6 +102,14 @@ public class RecurringStore {
                 .bind("due", nextDueOn).bind("id", id).then();
     }
 
+    /** True when that occurrence of the schedule already has this outcome (a repeat of a dismissal). */
+    public Mono<Boolean> hasOccurrence(UUID scheduleId, LocalDate dueOn, String outcome) {
+        return client.sql("SELECT EXISTS (SELECT 1 FROM recurring_occurrence WHERE schedule_id = :id "
+                        + "AND due_on = :due AND outcome = :outcome) AS found")
+                .bind("id", scheduleId).bind("due", dueOn).bind("outcome", outcome)
+                .map((row, meta) -> Boolean.TRUE.equals(row.get("found", Boolean.class))).one();
+    }
+
     /** Records that an occurrence was paid (with the entry that paid it) or dismissed. */
     public Mono<Void> addOccurrence(UUID scheduleId, LocalDate dueOn, String outcome, LocalDate paidOn,
             UUID activityId, UUID memberId, Instant at) {

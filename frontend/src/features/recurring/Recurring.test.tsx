@@ -461,3 +461,94 @@ describe('recurring bills: record the actual expense', () => {
     expect(api.activity).toHaveLength(1)
   })
 })
+
+describe('recurring bills: overdue', () => {
+  const overdue = () => ({
+    ...seed(),
+    today: '2026-10-07',
+    schedules: [
+      {
+        id: '66666666-6666-4666-8666-000000000001',
+        accountId: checking.id,
+        description: 'Electricity',
+        categoryId: CATEGORIES.find((c) => c.name === 'Utilities')!.id,
+        amount: '180.00',
+        frequency: 'monthly' as const,
+        status: 'active' as const,
+        nextDueOn: '2026-10-05',
+        anchorDay: 5,
+        occurrences: [],
+        events: [],
+      },
+    ],
+  })
+
+  it('V2_RECURRING_010 shows Overdue by 2 days with Record, Reschedule and Dismiss, and posts no expense', async () => {
+    const api = mockApi(overdue())
+    renderRoute('/recurring')
+    const list = await screen.findByRole('region', { name: 'Schedules' })
+    expect(await within(list).findByText('Overdue by 2 days')).toBeInTheDocument()
+    expect(within(list).getByRole('button', { name: 'Record actual expense' })).toBeInTheDocument()
+    expect(within(list).getByRole('button', { name: 'Reschedule' })).toBeInTheDocument()
+    expect(
+      within(list).getByRole('button', { name: 'Dismiss this occurrence' }),
+    ).toBeInTheDocument()
+    expect(api.activity).toHaveLength(0)
+    expect(api.accounts[0].balance.amount).toBe('5000.00')
+  })
+
+  it('V2_RECURRING_010 says Overdue by 1 day in the singular and nothing when not overdue', async () => {
+    const seeded = overdue()
+    seeded.today = '2026-10-06'
+    mockApi(seeded)
+    renderRoute('/recurring')
+    expect(await screen.findByText('Overdue by 1 day')).toBeInTheDocument()
+  })
+
+  it('V2_RECURRING_010 dismissing just this occurrence creates no expense and the next one is 2026-11-05', async () => {
+    const api = mockApi(overdue())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
+    const opener = await screen.findByRole('button', { name: 'Dismiss this occurrence' })
+    await user.click(opener)
+    const review = await screen.findByRole('region', { name: /Review dismissing the 2026-10-05/ })
+    await user.click(within(review).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: 'Dismiss this occurrence' })).toHaveFocus()
+    expect(api.schedules[0].occurrences).toHaveLength(0)
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss this occurrence' }))
+    await user.click(
+      await screen.findByRole('button', { name: 'Confirm dismissing this occurrence' }),
+    )
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('The 2026-10-05 occurrence of Electricity is dismissed')
+    expect(status).toHaveTextContent('No expense is created')
+    expect(status).toHaveTextContent('The next occurrence is 2026-11-05')
+    expect(status).toHaveFocus()
+    const list = screen.getByRole('region', { name: 'Schedules' })
+    expect(list).toHaveTextContent('Next due 2026-11-05')
+    expect(list).toHaveTextContent('2026-10-05 occurrence: dismissed, no expense recorded')
+    expect(screen.queryByText(/Overdue by/)).not.toBeInTheDocument()
+    expect(api.activity).toHaveLength(0)
+    expect(api.accounts[0].balance.amount).toBe('5000.00')
+  })
+
+  it('V2_RECURRING_010 rescheduling an overdue occurrence is reviewed and records nothing', async () => {
+    const api = mockApi(overdue())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    await user.click(await screen.findByRole('button', { name: 'Reschedule' }))
+    const review = await screen.findByRole('region', { name: /Review rescheduling Electricity/ })
+    expect(within(review).getByRole('button', { name: 'Confirm rescheduling' })).toBeDisabled()
+    fireEvent.change(within(review).getByLabelText('New due date'), {
+      target: { value: '2026-10-12' },
+    })
+    await user.click(within(review).getByRole('button', { name: 'Confirm rescheduling' }))
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('rescheduled from 2026-10-05 to 2026-10-12')
+    expect(screen.getByRole('region', { name: 'Schedules' })).toHaveTextContent(
+      'Next due 2026-10-12',
+    )
+    expect(api.activity).toHaveLength(0)
+  })
+})

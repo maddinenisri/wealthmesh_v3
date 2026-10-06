@@ -202,6 +202,22 @@ export const resumeSchedule = (id: string, dueOn: string, enteredByMemberId: str
     parse: parseSchedule,
   })
 
+/** Move the next occurrence to another due date; no expense is recorded. */
+export const rescheduleSchedule = (id: string, dueOn: string, enteredByMemberId: string) =>
+  request(`/recurring/${id}/reschedule`, {
+    method: 'POST',
+    body: { enteredByMemberId, dueOn },
+    parse: parseSchedule,
+  })
+
+/** Dismiss the occurrence due on `dueOn`: no expense is recorded and the schedule moves to the next one. */
+export const dismissOccurrence = (id: string, dueOn: string, enteredByMemberId: string) =>
+  request(`/recurring/${id}/dismiss`, {
+    method: 'POST',
+    body: { enteredByMemberId, dueOn },
+    parse: parseSchedule,
+  })
+
 export const deleteSchedule = (id: string, enteredByMemberId: string) =>
   request(`/recurring/${id}/delete`, {
     method: 'POST',

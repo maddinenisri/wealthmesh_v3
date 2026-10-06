@@ -5,7 +5,8 @@ import { stamp } from '../../lib/stamp'
 import { Bills } from './Bills'
 import { FREQUENCY_LABEL, overdueText, stateLabel } from './recurringText'
 
-export type ScheduleAction = 'record' | 'change' | 'pause' | 'resume' | 'delete'
+export type ScheduleAction =
+  'record' | 'reschedule' | 'dismissOccurrence' | 'change' | 'pause' | 'resume' | 'delete'
 
 /**
  * A saved schedule: the estimate, its state and its next occurrences, with the actions that are possible. A schedule
@@ -85,6 +86,16 @@ export function ScheduleItem({
         {open && schedule.status === 'active' && (
           <Button size="sm" onClick={() => onAction('record')}>
             Record actual expense
+          </Button>
+        )}
+        {open && schedule.overdueDays !== null && (
+          <Button size="sm" variant="secondary" onClick={() => onAction('reschedule')}>
+            Reschedule
+          </Button>
+        )}
+        {schedule.overdueDays !== null && (
+          <Button size="sm" variant="secondary" onClick={() => onAction('dismissOccurrence')}>
+            Dismiss this occurrence
           </Button>
         )}
         {open && (

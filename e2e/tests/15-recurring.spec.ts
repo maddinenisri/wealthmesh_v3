@@ -356,7 +356,7 @@ for (const [width, account, description] of [
         await expect(status).toContainText('is paused')
         await expect(status).toBeFocused()
         await expect(item).toContainText('Paused')
-        await expect(item).not.toContainText('Overdue')
+        await expect(item).not.toContainText('Overdue by')
 
         await item.getByRole('button', { name: 'Resume' }).click()
         const resume = page.getByRole('region', { name: /Review resuming/ })
@@ -513,5 +513,103 @@ for (const [width, account, description, dueOn, paidOn] of [
       expect(entries.map((entry) => entry.occurredOn).sort()).toEqual(['2026-09-05', paidOn])
       await expectNoSidewaysScroll(page)
     })
+  })
+}
+
+async function makeOverdue(page: Page, account: string, description: string) {
+  const owner = await ownerId(page)
+  const id = await makeAccount(page, account)
+  const schedule = await page.request.post('/api/v1/recurring', {
+    headers: { 'Idempotency-Key': `e2e-rec-over-${account}` },
+    data: {
+      description,
+      amount: '180.00',
+      frequency: 'monthly',
+      nextDueOn: '2026-10-01',
+      accountId: id,
+      category: 'Utilities',
+      enteredByMemberId: owner,
+    },
+  })
+  expect(schedule.ok()).toBeTruthy()
+  return id
+}
+
+for (const [width, account, description] of [
+  [710, 'Recurring Overdue 710', 'Water 710'],
+  [1280, 'Recurring Overdue 1280', 'Water 1280'],
+] as const) {
+  test.describe.serial(`Recurring overdue at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+
+    test(`V2_RECURRING_010 an unpaid occurrence says Overdue by 2 days and offers Record, Reschedule and Dismiss; nothing is posted (${width}px)`, async ({
+      page,
+    }) => {
+      const id = await makeOverdue(page, account, description)
+      await page.goto('/recurring')
+      const item = page.getByRole('listitem').filter({ hasText: description })
+      await expect(item).toContainText('Overdue by 2 days')
+      await expect(item.getByRole('button', { name: 'Record actual expense' })).toBeVisible()
+      await expect(item.getByRole('button', { name: 'Reschedule' })).toBeVisible()
+      await expect(item.getByRole('button', { name: 'Dismiss this occurrence' })).toBeVisible()
+      expect(await balanceOf(page, id)).toBe('5000.00')
+      const entries = (await (
+        await page.request.get(`/api/v1/accounts/${id}/activity`)
+      ).json()) as unknown[]
+      expect(entries).toHaveLength(0)
+      await expectNoSidewaysScroll(page)
+    })
+
+    if (width === 710) {
+      test(`V2_RECURRING_010 dismissing just this occurrence posts no expense and the next one is 2026-11-01 (${width}px)`, async ({
+        page,
+      }) => {
+        await page.goto('/recurring')
+        const item = page.getByRole('listitem').filter({ hasText: description })
+        const opener = item.getByRole('button', { name: 'Dismiss this occurrence' })
+        await opener.click()
+        const review = page.getByRole('region', { name: /Review dismissing the 2026-10-01/ })
+        await expectFocusInside(review)
+        await review.getByRole('button', { name: 'Cancel' }).click()
+        await expect(opener).toBeFocused()
+        await expect(item).toContainText('Overdue by 2 days')
+
+        await opener.click()
+        await page.getByRole('button', { name: 'Confirm dismissing this occurrence' }).click()
+        const status = page.getByRole('status')
+        await expect(status).toContainText('The next occurrence is 2026-11-01')
+        await expect(status).toBeFocused()
+        await expect(status).toBeInViewport({ ratio: 1 })
+        await expect(item).toContainText('Next due 2026-11-01')
+        await expect(item).toContainText('2026-10-01 occurrence: dismissed, no expense recorded')
+        await expect(item).not.toContainText('Overdue by')
+        await expectNoSidewaysScroll(page)
+      })
+    } else {
+      test(`V2_RECURRING_010 rescheduling an overdue occurrence is reviewed and posts nothing (${width}px)`, async ({
+        page,
+      }) => {
+        await page.goto('/recurring')
+        const item = page.getByRole('listitem').filter({ hasText: description })
+        const opener = item.getByRole('button', { name: 'Reschedule' })
+        await opener.click()
+        const review = page.getByRole('region', { name: /Review rescheduling/ })
+        await expectFocusInside(review)
+        await review.getByLabel('New due date').fill('2026-10-12')
+        await review.getByRole('button', { name: 'Cancel' }).click()
+        await expect(opener).toBeFocused()
+        await expect(item).toContainText('Overdue by 2 days')
+
+        await opener.click()
+        await page.getByLabel('New due date').fill('2026-10-12')
+        await page.getByRole('button', { name: 'Confirm rescheduling' }).click()
+        const status = page.getByRole('status')
+        await expect(status).toContainText('rescheduled from 2026-10-01 to 2026-10-12')
+        await expect(status).toBeFocused()
+        await expect(item).toContainText('Next due 2026-10-12')
+        await expect(item).not.toContainText('Overdue by')
+        await expectNoSidewaysScroll(page)
+      })
+    }
   })
 }

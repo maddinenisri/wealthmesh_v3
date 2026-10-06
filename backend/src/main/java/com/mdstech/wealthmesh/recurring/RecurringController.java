@@ -68,6 +68,19 @@ public class RecurringController {
         return service.record(id, key, request).map(RecurringController::saved);
     }
 
+    /** Moves the next occurrence to the due date in the body; no expense is recorded. */
+    @PostMapping("/{id}/reschedule")
+    public Mono<ScheduleView> reschedule(@PathVariable UUID id, @RequestBody(required = false) RecurringWho who) {
+        return service.reschedule(id, memberOf(who), who.dueOn());
+    }
+
+    /** Dismisses the occurrence due on the date in the body; no expense is recorded. */
+    @PostMapping("/{id}/dismiss")
+    public Mono<ScheduleView> dismissOccurrence(@PathVariable UUID id,
+            @RequestBody(required = false) RecurringWho who) {
+        return service.dismissOccurrence(id, memberOf(who), who.dueOn());
+    }
+
     @PostMapping("/{id}/pause")
     public Mono<ScheduleView> pause(@PathVariable UUID id, @RequestBody(required = false) RecurringWho who) {
         return service.pause(id, memberOf(who));

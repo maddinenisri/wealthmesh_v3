@@ -1276,6 +1276,44 @@ export function mockApi(
       found.key = `record:${key}`
       return HttpResponse.json(scheduleView(found), { status: 201 })
     }),
+    http.post('*/api/v1/recurring/:id/reschedule', async ({ request, params }) => {
+      log(request)
+      const body = (await request.json()) as { enteredByMemberId: string; dueOn?: string }
+      const found = state.schedules.find((s) => s.id === params.id && !s.removed)
+      if (!found) return problem(404, 'Recurring bill not found')
+      if (!body.dueOn) return problem(400, 'Enter the new due date')
+      found.events.unshift({
+        action: 'rescheduled',
+        memberId: body.enteredByMemberId,
+        at: '2026-10-06T09:00:00Z',
+        detail: `Next due ${found.nextDueOn} to ${body.dueOn}`,
+      })
+      found.nextDueOn = body.dueOn
+      found.anchorDay = Number(body.dueOn.slice(8))
+      return HttpResponse.json(scheduleView(found))
+    }),
+    http.post('*/api/v1/recurring/:id/dismiss', async ({ request, params }) => {
+      log(request)
+      const body = (await request.json()) as { enteredByMemberId: string; dueOn?: string }
+      const found = state.schedules.find((s) => s.id === params.id && !s.removed)
+      if (!found) return problem(404, 'Recurring bill not found')
+      if (found.nextDueOn !== body.dueOn)
+        return problem(409, `The next occurrence is ${found.nextDueOn}, not ${body.dueOn}`)
+      found.occurrences.unshift({
+        dueOn: body.dueOn,
+        outcome: 'dismissed',
+        paidOn: null,
+        activityId: null,
+      })
+      found.nextDueOn = followingDue(body.dueOn, found.frequency, found.anchorDay)
+      found.events.unshift({
+        action: 'dismissed',
+        memberId: body.enteredByMemberId,
+        at: '2026-10-06T09:00:00Z',
+        detail: `The ${body.dueOn} occurrence is dismissed`,
+      })
+      return HttpResponse.json(scheduleView(found))
+    }),
     ...(['pause', 'resume', 'delete'] as const).map((action) =>
       http.post(`*/api/v1/recurring/:id/${action}`, async ({ request, params }) => {
         log(request)

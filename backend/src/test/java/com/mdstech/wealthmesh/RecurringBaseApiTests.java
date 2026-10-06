@@ -25,6 +25,7 @@ class RecurringBaseApiTests extends RecurringTestBase {
     @DisplayName("V2_RECURRING_006 a weekly, monthly and yearly Gym membership is saved with its due date and its "
             + "following occurrence; Balance and spending do not change")
     void createManualSchedules() {
+        setToday("2026-09-30");
         String[][] examples = {
             {"45.00", "weekly", "2026-10-09", "2026-10-16"},
             {"180.00", "monthly", "2026-10-05", "2026-11-05"},
@@ -49,6 +50,7 @@ class RecurringBaseApiTests extends RecurringTestBase {
     @Test
     @DisplayName("V2_RECURRING_006 the review shows the schedule and its following occurrence and saves nothing")
     void reviewSavesNothing() {
+        setToday("2026-09-30");
         reviewSchedule(schedule("Review only", "30.00", "monthly", "2026-10-31", checking, "Health"))
                 .expectStatus().isOk().expectBody().jsonPath("$.id").doesNotExist()
                 .jsonPath("$.followingDueOn").isEqualTo("2026-11-30").jsonPath("$.nextDueOn")

@@ -11,7 +11,14 @@ import { ActionPanel } from './ActionPanel'
 import { ScheduleForm } from './ScheduleForm'
 import { RecordPanel } from './RecordPanel'
 import { ScheduleItem, type ScheduleAction } from './ScheduleItem'
-import { ChangePanel, DeletePanel, PausePanel, ResumePanel } from './SchedulePanels'
+import {
+  ChangePanel,
+  DeletePanel,
+  DismissOccurrencePanel,
+  PausePanel,
+  ReschedulePanel,
+  ResumePanel,
+} from './SchedulePanels'
 import { SuggestionItem } from './SuggestionItem'
 import { FREQUENCY_LABEL } from './recurringText'
 
@@ -205,6 +212,8 @@ function SchedulePanel({
 }) {
   const props = { schedule: mode.schedule, members, onDone, onCancel }
   if (mode.kind === 'record') return <RecordPanel {...props} />
+  if (mode.kind === 'reschedule') return <ReschedulePanel {...props} />
+  if (mode.kind === 'dismissOccurrence') return <DismissOccurrencePanel {...props} />
   if (mode.kind === 'change') return <ChangePanel {...props} />
   if (mode.kind === 'pause') return <PausePanel {...props} />
   if (mode.kind === 'resume') return <ResumePanel {...props} />

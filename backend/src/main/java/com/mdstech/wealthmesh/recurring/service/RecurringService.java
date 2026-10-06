@@ -287,6 +287,57 @@ public class RecurringService {
     }
 
     /**
+     * Moves the next occurrence to another due date without recording anything (RECURRING_010): no expense, no
+     * Balance change. The account must be open, since the new date sets when money is expected to leave. The same
+     * date again is the same result.
+     */
+    public Mono<ScheduleView> reschedule(UUID id, UUID memberId, LocalDate dueOn) {
+        return Mono.fromCallable(() -> {
+            if (dueOn == null) {
+                throw bad("Enter the new due date");
+            }
+            return dueOn;
+        }).flatMap(date -> acting(id, memberId, true, s -> {
+            if (!"active".equals(s.status())) {
+                return Mono.error(conflict(s.description() + " is paused. Resume it first."));
+            }
+            if (s.nextDueOn().equals(date)) {
+                return Mono.empty();
+            }
+            return store.setNextDue(id, date, "active").then(Mono.defer(() -> store.recordEvent(id, "rescheduled",
+                    memberId, clock.instant(), null, null, "Next due " + s.nextDueOn() + " to " + date)));
+        }));
+    }
+
+    /**
+     * Dismisses one occurrence: no expense is created and the schedule moves on to the occurrence after it
+     * (RECURRING_010). Only the next occurrence can be dismissed; a repeat of the same dismissal is the same result.
+     */
+    public Mono<ScheduleView> dismissOccurrence(UUID id, UUID memberId, LocalDate dueOn) {
+        return Mono.fromCallable(() -> {
+            if (dueOn == null) {
+                throw bad("Choose the occurrence to dismiss");
+            }
+            return dueOn;
+        }).flatMap(date -> acting(id, memberId, false, s -> {
+            if (!s.nextDueOn().equals(date)) {
+                return store.hasOccurrence(id, date, "dismissed").flatMap(done -> done ? Mono.<Void>empty()
+                        : Mono.<Void>error(conflict("The next occurrence of " + s.description() + " is "
+                                + s.nextDueOn() + ", not " + date)));
+            }
+            if (!"active".equals(s.status())) {
+                return Mono.error(conflict(s.description() + " is paused. Resume it first."));
+            }
+            LocalDate next = Recurrence.following(date, s.frequency(), s.anchorDay());
+            Instant now = clock.instant();
+            return store.addOccurrence(id, date, "dismissed", null, null, memberId, now)
+                    .then(Mono.defer(() -> store.advance(id, next)))
+                    .then(Mono.defer(() -> store.recordEvent(id, "dismissed", memberId, now, null, null,
+                            "The " + date + " occurrence is dismissed, no expense recorded; next due " + next)));
+        }));
+    }
+
+    /**
      * Deletes a schedule softly: no future reminder or expense comes from it and every paid bill stays. The bills that
      * supported it are not offered again as a suggestion: the household said it does not want this estimate.
      */

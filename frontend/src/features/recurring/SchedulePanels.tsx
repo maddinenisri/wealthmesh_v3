@@ -6,7 +6,9 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import {
   useChangeSchedule,
   useDeleteSchedule,
+  useDismissOccurrence,
   usePauseSchedule,
+  useRescheduleSchedule,
   useResumeSchedule,
 } from '../../hooks/useRecurring'
 import { formatMoney } from '../../lib/money'
@@ -156,6 +158,86 @@ export function DeletePanel({ schedule, members, onDone, onCancel }: Props) {
         The estimate leaves the list and no reminder is created from it. The {schedule.bills.length}{' '}
         recorded {schedule.bills.length === 1 ? 'bill' : 'bills'} keep their dates and amounts. This
         cannot be undone: create the estimate again if you need it.
+      </p>
+    </ActionPanel>
+  )
+}
+
+/** Reschedule an occurrence: a new due date, reviewed first; nothing is recorded (RECURRING_010). */
+export function ReschedulePanel({ schedule, members, onDone, onCancel }: Props) {
+  const reschedule = useRescheduleSchedule(schedule.id!)
+  const who = useEnteringAs(members)
+  const [dueOn, setDueOn] = useState('')
+  return (
+    <ActionPanel
+      heading={`Review rescheduling ${schedule.description}`}
+      members={members}
+      member={dueOn !== '' ? who.member : undefined}
+      setMemberId={who.setMemberId}
+      error={reschedule.error?.message}
+      pending={reschedule.isPending}
+      confirmLabel="Confirm rescheduling"
+      onConfirm={() =>
+        reschedule.mutate(
+          { dueOn, memberId: who.member!.id },
+          {
+            onSuccess: () =>
+              onDone(
+                `${schedule.description} is rescheduled from ${schedule.nextDueOn} to ${dueOn}. No expense is recorded and the account Balance is unchanged.`,
+              ),
+          },
+        )
+      }
+      onCancel={onCancel}
+    >
+      <Field
+        label="New due date"
+        type="date"
+        value={dueOn}
+        onChange={(event) => setDueOn(event.target.value)}
+        hint={`It was due ${schedule.nextDueOn}.`}
+      />
+      {dueOn !== '' && (
+        <p className="text-sm">
+          The {schedule.nextDueOn} occurrence moves to {dueOn}. No expense is created.
+        </p>
+      )}
+    </ActionPanel>
+  )
+}
+
+/** Dismiss one occurrence: no expense, and the schedule moves on to the next one (RECURRING_010). */
+export function DismissOccurrencePanel({ schedule, members, onDone, onCancel }: Props) {
+  const dismiss = useDismissOccurrence(schedule.id!)
+  const who = useEnteringAs(members)
+  return (
+    <ActionPanel
+      heading={`Review dismissing the ${schedule.nextDueOn} occurrence`}
+      members={members}
+      member={who.member}
+      setMemberId={who.setMemberId}
+      error={dismiss.error?.message}
+      pending={dismiss.isPending}
+      confirmLabel="Confirm dismissing this occurrence"
+      onConfirm={() =>
+        dismiss.mutate(
+          { dueOn: schedule.nextDueOn, memberId: who.member!.id },
+          {
+            onSuccess: (saved) =>
+              onDone(
+                `The ${schedule.nextDueOn} occurrence of ${schedule.description} is dismissed. No expense is created. The next occurrence is ${(saved as Schedule).nextDueOn}.`,
+              ),
+          },
+        )
+      }
+      onCancel={onCancel}
+    >
+      <p className="text-sm">
+        Only the {schedule.nextDueOn} occurrence is dismissed: no expense is created and the account
+        Balance is unchanged. {schedule.description} stays{' '}
+        {schedule.status === 'paused' ? 'paused' : 'scheduled'}{' '}
+        {FREQUENCY_LABEL[schedule.frequency].toLowerCase()}, with its next occurrence on{' '}
+        {schedule.followingDueOn}.
       </p>
     </ActionPanel>
   )

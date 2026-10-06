@@ -4,10 +4,12 @@ import {
   changeSchedule,
   createSchedule,
   deleteSchedule,
+  dismissOccurrence,
   dismissSuggestion,
   getRecurring,
   pauseSchedule,
   recordActual,
+  rescheduleSchedule,
   reviewRecordActual,
   type RecordBody,
   resumeSchedule,
@@ -89,3 +91,13 @@ export function useRecordActual(id: string, accountId: string) {
       Promise.all([queryClient.invalidateQueries({ queryKey: recurringKey }), refreshMoney()]),
   })
 }
+
+export const useRescheduleSchedule = (id: string) =>
+  useScheduleAction(({ dueOn, memberId }: { dueOn: string; memberId: string }) =>
+    rescheduleSchedule(id, dueOn, memberId),
+  )
+
+export const useDismissOccurrence = (id: string) =>
+  useScheduleAction(({ dueOn, memberId }: { dueOn: string; memberId: string }) =>
+    dismissOccurrence(id, dueOn, memberId),
+  )
