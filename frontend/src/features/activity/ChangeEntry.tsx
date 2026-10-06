@@ -1,4 +1,5 @@
 import type { Account } from '../../api/accounts'
+import type { Portion } from '../../api/activity'
 import type { Member } from '../../api/household'
 import { Button, Card, CardTitle, FormAlert } from '../../design-system'
 import { useChangeEntry, useIncome, useSpending } from '../../hooks/useActivity'
@@ -6,6 +7,7 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney } from '../../lib/money'
 import { balanceText } from '../accounts/cardBalance'
 import { EnteredBy } from './EnteredBy'
+import { PortionList } from './PortionList'
 
 /** The part of an entry the review shows; both the activity list and history rows fit it. */
 export type ChangeTarget = {
@@ -15,6 +17,8 @@ export type ChangeTarget = {
   occurredOn: string
   description: string | null
   categoryName: string | null
+  /** The portions of a split expense; both are removed and restored with the payment. */
+  portions?: Portion[]
 }
 
 const MONTHS = [
@@ -77,8 +81,15 @@ export function ChangeEntry({
       <FormAlert message={change.error?.message} />
       <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
         <Item label="Entry">
-          {entry.description || entry.categoryName} ({entry.categoryName})
+          {entry.portions && entry.portions.length > 0
+            ? `${entry.description || 'Split expense'} (split)`
+            : `${entry.description || entry.categoryName} (${entry.categoryName})`}
         </Item>
+        {entry.portions && entry.portions.length > 0 && (
+          <Item label="Portions">
+            <PortionList portions={entry.portions} />
+          </Item>
+        )}
         <Item label="Date">{entry.occurredOn}</Item>
         <Item label="Amount">{formatMoney(Number(entry.amount))}</Item>
         <Item label={`${account.name} Balance after ${mode === 'remove' ? 'removal' : 'Undo'}`}>

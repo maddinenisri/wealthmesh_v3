@@ -25,6 +25,7 @@ import { accountChoice } from '../transfers/accountChoice'
 import { useAccountContext } from '../accounts/useAccountContext'
 import { UNCATEGORIZED, type Activity } from '../../api/activity'
 import { classText } from '../activity/classes'
+import { PortionList } from '../activity/PortionList'
 
 /** "October" or "September 2026" from "2026-10". */
 function monthName(month: string, withYear = false): string {
@@ -277,7 +278,9 @@ function Entries({
             <tr key={entry.id}>
               <Td>
                 <Button variant="ghost" size="sm" onClick={() => setOpenId(entry.id)}>
-                  {entry.description ?? entry.categoryName ?? words.column}
+                  {entry.description ??
+                    (entry.portions.length > 0 ? 'Split expense' : entry.categoryName) ??
+                    words.column}
                 </Button>
               </Td>
               <Td>{entry.occurredOn}</Td>
@@ -303,10 +306,19 @@ function Entries({
             {open.kind === 'refund' && ' (refund)'}
           </Detail>
           <Detail label="Category">
-            {open.categoryName ?? 'Uncategorized'}
-            {open.categoryArchived && ' (archived)'}
+            {open.portions.length > 0 ? (
+              <>
+                Split
+                <PortionList portions={open.portions} />
+              </>
+            ) : (
+              <>
+                {open.categoryName ?? 'Uncategorized'}
+                {open.categoryArchived && ' (archived)'}
+              </>
+            )}
           </Detail>
-          {open.kind !== 'income' && (
+          {open.kind !== 'income' && open.portions.length === 0 && (
             <Detail label="Class">{classText(open.classification)}</Detail>
           )}
           <Detail label="Entered by">

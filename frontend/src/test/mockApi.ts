@@ -36,6 +36,8 @@ export type MockActivity = {
   /** essential or discretionary, stored when the entry was saved; null when unclassified. */
   classification?: string | null
   enteredByMemberId: string | null
+  /** The portions of a split expense (it then has no category of its own). */
+  portions?: { categoryId: string; classification: string | null; amount: string }[]
   createdAt?: string
   reason?: string | null
   replacesId?: string | null
@@ -91,6 +93,7 @@ type ExpenseBody = {
   categoryId?: string
   classification?: string
   enteredByMemberId: string
+  portions?: { categoryId: string; classification?: string; amount: string }[]
 }
 
 type MockCategory = {
@@ -179,6 +182,40 @@ const SEEDED: MockCategory[] = [
 /** The live list: `mockApi()` resets it to the seeded categories, and a created category is added to it. */
 export const CATEGORIES: MockCategory[] = SEEDED.map((c) => ({ ...c }))
 
+/** The portions of a split as the API shows them, under the category each counts under now. */
+function shownPortions(a: MockActivity) {
+  return (a.portions ?? []).map((p) => {
+    const category = CATEGORIES.find((c) => c.id === effectiveId(p.categoryId))
+    return {
+      categoryId: category?.id ?? p.categoryId,
+      categoryName: category?.name ?? '',
+      categoryArchived: category?.archived ?? false,
+      classification: p.classification,
+      amount: p.amount,
+    }
+  })
+}
+
+/** What the server says when portions do not add up to the payment (SPLITS_003). */
+export function splitProblem(amount: number, portions: { amount: string }[]): string | null {
+  const assigned = portions.reduce((sum, p) => sum + Number(p.amount), 0)
+  const money = (value: number) => `$${Math.abs(value).toFixed(2)}`
+  if (Math.abs(assigned - amount) < 0.005) return null
+  return assigned < amount
+    ? `${money(assigned)} is assigned and ${money(amount - assigned)} is still to assign`
+    : `${money(assigned - amount)} more is assigned than the payment`
+}
+
+/** A portion as stored: its class is the category's default when none was chosen. */
+function portionOf(p: { categoryId: string; classification?: string; amount: string }) {
+  return {
+    categoryId: p.categoryId,
+    classification:
+      p.classification || (CATEGORIES.find((c) => c.id === p.categoryId)?.defaultClass ?? null),
+    amount: Number(p.amount).toFixed(2),
+  }
+}
+
 function decorate(a: MockActivity, accounts: MockAccount[], all: MockActivity[] = []) {
   const counter = a.movementId
     ? all.find((x) => x.movementId === a.movementId && x.id !== a.id)
@@ -190,6 +227,7 @@ function decorate(a: MockActivity, accounts: MockAccount[], all: MockActivity[] 
     categoryName: CATEGORIES.find((c) => c.id === effectiveId(a.categoryId))?.name ?? null,
     categoryArchived: CATEGORIES.find((c) => c.id === effectiveId(a.categoryId))?.archived ?? false,
     classification: a.classification ?? null,
+    portions: shownPortions(a),
     movementId: a.movementId ?? null,
     counterAccountId: counter?.accountId ?? null,
     counterAccountName: counter
@@ -384,17 +422,33 @@ export function mockApi(
         a.occurredOn.startsWith(month) &&
         (!accountId || a.accountId === accountId),
     )
+    // A split counts once as a payment, and each portion under its own category and class.
+    const parts = rows.flatMap((a) =>
+      a.portions?.length
+        ? a.portions.map((p) => ({
+            categoryId: p.categoryId,
+            classification: p.classification,
+            value: Number(p.amount),
+          }))
+        : [
+            {
+              categoryId: a.categoryId,
+              classification: a.classification ?? null,
+              value: effect(a),
+            },
+          ],
+    )
     const byCategory = new Map<string, { total: number; count: number }>()
-    rows.forEach((a) => {
-      const key = effectiveId(a.categoryId)
+    parts.forEach((part) => {
+      const key = effectiveId(part.categoryId)
       const row = byCategory.get(key) ?? { total: 0, count: 0 }
-      byCategory.set(key, { total: row.total + effect(a), count: row.count + 1 })
+      byCategory.set(key, { total: row.total + part.value, count: row.count + 1 })
     })
     const total = rows.reduce((sum, a) => sum + effect(a), 0)
     const byClass = (cls: string | null) =>
-      rows
-        .filter((a) => (a.classification ?? null) === cls)
-        .reduce((sum, a) => sum + effect(a), 0)
+      parts
+        .filter((part) => (part.classification ?? null) === cls)
+        .reduce((sum, part) => sum + part.value, 0)
         .toFixed(2)
     return {
       month,
@@ -1015,6 +1069,7 @@ export function mockApi(
               occurredOn: a.occurredOn,
               description: a.description,
               categoryName: CATEGORIES.find((c) => c.id === a.categoryId)?.name ?? null,
+              portions: shownPortions(a),
               enteredByName: name(a.enteredByMemberId),
               createdAt: a.createdAt ?? '2026-10-03T09:00:00Z',
               reason: a.reason ?? null,
@@ -1359,6 +1414,15 @@ export function mockApi(
           if (original.occurredOn !== body.occurredOn)
             return problem(400, 'The fee must be dated the same day as the correction')
         }
+        // Portions left out keep the split; an empty list removes it; a list replaces it.
+        const newPortions =
+          body.portions === undefined
+            ? original.portions?.map((p) => ({ ...p }))
+            : body.portions.map(portionOf)
+        if (newPortions?.length) {
+          const bad = splitProblem(amount, newPortions)
+          if (bad) return problem(400, bad)
+        }
         const newKind = original.kind === 'correction' ? 'expense' : original.kind
         original.removedAt = '2026-10-03T09:00:00Z'
         original.events = [
@@ -1377,15 +1441,18 @@ export function mockApi(
           amount: amount.toFixed(2),
           occurredOn: body.occurredOn,
           description: body.description.trim() || null,
-          categoryId: body.categoryId ?? '',
-          classification: classOf(newKind, {
-            ...body,
-            classification:
-              body.classification ??
-              ((body.categoryId ?? '') === original.categoryId
-                ? (original.classification ?? undefined)
-                : undefined),
-          }),
+          portions: newPortions?.length ? newPortions : undefined,
+          categoryId: newPortions?.length ? '' : (body.categoryId ?? ''),
+          classification: newPortions?.length
+            ? null
+            : classOf(newKind, {
+                ...body,
+                classification:
+                  body.classification ??
+                  ((body.categoryId ?? '') === original.categoryId
+                    ? (original.classification ?? undefined)
+                    : undefined),
+              }),
           enteredByMemberId: body.enteredByMemberId,
           createdAt: '2026-10-03T09:05:00Z',
           reason: body.reason?.trim() || null,
@@ -1479,7 +1546,11 @@ export function mockApi(
           return problem(400, 'Future activity is not saved as completed history yet')
         const existing = state.activity.find((a) => a.key === key)
         if (existing) return HttpResponse.json(decorate(existing, state.accounts), { status: 200 })
-        if (!body.categoryId && kind !== 'expense')
+        if (body.portions?.length) {
+          const bad = splitProblem(amount, body.portions)
+          if (bad) return problem(400, bad)
+        }
+        if (!body.categoryId && !body.portions?.length && kind !== 'expense')
           return problem(
             400,
             kind === 'income' ? 'Choose an income category' : 'Choose a spending category',
@@ -1496,7 +1567,8 @@ export function mockApi(
           occurredOn: body.occurredOn,
           description: body.description.trim() || null,
           categoryId: body.categoryId ?? '',
-          classification: classOf(kind, body),
+          classification: body.portions?.length ? null : classOf(kind, body),
+          portions: body.portions?.map(portionOf),
           enteredByMemberId: body.enteredByMemberId,
         }
         state.activity.push(entry)
@@ -1536,8 +1608,11 @@ export function mockApi(
                 counted(a, kind) &&
                 a.occurredOn.startsWith(query.get('month') ?? '') &&
                 (query.get('uncategorized') === 'true'
-                  ? a.categoryId === ''
-                  : effectiveId(a.categoryId) === query.get('categoryId')) &&
+                  ? a.categoryId === '' && !a.portions?.length
+                  : effectiveId(a.categoryId) === query.get('categoryId') ||
+                    !!a.portions?.some(
+                      (p) => effectiveId(p.categoryId) === query.get('categoryId'),
+                    )) &&
                 (!query.get('accountId') || a.accountId === query.get('accountId')),
             )
             .map((a) => decorate(a, state.accounts, state.activity)),

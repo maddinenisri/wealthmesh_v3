@@ -21,6 +21,16 @@ export type NewCategory = {
   enteredByMemberId: string
 }
 
+/** One portion of a split expense, under the category it counts under now (a merge is followed). */
+export type Portion = {
+  categoryId: string
+  categoryName: string
+  categoryArchived: boolean
+  /** essential or discretionary, saved with the portion. */
+  classification: string | null
+  amount: string
+}
+
 export type Activity = {
   id: string
   accountId: string
@@ -41,6 +51,8 @@ export type Activity = {
   movementId: string | null
   counterAccountId: string | null
   counterAccountName: string | null
+  /** The portions of a split expense, in the order entered; empty when it is not split (it has no category then). */
+  portions: Portion[]
 }
 
 /** The other side of a replacement: what the entry was, where, and who saved it when. */
@@ -79,6 +91,8 @@ export type HistoryEntry = {
   counterAccountName: string | null
   /** Who replaced, removed or restored the entry and when, oldest first. */
   events: { action: 'replaced' | 'removed' | 'restored'; byName: string; at: string }[]
+  /** The split a replaced or removed entry had; empty when it was not split. */
+  portions: Portion[]
 }
 
 /** One money-in or money-out entry as the form sends it. */
@@ -177,6 +191,17 @@ function parseCategory(value: unknown): Category {
   }
 }
 
+function parsePortion(value: unknown): Portion {
+  const data = record(value)
+  return {
+    categoryId: str(data.categoryId),
+    categoryName: str(data.categoryName),
+    categoryArchived: data.categoryArchived === true,
+    classification: strOrNull(data.classification),
+    amount: str(data.amount),
+  }
+}
+
 function parseActivity(value: unknown): Activity {
   const data = record(value)
   return {
@@ -196,6 +221,7 @@ function parseActivity(value: unknown): Activity {
     movementId: strOrNull(data.movementId),
     counterAccountId: strOrNull(data.counterAccountId),
     counterAccountName: strOrNull(data.counterAccountName),
+    portions: data.portions == null ? [] : list(data.portions, parsePortion),
   }
 }
 
@@ -264,6 +290,7 @@ function parseHistoryEntry(value: unknown): HistoryEntry {
       if (action !== 'replaced' && action !== 'removed' && action !== 'restored') throw bad()
       return { action, byName: str(event.byName), at: str(event.at) }
     }),
+    portions: data.portions == null ? [] : list(data.portions, parsePortion),
   }
 }
 
@@ -405,6 +432,26 @@ const entryBody = <T extends { categoryId: string; classification?: string }>(en
 export const listActivity = (accountId: string) =>
   request(`/accounts/${accountId}/activity`, { parse: (value) => list(value, parseActivity) })
 
+/** One portion as the split form sends it: a spending category, an optional class and an amount. */
+export type PortionInput = { categoryId: string; classification?: string; amount: string }
+
+/** An expense split across spending categories (SPLITS_001); the payment names no category of its own. */
+export type NewSplit = {
+  description: string
+  amount: string
+  occurredOn: string
+  enteredByMemberId: string
+  portions: PortionInput[]
+}
+
+/** A corrected split; `accountId` moves it to another account, and its portions go with it. */
+export type EditedSplit = NewSplit & { reason: string; accountId?: string }
+
+const splitBody = <T extends NewSplit>(split: T) => ({
+  ...split,
+  portions: split.portions.map((p) => ({ ...p, classification: p.classification || undefined })),
+})
+
 export type EntryKind = 'expense' | 'income' | 'refund'
 
 const ENTRY_PATH = { expense: 'expenses', income: 'income', refund: 'refunds' } as const
@@ -415,6 +462,29 @@ export const recordEntry = (accountId: string, kind: EntryKind, key: string, ent
     method: 'POST',
     headers: { 'Idempotency-Key': key },
     body: entryBody(entry),
+    parse: parseActivity,
+  })
+
+/** Saves one split expense. Repeating a call with the same `key` never saves a second one. */
+export const recordSplit = (accountId: string, key: string, split: NewSplit) =>
+  request(`/accounts/${accountId}/expenses`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+    body: splitBody(split),
+    parse: parseActivity,
+  })
+
+/** Corrects a split by replacing it (SPLITS_002); the original and its split stay in history. */
+export const replaceSplit = (
+  accountId: string,
+  activityId: string,
+  key: string,
+  split: EditedSplit,
+) =>
+  request(`/accounts/${accountId}/activity/${activityId}/replacement`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+    body: splitBody(split),
     parse: parseActivity,
   })
 

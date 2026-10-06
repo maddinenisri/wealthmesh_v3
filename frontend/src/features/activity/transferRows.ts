@@ -27,5 +27,7 @@ export const movementName = (entry: { kind: string; counterAccountName?: string 
 export function rowName(entry: Activity): string {
   return isMovement(entry)
     ? movementName(entry)
-    : (entry.description ?? entry.categoryName ?? 'entry')
+    : (entry.description ??
+        (entry.portions.length > 0 ? 'split expense' : entry.categoryName) ??
+        'entry')
 }

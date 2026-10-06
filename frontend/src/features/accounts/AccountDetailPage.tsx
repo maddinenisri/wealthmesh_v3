@@ -9,6 +9,7 @@ import type { EntryKind } from '../../api/activity'
 import type { Activity as ActivityEntry } from '../../api/activity'
 import { AddEntry } from '../activity/AddEntry'
 import { BatchEntry } from '../activity/BatchEntry'
+import { SplitEntry } from '../activity/SplitEntry'
 import { UpdateBalance } from '../activity/UpdateBalance'
 import { ActivityList } from '../activity/ActivityList'
 import { Panel } from '../activity/Panel'
@@ -185,6 +186,8 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
   )
   const [transfer, setTransfer] = useState<TransferPanel | null>(null)
   const [batching, setBatching] = useState(false)
+  // A new split expense, or a split payment being corrected (SPLITS_001, SPLITS_002).
+  const [splitting, setSplitting] = useState<{ editing?: ActivityEntry } | null>(null)
   const accounts = useAccounts()
   // "Pay a card" needs a card to pay (Q-034).
   const hasCard = (accounts.data ?? []).some((candidate) => isCard(candidate.type))
@@ -196,6 +199,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
     !changing &&
     !transfer &&
     !batching &&
+    !splitting &&
     !!today.data &&
     !!members
   // After a save the new row is what the person came for, so the table's top is brought into view.
@@ -208,7 +212,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
     }
   }
   const remember = useReturnFocus(
-    !!adding || !!editing || !!correcting || !!changing || !!transfer || batching,
+    !!adding || !!editing || !!correcting || !!changing || !!transfer || batching || !!splitting,
   )
 
   return (
@@ -235,6 +239,24 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               requestAnimationFrame(() =>
                 document.getElementById('activity-heading')?.scrollIntoView?.({ block: 'start' }),
               )
+            }}
+          />
+        </Panel>
+      )}
+      {splitting && today.data && members && (
+        <Panel key={`split-${splitting.editing?.id ?? 'new'}`}>
+          <SplitEntry
+            account={account}
+            members={members}
+            today={today.data}
+            editing={splitting.editing}
+            onDone={(saved) => {
+              setSplitting(null)
+              if (saved) {
+                requestAnimationFrame(() =>
+                  document.getElementById('activity-heading')?.scrollIntoView?.({ block: 'start' }),
+                )
+              }
             }}
           />
         </Panel>
@@ -333,6 +355,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               ? (entry) => {
                   remember()
                   if (isMovement(entry)) setTransfer({ kind: 'edit', entry })
+                  else if (entry.portions.length > 0) setSplitting({ editing: entry })
                   else setEditing(entry)
                 }
               : undefined
@@ -387,6 +410,17 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               disabled={!ready}
             >
               Add several purchases
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setSplitting({})
+              }}
+              disabled={!ready}
+            >
+              Split a purchase
             </Button>
             <Button
               variant="secondary"
@@ -456,6 +490,17 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               disabled={!ready}
             >
               Add several expenses
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setSplitting({})
+              }}
+              disabled={!ready}
+            >
+              Split an expense
             </Button>
             <Button
               variant="secondary"

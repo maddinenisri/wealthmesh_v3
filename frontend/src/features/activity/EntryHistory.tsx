@@ -5,6 +5,7 @@ import { useAccountHistory } from '../../hooks/useActivity'
 import { useOpeningRevisions } from '../../hooks/useStartingBalance'
 import { formatMoney } from '../../lib/money'
 import { BalanceFigure } from '../accounts/BalanceFigure'
+import { PortionList } from './PortionList'
 import { shownAmount } from './signedAmount'
 import { isMovement, movementName } from './transferRows'
 
@@ -81,13 +82,28 @@ export function EntryHistory({
                     : isMovement(entry)
                       ? movementName(entry).replace(/^./, (letter) => letter.toUpperCase())
                       : (entry.description ?? '')}
-                  {entry.categoryName && (
-                    <span className="block text-caption text-ink-muted lg:hidden">
-                      {entry.categoryName}
+                  {entry.portions.length > 0 ? (
+                    <span className="block lg:hidden">
+                      <PortionList portions={entry.portions} />
                     </span>
+                  ) : (
+                    entry.categoryName && (
+                      <span className="block text-caption text-ink-muted lg:hidden">
+                        {entry.categoryName}
+                      </span>
+                    )
                   )}
                 </Td>
-                <Td className="hidden lg:table-cell">{entry.categoryName ?? ''}</Td>
+                <Td className="hidden lg:table-cell">
+                  {entry.portions.length > 0 ? (
+                    <>
+                      Split
+                      <PortionList portions={entry.portions} />
+                    </>
+                  ) : (
+                    (entry.categoryName ?? '')
+                  )}
+                </Td>
                 <Td className="text-right whitespace-nowrap">
                   <Amount value={shownAmount(entry, opening?.type)} />
                 </Td>

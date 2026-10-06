@@ -23,12 +23,16 @@ import {
   previewCorrection,
   recordBatch,
   recordEntry,
+  recordSplit,
   previewReplacement,
   replaceEntry,
+  replaceSplit,
   saveCorrection,
   saveHistoricalEntry,
   saveReminder,
   type EditedEntry,
+  type EditedSplit,
+  type NewSplit,
   type HistoricalEntry,
   type EntryKind,
   type NewCorrection,
@@ -119,6 +123,28 @@ export function useRecordEntry(accountId: string, kind: EntryKind) {
     mutationFn: ({ key, entry }: { key: string; entry: NewEntry }) =>
       recordEntry(accountId, kind, key, entry),
     onSuccess: refresh,
+  })
+}
+
+/** Saves one expense split across categories. Repeating a call with the same `key` never saves a second one. */
+export function useRecordSplit(accountId: string) {
+  const refresh = useRefreshMoney(accountId)
+  return useMutation({
+    mutationFn: ({ key, split }: { key: string; split: NewSplit }) =>
+      recordSplit(accountId, key, split),
+    onSuccess: refresh,
+  })
+}
+
+/** Replaces a split expense with a corrected one (SPLITS_002); the original stays in history. */
+export function useReplaceSplit(accountId: string, activityId: string) {
+  const queryClient = useQueryClient()
+  const refresh = useRefreshMoney(accountId)
+  return useMutation({
+    mutationFn: ({ key, split }: { key: string; split: EditedSplit }) =>
+      replaceSplit(accountId, activityId, key, split),
+    onSuccess: () =>
+      Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['activity'] })]),
   })
 }
 
