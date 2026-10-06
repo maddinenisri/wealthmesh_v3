@@ -226,6 +226,7 @@ for (const [width, month, name, copyMonth, copyName, latest, from] of [
       await page.getByLabel('Groceries target', { exact: true }).fill('-50')
       await page.getByRole('button', { name: 'Review Budget' }).click()
       await expect(page.getByText('Enter zero or a positive amount')).toBeVisible()
+      await expect(page.getByLabel('Groceries target', { exact: true })).toBeFocused()
       await page.getByRole('button', { name: 'Cancel' }).click()
       await expect(page.getByRole('table', { name: 'Budget by category' })).toContainText('$600.00')
     })

@@ -1,7 +1,7 @@
 # Slice 13: Budgets
 
 - Slice: 13 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/spending/budgets/manage-budgets.feature` (all 7), `spending/monthly-review/review-spending.feature` (003 of 5 here; 004 and 005 are other slices)
-- Status: in-progress (checkpoint 1 approved)
+- Status: in-progress (built and proven, waiting for checkpoint 2)
 - Started: 2026-10-06 10:46 (session clock)  Finished:  Commit:
 
 ## Prompts and directions
@@ -45,7 +45,7 @@ What to watch for in slice 13:
 4. **Save is one keyed write** `PUT /api/v1/budgets/{month}` with `total`, `targets[]`, `enteredByMemberId` and the idempotency key: replace the target set. Under the lock (household row; then the target categories `FOR SHARE`, lowest id first; the member `FOR SHARE`), the key is read first (D-024; the lesson of Q-040), then the rule checks. A review is informational: `POST /budgets/{month}/review` returns category total, total, difference, gap and the lines (D-028: the save recomputes). Cancel saves nothing.
 5. **Totals disagree on purpose.** Target total and Budget total may differ (BUDGET_002, 003); the review states both and the difference and never changes the total. A zero target is valid (005); a negative one is 400 "Enter zero or a positive amount" (007), checked on the server first.
 6. **Status words.** Month: "$X over Budget" / "$X under Budget" / "On Budget" (spending vs total). Category: "$X over target", "$X left to target", "No target set", "$X unplanned spending" (target 0 with spending), "No spending" (target 0, none). Percent used is `null` when the target is zero (shown "Not applicable").
-7. **Copy** `POST /budgets/{month}/copy` with `fromMonth`: copies the total and the targets (resolved through merges; archived targets are left out and named in the review). Copy does not copy expenses and does not change the source. Refused 409 if the month already has a budget.
+7. **Copy** `POST /budgets/{month}/copy` with `fromMonth`: copies the total and every target (resolved through merges; archived ones too, since Q-041 (b) allows a target on an archived category). Copy does not copy expenses and does not change the source. Refused 409 if the month already has a budget.
 8. **Remove and Undo** (BUDGET_006), all addressed by month: `POST /budgets/{month}/remove` sets `removed_at` (missing budget 404; a repeat remove returns 200 with the same result); `POST /budgets/{month}/undo` clears it on the latest removed budget of that month, refuses 409 when the month got another budget meanwhile, and a repeat Undo returns the same result with no second event (D-044). Every real change writes a `budget_event` (who, when, saved/copied/removed/restored) shown as history.
 9. **Required who.** Every budget write takes `enteredByMemberId` (400 "Choose who entered this"), read under a share lock so a deactivate cannot slip in (D-025, D-034).
 10. **Month review (MONTHLY_003).** `GET /api/v1/review?month=` (in `IncomeController`) gains `budget` (null when the month has none): total, difference, status. Only that month's budget is used. With the Spending page's account filter on, no budget line is shown (a budget is household-wide).
@@ -86,7 +86,37 @@ Writer by state, for the budget row: save, copy, remove, Undo × (month has no b
 
 ## Coverage
 
-(filled by `npm run coverage -- --slice 13`)
+`npm run coverage -- --require --slice 13`: 8/8 covered, none deferred; `--require spending/budgets/manage-budgets.feature`: 7/7.
+
+| ID | API | UI (Vitest + MSW) | e2e (710px and 1280px) |
+| --- | --- | --- | --- |
+| BUDGET_001 | `BudgetApiTests`, `BudgetSaveApiTests`, `BudgetRaceApiTests` | `Budget.test.tsx` | `14-budgets` build |
+| BUDGET_002 | `BudgetApiTests`, `BudgetSaveApiTests` | `Budget.test.tsx` | (UI) |
+| BUDGET_003 | `BudgetSaveApiTests` | `Budget.test.tsx` | `14-budgets` target change |
+| BUDGET_004 | `BudgetCopyApiTests`, `BudgetRemoveApiTests` | `Budget.test.tsx` | `14-budgets` copy |
+| BUDGET_005 | `BudgetApiTests` | `Budget.test.tsx` | (API and UI) |
+| BUDGET_006 | `BudgetRemoveApiTests` (writer-by-state matrix), `BudgetRaceApiTests` | `Budget.test.tsx` | `14-budgets` remove and Undo |
+| BUDGET_007 | `BudgetSaveApiTests` | `Budget.test.tsx` | `14-budgets` negative target |
+| MONTHLY_003 | `BudgetReviewApiTests` (one figure on the line, the Spending page and the review, with a split and a refund) | `Budget.test.tsx` | `14-budgets` month review |
+| Group 0 (Q-040) | `ArchivedReplayApiTests` | | |
+
+Planted defects (red, then removed): household `FOR UPDATE` (4 race tests), category share lock, member share lock, category check before the key lookup, state gate back before the key lookup in each of the five group 0 writers, merged-category refusal, negative-target refusal, copy "month already has a Budget".
+
+## Validator report (independent agent, commit 84630fb) and what was done
+
+161 e2e, 451 backend and 202 frontend tests green when it ran. Findings and answers:
+
+| # | Finding | Answer |
+| --- | --- | --- |
+| 1 | Retry of entry, batch, reminder judged on today's category and member rules (400 after archive or deactivate) | Pre-existing, outside Q-040 (account state); opened Q-044, not fixed |
+| 2 | Copy race test hidden by the household foreign key; copy's category join is read unlocked | Copy shares `locked()` with save (planting its removal turns the save races red); the unlocked join read is benign (a merge afterwards is read through the pointer, D-042); left, noted |
+| 3 | "Key before member" order untested | Added `BudgetRaceApiTests.retryAfterDeactivate` |
+| 4 | Notes said copy leaves archived targets out; code copies them | Notes corrected (Q-041 b) |
+| 5 | Group 0 matrix gaps (historical after Close, 409 for batch and reminder, held retry for others) | Left; the five gates are each proven red by moving the key lookup back |
+| 6 | No Back test, no prefilled-value assertion, no error-focus assertion | Added (`Budget form` test, e2e focus on the field) |
+
+Observed flake: one run of `--tests '*Review*' --tests '*Spending*'` failed four tests with 404 on setup (a partial multi-class run); the full suite then passed twice. Not reproduced.
+
 
 ## Open questions
 

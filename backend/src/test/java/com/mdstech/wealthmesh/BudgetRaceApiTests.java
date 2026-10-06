@@ -123,4 +123,15 @@ class BudgetRaceApiTests extends BudgetTestBase {
         saveBudget("2026-08", "r-1", "100.00", t(c, "50.00")).expectStatus().isOk();
         saveBudget("2026-08", "r-2", "100.00", t(c, "50.00")).expectStatus().isBadRequest();
     }
+
+    @Order(8)
+    @Test
+    @DisplayName("V2_BUDGET_001 a retry by a member deactivated since replays (the key is read before the member)")
+    void retryAfterDeactivate() {
+        saveBudget("2026-09", "dm-1", "100.00", t(groceries, "50.00")).expectStatus().isCreated();
+        webTestClient.post().uri("/api/v1/household-members/{id}/deactivate", mayaId).exchange().expectStatus()
+                .isOk();
+        saveBudget("2026-09", "dm-1", "100.00", t(groceries, "50.00")).expectStatus().isOk();
+        saveBudget("2026-09", "dm-2", "100.00", t(groceries, "50.00")).expectStatus().isBadRequest();
+    }
 }

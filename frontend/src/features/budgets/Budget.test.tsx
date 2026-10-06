@@ -298,6 +298,30 @@ describe('Budget in the month review', () => {
   })
 })
 
+describe('Budget form', () => {
+  it('V2_BUDGET_003 starts from the saved values, and Back from the review keeps what was typed', async () => {
+    const state = mockApi({ household, members: [maya, sam], accounts: [everyday], activity: [] })
+    addCategories()
+    state.budgets.push({
+      id: 'b1',
+      month: '2026-09',
+      total: '3600.00',
+      targets: [{ categoryId: idOf('Groceries'), amount: '600.00' }],
+    })
+    const { user } = renderRoute('/spending')
+    await openSeptember(user)
+
+    await user.click(await screen.findByRole('button', { name: 'Edit Budget' }))
+    expect(await screen.findByLabelText('Total Budget')).toHaveValue('3600.00')
+    expect(screen.getByLabelText('Groceries target')).toHaveValue('600.00')
+    await fill(user, 'Groceries target', '650')
+    await user.click(screen.getByRole('button', { name: 'Review Budget' }))
+    await user.click(await screen.findByRole('button', { name: 'Back' }))
+    expect(await screen.findByLabelText('Groceries target')).toHaveValue('650')
+    expect(state.budgets[0].targets[0].amount).toBe('600.00')
+  })
+})
+
 describe('Copy a Budget', () => {
   it('V2_BUDGET_004 copies September targets into October without copying expenses', async () => {
     const state = mockApi({ household, members: [maya, sam], accounts: [everyday], activity: [] })
