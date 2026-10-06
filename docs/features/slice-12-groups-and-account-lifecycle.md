@@ -4,8 +4,8 @@ Copy this file to `docs/features/slice-NN-<name>.md` at the start of the session
 the session working it. Keep it short; it exists so the next session needs no memory of this one.
 
 - Slice: 12 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/lifecycle/manage-accounts.feature` (006 of 7: 007 is the draft, slice 17), `accounts/checking/activity.feature`, `household/overview/understand-wealth.feature`
-- Status: in-progress (checkpoint 2: app ready to look at)
-- Started: 2026-10-06 08:04 (session clock)  Finished:   Commit:
+- Status: done, local (not pushed: owner said no push, D-002)
+- Started: 2026-10-06 08:04 (session clock)  Finished: 2026-10-06  Commit: `919cb35` (commits from `c59f23b`)
 
 ## Prompts and directions
 
@@ -183,13 +183,17 @@ user can do now, what changed, how the main path works, decisions and open items
 
 ## Handoff
 
-What the next session must know that is not in the code: what is half-built, what to watch for, what v1 showed.
+- Built: `AccountState.requireOpen` (new money) and `requireNotClosed` (change of what exists) gate every writer after the account lock and re-read; archive, restore, close, reopen, delete and undo-delete (`AccountLifecycleService`, `account_event` V19 for who and when, `deleted_at` V18); `GET /wealth` groups (D-046); `usableAccounts` in `transfers/accountChoice.ts` is the one chooser filter; `useStateChangeFocus` is the one answer to focus after a state change; `13-lifecycle.spec.ts` makes its own household so each assertion runs alone.
+- Watch for: any new writer that adds money or changes a row must call the gate after `lockAccount` and add a cell to the writer-by-state matrix (checklist); any new reader of accounts must skip deleted rows (`AccountRepository.findById` is overridden; raw SQL joins are not) and add its path to `DeletedAccountSweepApiTests`; any new thing an account can own (dated values and prices in slice 15, loans in 16) must be added to `AccountUsageStore.usageOf` or a delete will lose it; `WealthService` puts only `paysCards` types in Bank money, so investment types need their own group; a new Confirm that needs who is entering needs Entering as set in the e2e.
+- Left open: Q-040 (a retry after an archive is 409 for entry writers and a replay for movements); a repeat delete is 404; a soft delete keeps `account_owner` rows so a member who owns only a deleted account gets 409 on delete until Undo; a move target deleted while the move waits shows the tracking-start message; the slice 09 to 11 panel exits are a backlog above, not routed through `useStateChangeFocus`; 1280px was checked by page contents only on LC Used Savings; one e2e flake (focus after Close at 710px) did not recur in 5 runs.
+- v1 showed: not running, not consulted.
+- Next: slice 13 (budgets).
 
 ## Retro (3 lines, also appended to `docs/process/retro.md`)
 
-- What slowed this session:
-- What went well:
-- Process change to try:
+- What slowed this session: the validator again found gaps after the build (a reminder save racing a delete answered 200 empty; six closed-state gates untested); Cowork found 5 faults after 151 e2e tests, two of them on the other side of a link (a closed card's payment on the bank's page, no history of the state change); two e2e runs failed on my own test setup (Entering as, a before-figure that included the account being deleted).
+- What went well: planting each gate's removal proved every race and guard (and showed the first `loadOpen` change had no test); the shared focus helper meant no focus fault at Cowork (5 against 8, 8 and 5); each Cowork fault got an e2e that was red on the old code; `13-lifecycle.spec.ts` runs alone.
+- Process change to try: writer-by-state matrix with a planted-defect red per cell; check the pages of linked accounts for a state on one account; Entering as in the e2e beforeEach (checklist and improvements log updated).
 
 ## Panel-exit backlog (slices 09 to 11, not retrofitted this session)
 

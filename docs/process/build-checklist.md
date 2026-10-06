@@ -13,6 +13,10 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
 
 - [ ] A rule that restricts stored data (one per category, at most N) is tried against every operation that rewrites that
       data: merge, move, replacement, Undo (slice 11: one portion per category broke correcting a merged split).
+- [ ] A state rule (archived, closed) is a matrix in the inventory: every writer by every state (new money, change of what
+      exists), one raw-API test per cell, and planting the gate's removal turns a test red (slice 12: six closed-state gates
+      had no test until the validator asked). A state on one account is also checked from the pages of the accounts linked to
+      it by transfers and payments.
 - [ ] Every rule a feature adds has a raw-API test of the forbidden case. A UI that hides the option is not the guard.
 - [ ] A state rule (inactive, closed, replaced) is enforced where the server writes, at every use of that state
       (owner, entered-by, target account), and re-read under the lock.
