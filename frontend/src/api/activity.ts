@@ -66,6 +66,8 @@ export type HistoryOrigin = {
   categoryName: string | null
   enteredByName: string | null
   at: string
+  /** The entry was a split expense, so it has no category of its own. */
+  split: boolean
 }
 
 /** One ledger row as history shows it: effective, replaced by a later edit, or removed. */
@@ -237,6 +239,7 @@ function parseOrigin(value: unknown): HistoryOrigin {
     categoryName: strOrNull(data.categoryName),
     enteredByName: strOrNull(data.enteredByName),
     at: str(data.at),
+    split: data.split === true,
   }
 }
 

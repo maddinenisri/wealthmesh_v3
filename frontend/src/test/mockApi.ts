@@ -1055,6 +1055,7 @@ export function mockApi(
           categoryName: CATEGORIES.find((c) => c.id === row.categoryId)?.name ?? null,
           enteredByName: name(row.enteredByMemberId),
           at: row.createdAt ?? '2026-10-03T09:00:00Z',
+          split: !!row.portions?.length,
         }
       }
       return HttpResponse.json(

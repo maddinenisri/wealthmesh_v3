@@ -3,7 +3,7 @@
 One file per slice, edited only by the session working it.
 
 - Slice: 11 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/spending/categories/split-expenses.feature`
-- Status: in-progress (waiting at checkpoint 1)
+- Status: in-progress (built; validator findings fixed; waiting at checkpoint 2)
 - Started: 2026-10-05 20:34 (session clock)  Finished:   Commit: 
 
 ## Prompts and directions
@@ -22,7 +22,7 @@ At the checkpoint-2 pass, remember that Cowork has found 8 faults for two slices
 
 A second paste of the prompt, without the Q-035 and Cowork paragraphs, said everything else in the owner's plan stands.
 - Repository fact: Q-035 was already built and committed in `8ce398d` (end of the slice 09 and 10 session, race test `CategoryGuardsApiTests.plainSaveWaitsForMemberRow`), so there is no group 0 to build. I will check the test fails with the lock removed in Prove.
-- 2026-10-05 Checkpoint 1 answer: pending
+- 2026-10-05 Checkpoint 1 answer: approved the task list (groups 1 to 6) and the design. Q-036: a second Undo of the same removal is idempotent (the same restored result, no second restore, no 409); one Undo restores the payment and both portions; record it in `decisions.md` as cross-cutting (D-044) and keep slice 02's Undo consistent on a repeat. Add to the inventory and tests: moving a split to another account carries its portions; reminders and a card purchase with portions read correctly; keep the portions table extensible for slice 16 debt payments. One commit per group, local only, no push, no Claude trailer. Report the Cowork finding count against 8 and 8, and whether the 710px table and focus faults appear.
 - Checkpoint 2 answer: pending
 
 ## Scope
@@ -37,23 +37,23 @@ Foundations 6 and 11 (portions, corrections) apply; D-026, D-028 to D-031, D-034
 
 - **Model (new decision, to promote as D-043 after approval):** a split is one `activity` expense row (the payment, its full amount, no category of its own) plus 2 to 20 rows in `activity_portion (activity_id, seq, category_id, classification, amount)`. Balance, removal, Undo, history and the date all stay on the one payment row. Portions never change in place: a correction is a replacement of the payment (as for any entry, D-028) that carries the new portions, so the old split stays on the replaced row.
 - **One definition of "what a category sees":** a SQL view `activity_part` (V16) gives one row per portion, or one row for a payment with no portions, with the category, class and amount to count. `ActivityStore` readers by category and class (`totalsByCategory`, `classTotals`, `monthEntries` by category, the uncategorized review) and the category usage count read it instead of `activity`. Month totals, Balance and `spendingByMonth` still read `activity`, so a split payment counts once (SPLITS_001 "from one payment"). Merge pointer resolved on the portion's category as for D-042.
-- **Rules (server, raw-API tests):** the portions sum to the payment amount exactly (400 with assigned and remaining); at least 2 portions; each amount above 0; each a spending category (kind expense, active, not archived); one portion per category (a repeat is 400); the payment's own category must be omitted when portions are sent; an expense only (not income, refund, correction, transfer) and on an account that holds activity. Each portion carries its own class (default the category's default, then null).
+- **Rules (server, raw-API tests):** the portions sum to the payment amount exactly (400 with assigned and remaining); at least 2 portions; each amount above 0; each a spending category (kind expense, active, not archived); a category may repeat (V17 drops the one-per-category index: after a merge two portions can sit in one category, and the correction form sends them back); the payment's own category must be omitted when portions are sent; an expense only (not income, refund, correction, transfer) and on an account that holds activity. Each portion carries its own class (default the category's default, then null).
 - **Review:** computed in the browser like batch entry (no server preview): lists each portion, shows "assigned" and "still to assign", and Confirm is disabled until still to assign is $0.00 (SPLITS_003). The server re-checks.
 - **Opening a portion:** a category's entry list shows the payment (full amount, account, date) with its split beneath it; the Spending page highlights the portion's amount in that category. Same payment, same full split on either category (SPLITS_001).
-- **Q-036 (open, see register):** one Undo restores the payment and both portions; a second Undo is refused.
-- Out of scope: splitting income, refunds or card payments; splits in batch entry or reminders (each stays one category); a split opened from a transfer.
+- **Undo (Q-036, owner yes, D-044):** one Undo restores the payment and both portions; a second Undo of the same removal is idempotent (200, no second event), for entries and linked movements. Slice 02 and 07 tests that expected a 409 now expect 200.
+- Out of scope: splitting income, refunds or card payments; splits in batch entry, reminders (400 if sent) or historical entries; a Balance correction may be replaced by a split fee (not refused, not specially tested).
 
-## Task list (awaiting approval at checkpoint 1)
+## Task list (approved at checkpoint 1)
 
-| Group | Scenario IDs | Test level | Status |
-| --- | --- | --- | --- |
-| 0 | Q-035 locked member read in `EntryService.record` | none (already `8ce398d`) | done before this session; re-prove the race test fails without the lock |
-| 1 | Portions in the data and the rules: V16 table and view, `portions` on the expense request, sum, count, kind and duplicate rules, Balance and totals unchanged | `V2_SPLITS_001` (save and Balance), `V2_SPLITS_003` (sum rule, raw API) | API |
-| 2 | Readers: category totals, class totals, category entry list, uncategorized review, category usage and merge read portions; the entry list and history show the split | `V2_SPLITS_001` (Groceries $90, Gifts $30, September $120 from one payment, either portion opens the payment) | API + UI (MSW) |
-| 3 | Entry form: "Split across categories" with portion rows, assigned and still to assign, review, confirm | `V2_SPLITS_001`, `V2_SPLITS_003` | UI (MSW) + e2e at 710px and 1280px |
-| 4 | Correct a split as a replacement with reason, original split stays in history; Cancel changes nothing | `V2_SPLITS_002`, `V2_SPLITS_005` | API + UI (MSW) + e2e |
-| 5 | Remove and Undo a split payment (portions follow the payment) | `V2_SPLITS_004` (one Undo, Q-036) | API + e2e |
-| 6 | Races: every writer in the inventory, plus same-key concurrent save and a retry after the ledger changed | all five (rules, not scenarios) | API (`holdUncommitted`) |
+| Group | What | Scenario IDs | Test level | Status |
+| --- | --- | --- | --- | --- |
+| 0 | Q-035 locked member read in `EntryService.record` | none (already `8ce398d`) | done before this session; re-proved in Prove: `CategoryGuardsApiTests` fails with the lock planted out | done |
+| 1 | Portions in the data and the rules: V16 table and view, `portions` on the expense request, sum, count, kind and duplicate rules, Balance and totals unchanged | `V2_SPLITS_001` (save and Balance), `V2_SPLITS_003` (sum rule, raw API) | API | done |
+| 2 | Readers: category totals, class totals, category entry list, uncategorized review, category usage and merge read portions; the entry list and history show the split | `V2_SPLITS_001` (Groceries $90, Gifts $30, September $120 from one payment, either portion opens the payment) | API + UI (MSW) | done |
+| 3 | Entry form: "Split across categories" with portion rows, assigned and still to assign, review, confirm | `V2_SPLITS_001`, `V2_SPLITS_003` | UI (MSW) + e2e at 710px and 1280px | done |
+| 4 | Correct a split as a replacement with reason, original split stays in history; Cancel changes nothing | `V2_SPLITS_002`, `V2_SPLITS_005` | API + UI (MSW) + e2e | done |
+| 5 | Remove and Undo a split payment (portions follow the payment) | `V2_SPLITS_004` (one Undo, Q-036) | API + e2e | done |
+| 6 | Races: every writer in the inventory, plus same-key concurrent save and a retry after the ledger changed | all five (rules, not scenarios) | API (`holdUncommitted`) | done |
 
 Levels: unit, API (Testcontainers), UI (Vitest + MSW), e2e (Playwright). Each ID needs at least one test that cites
 it by name, for example in the test title or a comment.
@@ -67,7 +67,7 @@ Every shared row or state this slice changes, with each reader and writer (grep 
 | Row or state | Readers | Writers | Race test |
 | --- | --- | --- | --- |
 | `activity_portion` rows (new) | `ActivityStore` (month entries, totals by category, class totals, `ENTRY_COLUMNS`, history), `CategoryStore` usage and merge, `SpendingService` uncategorized review | `EntryService.record`, `EntryChangeService.swapLocked` (replacement), `HistoricalEntryService` (calls `record`'s save for a pre-start entry; splits allowed there? no: plain expense only, 400 if portions) | portions saved with the payment in one transaction under the account lock; replacement swap |
-| the payment row (`activity`, split expense) | everything that reads `activity` (Balance deltas, `changeUpTo`, month totals, `spendingByMonth`, `earliestOf`) which stay unchanged | `EntryService`, `EntryChangeService` (replace, remove, undo), `BatchEntryService` (no portions: 400 if sent), `MovementService` convert-from-expense (refuses a split payment: 409) | existing account-lock tests extended to a split payment |
+| the payment row (`activity`, split expense) | everything that reads `activity` (Balance deltas, `changeUpTo`, month totals, `spendingByMonth`, `earliestOf`) which stay unchanged | `EntryService`, `EntryChangeService` (replace, remove, undo), `BatchEntryService` (no portions: 400 if sent), `MovementService` convert-from-expense (replaces the split payment with a transfer; the split stays on the replaced row, tested) | existing account-lock tests extended to a split payment |
 | a category named by a portion | `CategoryService` lookups, archive and merge (`CategoryLifecycleService`), `EntryValidator.checkCategoryLocked` | portion save (each portion's category read `FOR SHARE`, every path: id and name), archive, merge | archive and merge held uncommitted vs a split save, by id and by name; merge vs the portion pointer |
 | the entering member | `validator.memberLocked` | split save and replacement (already `FOR SHARE`) | split save holds only the member row (`holdUncommitted`) |
 | the save key | `findByIdempotencyKeyAndCreatedAtAfter` after `lockAccount` | split save, replacement | same-key concurrent; retry after the ledger moved; same key with other portions is 409 (portions are part of `Entry.matches`) |

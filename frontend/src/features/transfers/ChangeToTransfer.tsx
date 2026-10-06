@@ -74,7 +74,7 @@ export function ChangeToTransfer({
           <Item label="To">{target?.name}</Item>
           <Item label="Date">{entry.occurredOn}</Item>
           <Item label="Amount">{formatMoney(Number(entry.amount))}</Item>
-          <Item label="Was recorded as">{entry.categoryName ?? 'an expense'}</Item>
+          <Item label="Was recorded as">{recordedAs(entry)}</Item>
         </dl>
         {effect.data && <TransferFigures preview={effect.data} />}
         {effect.isError && <FormAlert message={effect.error.message} />}
@@ -115,7 +115,7 @@ export function ChangeToTransfer({
       </CardTitle>
       <p className="mt-2 max-w-md text-sm text-ink-muted">
         {formatMoney(Number(entry.amount))} on {entry.occurredOn} from {account.name} was recorded
-        as {entry.categoryName ?? 'an expense'}. Choose the account it really went to.
+        as {recordedAs(entry)}. Choose the account it really went to.
       </p>
       <form
         noValidate
@@ -154,3 +154,7 @@ function Item({ label, children }: { label: string; children: React.ReactNode })
     </div>
   )
 }
+
+/** What the expense was filed under: its category, "a split expense", or just "an expense". */
+const recordedAs = (entry: Activity): string =>
+  entry.portions.length > 0 ? 'a split expense' : (entry.categoryName ?? 'an expense')

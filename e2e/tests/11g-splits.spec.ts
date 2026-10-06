@@ -135,6 +135,7 @@ test.describe.serial('split expenses', () => {
 
       const row = page.getByRole('row').filter({ hasText: 'Mixed shop' })
       await expect(row).toBeInViewport()
+      await expect(page.getByRole('heading', { name: 'Activity' })).toBeFocused()
       await expect(row).toContainText('Split')
       await expect(row).toContainText('Groceries $90.00')
       await expect(row).toContainText('Gifts $30.00')
@@ -154,6 +155,35 @@ test.describe.serial('split expenses', () => {
       await expect(month.getByRole('list', { name: 'Spending by category' })).toContainText(
         'Gifts $30.00',
       )
+      // Opening a category lists the payment with the part that is in it, so the rows add up to the total.
+      await month.getByRole('button', { name: 'Groceries' }).click()
+      const listed = page.getByRole('row').filter({ hasText: 'Mixed shop' })
+      await expect(listed).toContainText('$90.00')
+      await expect(listed).toContainText('of $120.00 payment')
+    })
+
+    test(`V2_SPLITS_003 the first error is in view and focused, and what was typed stays at ${width}px`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      const id = await account(request, `Error Split ${width}`)
+      await seedLongList(request, id)
+      await page.goto(`/accounts/${id}`)
+      await page.getByLabel('Entering as').selectOption({ label: OWNER })
+      await page.getByRole('button', { name: 'Split an expense' }).click()
+      await page.getByLabel('Amount', { exact: true }).fill('120.00')
+      await page.getByLabel('Date', { exact: true }).fill('2026-10-02')
+      await page.getByLabel('Category 1', { exact: true }).selectOption({ label: 'Groceries' })
+      await page.getByLabel('Portion amount 1', { exact: true }).fill('90.00')
+      await page.getByRole('button', { name: 'Review' }).click()
+      const message = page.getByRole('alert').filter({ hasText: 'Choose a category' })
+      await expect(message).toBeInViewport()
+      await expect(page.getByLabel('Category 2', { exact: true })).toBeFocused()
+      await expect(page.getByLabel('Portion amount 1', { exact: true })).toHaveValue('90.00')
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await expect(page.getByRole('button', { name: 'Split an expense' })).toBeFocused()
     })
 
     test(`V2_SPLITS_002 corrects the portions to $80.00 and $40.00 and keeps the original in history at ${width}px`, async ({
@@ -189,6 +219,7 @@ test.describe.serial('split expenses', () => {
 
       const row = page.getByRole('row').filter({ hasText: 'Mixed shop' })
       await expect(row).toBeInViewport()
+      await expect(page.getByRole('heading', { name: 'Activity' })).toBeFocused()
       await expect(row).toContainText('Groceries $80.00')
       await expect(row).toContainText('Gifts $40.00')
       await expect(page.getByRole('main')).toContainText('$4,868.00')

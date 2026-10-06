@@ -297,9 +297,11 @@ public class ActivityStore {
                        p.account_id AS p_account_id, pa.name AS p_account_name, p.kind AS p_kind,
                        p.amount AS p_amount, p.occurred_on AS p_on, pc.name AS p_category,
                        pm.name AS p_by, p.created_at AS p_at,
+                       EXISTS (SELECT 1 FROM activity_portion pp WHERE pp.activity_id = p.id) AS p_split,
                        r.account_id AS r_account_id, ra.name AS r_account_name, r.kind AS r_kind,
                        r.amount AS r_amount, r.occurred_on AS r_on, rc.name AS r_category,
                        rm.name AS r_by, r.created_at AS r_at,
+                       EXISTS (SELECT 1 FROM activity_portion rp WHERE rp.activity_id = r.id) AS r_split,
                        a.movement_id, cp.account_id AS counter_account_id, cpa.name AS counter_account_name
                 FROM activity a LEFT JOIN category c0 ON c0.id = a.category_id
                 LEFT JOIN category c ON c.id = COALESCE(c0.merged_into_id, c0.id)
@@ -346,7 +348,7 @@ public class ActivityStore {
                 Money.format(row.get(prefix + "amount", BigDecimal.class)),
                 row.get(prefix + "on", LocalDate.class),
                 row.get(prefix + "category", String.class), row.get(prefix + "by", String.class),
-                instant(row, prefix + "at"));
+                instant(row, prefix + "at"), Boolean.TRUE.equals(row.get(prefix + "split", Boolean.class)));
     }
 
     private static Instant instant(io.r2dbc.spi.Readable row, String column) {

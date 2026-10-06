@@ -23,6 +23,7 @@ import {
 import { ownerNames } from '../accounts/ownerNames'
 import { accountChoice } from '../transfers/accountChoice'
 import { useAccountContext } from '../accounts/useAccountContext'
+import { formatMoney } from '../../lib/money'
 import { UNCATEGORIZED, type Activity } from '../../api/activity'
 import { classText } from '../activity/classes'
 import { PortionList } from '../activity/PortionList'
@@ -245,7 +246,7 @@ function MonthSection({
         </>
       )}
       {categoryId && entries.data && entries.data.length > 0 && (
-        <Entries entries={entries.data} words={words} />
+        <Entries entries={entries.data} words={words} categoryId={categoryId} />
       )}
     </Card>
   )
@@ -254,9 +255,12 @@ function MonthSection({
 function Entries({
   entries,
   words,
+  categoryId,
 }: {
   entries: Activity[]
   words: (typeof KIND)[keyof typeof KIND]
+  /** The category whose entries are listed: a split payment shows the part that is in it. */
+  categoryId: string
 }) {
   const [openId, setOpenId] = useState<string | null>(null)
   const open = entries.find((entry) => entry.id === openId)
@@ -286,9 +290,12 @@ function Entries({
               <Td>{entry.occurredOn}</Td>
               <Td>{entry.accountName}</Td>
               <Td className="text-right">
-                <Amount
-                  value={entry.kind === 'refund' ? -Number(entry.amount) : Number(entry.amount)}
-                />
+                <Amount value={listedAmount(entry, categoryId)} />
+                {entry.portions.length > 0 && (
+                  <span className="block text-caption text-ink-muted">
+                    of {formatMoney(Number(entry.amount))} payment
+                  </span>
+                )}
                 {entry.kind === 'refund' && (
                   <span className="block text-caption text-ink-muted">Refund</span>
                 )}
@@ -388,4 +395,13 @@ function History({ onMonth }: { onMonth: (month: string) => void }) {
       )}
     </Card>
   )
+}
+
+/** What an entry adds to the listed category: its portion there when split, else its amount (a refund lowers it). */
+function listedAmount(entry: Activity, categoryId: string): number {
+  if (entry.portions.length > 0)
+    return entry.portions
+      .filter((portion) => portion.categoryId === categoryId)
+      .reduce((sum, portion) => sum + Number(portion.amount), 0)
+  return entry.kind === 'refund' ? -Number(entry.amount) : Number(entry.amount)
 }

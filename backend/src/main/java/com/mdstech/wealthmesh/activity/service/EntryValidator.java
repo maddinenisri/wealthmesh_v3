@@ -154,9 +154,9 @@ public class EntryValidator {
     }
 
     /**
-     * The portions of a split: each a spending category and an amount above zero, all different categories, adding up
-     * to the payment (SPLITS_003). The categories are read under a share lock, lowest id first (D-034), and a repeat
-     * of one category is refused.
+     * The portions of a split: each a spending category and an amount above zero, adding up
+     * to the payment (SPLITS_003). The categories are read under a share lock, lowest id first (D-034). A category may
+     * repeat: after a merge two portions can sit in one category.
      */
     private Mono<List<Portion>> portions(List<PortionRequest> requested, BigDecimal total, Set<UUID> kept) {
         BigDecimal assigned = BigDecimal.ZERO;
@@ -173,10 +173,8 @@ public class EntryValidator {
                     : "$" + Money.format(assigned.subtract(total)) + " more is assigned than the payment");
         }
         return Flux.fromIterable(requested).concatMap(this::portionCategoryId).collectList().flatMap(ids -> {
-            if (ids.stream().distinct().count() != ids.size()) {
-                return Mono.error(bad("Each category can be used once in a split"));
-            }
-            return categoryStore.lockShared(ids.stream().sorted().toList()).collectMap(Category::id).flatMap(rows -> {
+            List<UUID> locked = ids.stream().distinct().sorted().toList();
+            return categoryStore.lockShared(locked).collectMap(Category::id).flatMap(rows -> {
                 List<Portion> list = new ArrayList<>();
                 for (int i = 0; i < ids.size(); i++) {
                     Category c = rows.get(ids.get(i));

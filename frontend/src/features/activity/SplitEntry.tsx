@@ -26,6 +26,7 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney, parseAmount } from '../../lib/money'
 import { ACCOUNT_TYPES } from '../accounts/accountTypes'
 import { balanceText, isCard } from '../accounts/cardBalance'
+import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { CLASS_LABEL, classText } from './classes'
 import { EnteredBy } from './EnteredBy'
 import { MoveFigures } from './MoveFigures'
@@ -89,7 +90,7 @@ export function SplitEntry({
   const { member, setMemberId } = useEnteringAs(members)
   const [reviewing, setReviewing] = useState<Values | null>(null)
   const [key] = useState(newKey)
-  const { control, handleSubmit, getValues } = useForm<Values>({
+  const { control, handleSubmit } = useForm<Values>({
     defaultValues: {
       description: editing?.description ?? '',
       amount: editing?.amount ?? '',
@@ -186,6 +187,12 @@ export function SplitEntry({
           {editing ? 'Review change' : `Review split ${noun}`}
         </CardTitle>
         <FormAlert message={save.error?.message} />
+        {!editing && !onCard && balanceAfter < 0 && (
+          <p role="alert" className="mt-3 max-w-md rounded-control border border-line p-3 text-sm">
+            This will leave {account.name} overdrawn by {formatMoney(-balanceAfter)}.{' '}
+            {OVERDRAFT_NOTICE}
+          </p>
+        )}
         <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
           <Item label={place}>
             {editing && moving ? `${account.name} changed to ${target.name}` : target.name}
@@ -286,7 +293,16 @@ export function SplitEntry({
       <form
         noValidate
         className="mt-3 flex max-w-3xl flex-col gap-4"
-        onSubmit={handleSubmit((values) => setReviewing(values))}
+        onSubmit={handleSubmit(
+          (values) => setReviewing(values),
+          // A long form: the first error and its message are brought into view, not left below the fold.
+          () =>
+            requestAnimationFrame(() =>
+              document
+                .querySelector('[aria-invalid="true"]')
+                ?.scrollIntoView?.({ block: 'center' }),
+            ),
+        )}
       >
         {editing ? (
           <SelectField control={control} name="accountId" label={place}>
@@ -337,12 +353,7 @@ export function SplitEntry({
                 control={control}
                 name={`portions.${index}.categoryId`}
                 label={`Category ${n}`}
-                rules={{
-                  required: 'Choose a category',
-                  validate: (value) =>
-                    getValues('portions').filter((p) => p.categoryId === value).length < 2 ||
-                    'Each category can be used once in a split',
-                }}
+                rules={{ required: 'Choose a category' }}
               >
                 <option value="">Choose a category</option>
                 {categories.data

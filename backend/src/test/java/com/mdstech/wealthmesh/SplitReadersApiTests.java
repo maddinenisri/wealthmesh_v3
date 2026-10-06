@@ -94,6 +94,28 @@ class SplitReadersApiTests extends SplitTestBase {
                 .jsonPath("$.categories[?(@.name=='Entertainment')].total").isEqualTo("20.00");
     }
 
+    @Order(6)
+    @Test
+    @DisplayName("V2_SPLITS_002 after Gifts is merged into Groceries the split reads and corrects with its merged ids")
+    void correctAfterAMerge() {
+        String shop = saveSplit(account, "m1", split(mayaId, "Merged shop", "50.00", "2026-09-15",
+                p("Utilities", null, "30.00"), p("Entertainment", null, "20.00")));
+        webTestClient.post().uri("/api/v1/categories/merges").contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"sourceIds\": [\"%s\"], \"targetId\": \"%s\", \"enteredByMemberId\": \"%s\"}"
+                        .formatted(categoryId("spending", "Entertainment"), categoryId("spending", "Utilities"),
+                                mayaId)).exchange().expectStatus().isCreated();
+        String utilities = categoryId("spending", "Utilities");
+        // The UI sends back the ids it was shown: both portions now name Utilities.
+        String body = """
+                {"description": "Merged shop", "amount": "50.00", "occurredOn": "2026-09-15",
+                 "enteredByMemberId": "%s", "reason": "Fix",
+                 "portions": [{"categoryId": "%s", "amount": "25.00"}, {"categoryId": "%s", "amount": "25.00"}]}"""
+                .formatted(mayaId, utilities, utilities);
+        replace(account, shop, "m-fix", body).expectStatus().isCreated().expectBody()
+                .jsonPath("$.portions[0].categoryName").isEqualTo("Utilities")
+                .jsonPath("$.portions[1].categoryName").isEqualTo("Utilities");
+    }
+
     @Order(5)
     @Test
     @DisplayName("V2_SPLITS_001 a split on savings lowers its Balance once")

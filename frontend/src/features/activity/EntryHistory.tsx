@@ -119,7 +119,10 @@ export function EntryHistory({
                   )}
                   {entry.kind === 'transfer_out' && entry.replaces?.kind === 'expense' && (
                     <span className="block text-caption text-ink-muted [overflow-wrap:anywhere]">
-                      Was recorded as {entry.replaces.categoryName ?? 'an expense'}
+                      Was recorded as{' '}
+                      {entry.replaces.split
+                        ? 'a split expense'
+                        : (entry.replaces.categoryName ?? 'an expense')}
                     </span>
                   )}
                   {entry.status === 'replaced' &&
@@ -155,7 +158,9 @@ export function EntryHistory({
                       aria-label={`Undo ${
                         entry.movementId
                           ? movementName(entry)
-                          : (entry.description ?? entry.categoryName ?? 'entry')
+                          : (entry.description ??
+                            (entry.portions.length > 0 ? 'split expense' : entry.categoryName) ??
+                            'entry')
                       }`}
                       disabled={!onUndo}
                       onClick={() => onUndo?.(entry)}
@@ -170,9 +175,11 @@ export function EntryHistory({
                 <tr>
                   <Td colSpan={8} className="text-caption text-ink-muted [overflow-wrap:anywhere]">
                     Replaced {formatMoney(Number(entry.replaces.amount))}{' '}
-                    {entry.replaces.categoryName ?? 'entry'} on {entry.replaces.accountName}, dated{' '}
-                    {entry.replaces.occurredOn}, saved by {entry.replaces.enteredByName ?? 'nobody'}{' '}
-                    {stamp(entry.replaces.at)}
+                    {entry.replaces.split
+                      ? 'split expense'
+                      : (entry.replaces.categoryName ?? 'entry')}{' '}
+                    on {entry.replaces.accountName}, dated {entry.replaces.occurredOn}, saved by{' '}
+                    {entry.replaces.enteredByName ?? 'nobody'} {stamp(entry.replaces.at)}
                   </Td>
                 </tr>
               )}

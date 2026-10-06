@@ -77,8 +77,6 @@ class SplitRulesApiTests extends SplitTestBase {
     void shapeRules() {
         assertBad("one", split(mayaId, "x", "10.00", "2026-09-10", p("Groceries", null, "10.00")),
                 "at least two");
-        assertBad("dup", split(mayaId, "x", "10.00", "2026-09-10", p("Groceries", null, "4.00"),
-                p("Groceries", null, "6.00")), "once");
         assertBad("zero", split(mayaId, "x", "10.00", "2026-09-10", p("Groceries", null, "0.00"),
                 p("Gifts", null, "10.00")), "greater than zero");
         assertBad("income-cat", split(mayaId, "x", "10.00", "2026-09-10", p("Groceries", null, "5.00"),
@@ -130,11 +128,25 @@ class SplitRulesApiTests extends SplitTestBase {
                 {"kind": "expense", "description": "x", "amount": "10.00", "dueOn": "2026-10-20",
                  "category": "Groceries", "enteredByMemberId": "%s", "portions": [{"category": "Groceries",
                  "amount": "5.00"}, {"category": "Gifts", "amount": "5.00"}]}""".formatted(mayaId);
-        post(account, "reminders", "rem", reminder).expectStatus().is2xxSuccessful();
-        webTestClient.get().uri("/api/v1/reminders").exchange().expectBody()
-                .jsonPath("$[0].categoryName").isEqualTo("Groceries").jsonPath("$[0].portions").doesNotExist();
+        post(account, "reminders", "rem", reminder).expectStatus().isBadRequest();
+        webTestClient.get().uri("/api/v1/reminders").exchange().expectBody().jsonPath("$.length()").isEqualTo(0);
         assertBalance(account, "4880.00");
         assertActivityCount(account, 1);
+    }
+
+    @Order(6)
+    @Test
+    @DisplayName("V2_SPLITS_003 exactly 20 portions are allowed, and a category may repeat; they add up to the payment")
+    void twentyPortionsAndRepeats() {
+        P[] many = new P[20];
+        for (int i = 0; i < 20; i++) {
+            many[i] = p(i % 2 == 0 ? "Groceries" : "Gifts", null, "1.00");
+        }
+        post(account, "expenses", "twenty", split(mayaId, "Twenty", "20.00", "2026-09-14", many)).expectStatus()
+                .isCreated().expectBody().jsonPath("$.portions.length()").isEqualTo(20);
+        post(account, "expenses", "repeat", split(mayaId, "Repeat", "10.00", "2026-09-14",
+                p("Groceries", null, "4.00"), p("Groceries", null, "6.00"))).expectStatus().isCreated();
+        assertBalance(account, "4850.00");
     }
 
     private void assertBad(String key, String body, String message) {

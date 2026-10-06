@@ -39,7 +39,7 @@ public record HistoryEntry(
 
     /** The other side of a replacement: the entry this one replaced, or the one that replaced it, and its account. */
     public record Origin(UUID id, UUID accountId, String accountName, String kind, String amount, LocalDate occurredOn,
-            String categoryName, String enteredByName, Instant at) {
+            String categoryName, String enteredByName, Instant at, boolean split) {
     }
 
     /** One change to this entry: replaced, removed or restored, by whom and when. */

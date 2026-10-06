@@ -253,9 +253,13 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             onDone={(saved) => {
               setSplitting(null)
               if (saved) {
-                requestAnimationFrame(() =>
-                  document.getElementById('activity-heading')?.scrollIntoView?.({ block: 'start' }),
-                )
+                // The row that changed is what the person came for; the opener may be gone (an edit replaces it).
+                remember.cancel()
+                requestAnimationFrame(() => {
+                  const heading = document.getElementById('activity-heading')
+                  heading?.scrollIntoView?.({ block: 'start' })
+                  heading?.focus({ preventScroll: true })
+                })
               }
             }}
           />
@@ -342,7 +346,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
         </Panel>
       )}
       <Card aria-labelledby="activity-heading">
-        <CardTitle id="activity-heading" className="text-lg">
+        <CardTitle id="activity-heading" tabIndex={-1} className="text-lg outline-none">
           Activity
         </CardTitle>
         <ActivityList

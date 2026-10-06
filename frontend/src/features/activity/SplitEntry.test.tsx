@@ -103,20 +103,61 @@ describe('splitting an expense', () => {
     expect(api.accounts[0].balance.amount).toBe('4880.00')
   })
 
-  it('V2_SPLITS_003 refuses a category used twice and an empty portion before the review', async () => {
+  it('V2_SPLITS_003 refuses an empty category and amount before the review', async () => {
     const api = mockApi(seed())
     const { user } = renderRoute(`/accounts/${everyday.id}`)
     await openSplit(user)
     await user.type(await screen.findByLabelText('Amount'), '10.00')
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-10' } })
     await user.selectOptions(screen.getByLabelText('Category 1'), 'Groceries')
-    await user.selectOptions(screen.getByLabelText('Category 2'), 'Groceries')
     await user.click(screen.getByRole('button', { name: 'Review' }))
 
-    expect(
-      await screen.findAllByText('Each category can be used once in a split'),
-    ).not.toHaveLength(0)
+    expect(await screen.findAllByText('Choose a category', { ignore: 'option' })).toHaveLength(1)
     expect(screen.getAllByText('Enter a valid amount')).toHaveLength(2)
     expect(api.activity).toHaveLength(0)
+  })
+
+  it('V2_SPLITS_003 says how much more than the payment is assigned and blocks Confirm', async () => {
+    const api = mockApi(seed())
+    const { user } = renderRoute(`/accounts/${everyday.id}`)
+    await openSplit(user)
+    await fillSplit(user, '40.00')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '$130.00 is assigned, $10.00 more than the payment.',
+    )
+    expect(screen.getByRole('button', { name: 'Confirm saving' })).toBeDisabled()
+    expect(api.activity).toHaveLength(0)
+  })
+
+  it('V2_SPLITS_003 allows one category twice, as a merge can leave it, and saves the sum once', async () => {
+    const api = mockApi(seed())
+    const { user } = renderRoute(`/accounts/${everyday.id}`)
+    await openSplit(user)
+    await user.type(await screen.findByLabelText('Amount'), '10.00')
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-10' } })
+    await user.selectOptions(screen.getByLabelText('Category 1'), 'Groceries')
+    await user.type(screen.getByLabelText('Portion amount 1'), '4.00')
+    await user.selectOptions(screen.getByLabelText('Category 2'), 'Groceries')
+    await user.type(screen.getByLabelText('Portion amount 2'), '6.00')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    await user.click(await screen.findByRole('button', { name: 'Confirm saving' }))
+
+    await within(await screen.findByRole('table')).findByText('Split')
+    expect(api.activity).toHaveLength(1)
+    expect(api.activity[0].portions).toHaveLength(2)
+  })
+
+  it('V2_SPLITS_001 warns when the payment would overdraw the account', async () => {
+    mockApi({
+      ...seed(),
+      accounts: [{ ...everyday, balance: { amount: '50.00', asOf: '2026-09-01' } }],
+    })
+    const { user } = renderRoute(`/accounts/${everyday.id}`)
+    await openSplit(user)
+    await fillSplit(user, '30.00')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    expect(await screen.findByText(/overdrawn by \$70\.00/)).toBeInTheDocument()
   })
 })
