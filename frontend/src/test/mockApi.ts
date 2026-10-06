@@ -74,6 +74,17 @@ export type MockStatement = {
   createdAt?: string
 }
 
+export type MockBudget = {
+  id: string
+  /** Like 2026-09. */
+  month: string
+  total: string
+  targets: { categoryId: string; amount: string }[]
+  /** Set once removed; Undo clears it. */
+  removed?: boolean
+  events?: { action: string; memberId: string | null; at: string }[]
+}
+
 type MockReminder = {
   id: string
   accountId: string
@@ -270,6 +281,8 @@ export function mockApi(
     activity?: MockActivity[]
     /** Supporting statements already attached. */
     statements?: MockStatement[]
+    /** Monthly Budgets already saved. */
+    budgets?: MockBudget[]
   } = {},
 ) {
   CATEGORIES.splice(0, CATEGORIES.length, ...SEEDED.map((c) => ({ ...c })))
@@ -281,6 +294,7 @@ export function mockApi(
     activity: [...(seed.activity ?? [])],
     reminders: [] as MockReminder[],
     statements: [...(seed.statements ?? [])],
+    budgets: (seed.budgets ?? []).map((b) => ({ ...b, events: b.events ?? [] })) as MockBudget[],
     openingRevisions: [] as MockOpeningRevision[],
     /** Save keys seen on POST expenses, in order. */
     keys: [] as string[],
@@ -771,7 +785,208 @@ export function mockApi(
     ),
   ]
 
+  /** A month's Budget view from a total and targets, as the server computes it (spending is the shared one). */
+  const budgetView = (
+    month: string,
+    budget: {
+      id: string | null
+      total: string
+      targets: { categoryId: string; amount: string }[]
+    } | null,
+    events: { action: string; memberId: string | null; at: string }[] = [],
+    canUndo = false,
+  ) => {
+    const spent = monthTotals(month, 'expense', null)
+    if (!budget) {
+      return {
+        month,
+        exists: false,
+        id: null,
+        total: null,
+        targetTotal: null,
+        unallocated: null,
+        spending: spent.total,
+        state: null,
+        difference: null,
+        lines: [],
+        history: events,
+        canUndo,
+      }
+    }
+    const target = new Map<string, number>()
+    budget.targets.forEach((t) =>
+      target.set(
+        effectiveId(t.categoryId),
+        (target.get(effectiveId(t.categoryId)) ?? 0) + Number(t.amount),
+      ),
+    )
+    const money = (n: number) => n.toFixed(2)
+    const lineFor = (
+      id: string | null,
+      name: string,
+      archived: boolean,
+      spending: number,
+      count: number,
+    ) => {
+      const t = id === null ? undefined : target.get(id)
+      let lineState = 'none'
+      let percent: number | null = null
+      if (t !== undefined && t === 0) lineState = spending > 0 ? 'unplanned' : 'noSpending'
+      else if (t !== undefined) {
+        lineState = spending > t ? 'over' : spending < t ? 'left' : 'on'
+        percent = Math.round((spending * 100) / t)
+      }
+      return {
+        categoryId: id,
+        name,
+        archived,
+        ...(t === undefined ? {} : { target: money(t) }),
+        spending: money(spending),
+        count,
+        state: lineState,
+        difference: money(t === undefined || t === 0 ? Math.abs(spending) : Math.abs(spending - t)),
+        ...(percent === null ? {} : { percentUsed: percent }),
+      }
+    }
+    const lines = spent.categories.map((c) =>
+      lineFor(c.categoryId, c.name, c.archived, Number(c.total), c.count),
+    )
+    target.forEach((_, id) => {
+      if (spent.categories.some((c) => c.categoryId === id)) return
+      const category = CATEGORIES.find((c) => c.id === id)
+      lines.push(lineFor(id, category?.name ?? '', category?.archived ?? false, 0, 0))
+    })
+    lines.sort((a, b) => Number(b.spending) - Number(a.spending) || a.name.localeCompare(b.name))
+    const total = Number(budget.total)
+    const targetTotal = [...target.values()].reduce((a, b) => a + b, 0)
+    const spending = Number(spent.total)
+    return {
+      month,
+      exists: true,
+      id: budget.id,
+      total: money(total),
+      targetTotal: money(targetTotal),
+      unallocated: money(total - targetTotal),
+      spending: spent.total,
+      state: spending > total ? 'over' : spending < total ? 'under' : 'on',
+      difference: money(Math.abs(spending - total)),
+      lines,
+      history: events,
+      canUndo,
+    }
+  }
+  const monthBudget = (month: string) => {
+    const active = state.budgets.find((b) => b.month === month && !b.removed)
+    const removed = state.budgets.some((b) => b.month === month && b.removed)
+    const events = state.budgets
+      .filter((b) => b.month === month)
+      .flatMap((b) => b.events ?? [])
+      .reverse()
+    return budgetView(month, active ?? null, events, removed && !active)
+  }
+  const budgetHandlers = () => [
+    http.get('*/api/v1/budgets', ({ request }) => {
+      log(request)
+      return HttpResponse.json(
+        state.budgets
+          .filter((b) => !b.removed)
+          .map((b) => ({ month: b.month, total: Number(b.total).toFixed(2) })),
+      )
+    }),
+    http.get('*/api/v1/budgets/:month', ({ request, params }) => {
+      log(request)
+      return HttpResponse.json(monthBudget(String(params.month)))
+    }),
+    http.post('*/api/v1/budgets/:month/review', async ({ request, params }) => {
+      log(request)
+      const body = (await request.json()) as {
+        total: string
+        targets: { categoryId: string; amount: string }[]
+      }
+      if (Number(body.total) < 0 || body.targets.some((t) => Number(t.amount) < 0))
+        return problem(400, 'Enter zero or a positive amount')
+      return HttpResponse.json(budgetView(String(params.month), { id: null, ...body }))
+    }),
+    http.put('*/api/v1/budgets/:month', async ({ request, params }) => {
+      log(request)
+      const month = String(params.month)
+      const body = (await request.json()) as {
+        total: string
+        targets: { categoryId: string; amount: string }[]
+        enteredByMemberId: string
+      }
+      if (Number(body.total) < 0 || body.targets.some((t) => Number(t.amount) < 0))
+        return problem(400, 'Enter zero or a positive amount')
+      const event = {
+        action: 'saved',
+        memberId: body.enteredByMemberId,
+        at: '2026-10-06T09:00:00Z',
+      }
+      const existing = state.budgets.find((b) => b.month === month && !b.removed)
+      if (existing) {
+        existing.total = body.total
+        existing.targets = body.targets
+        existing.events = [...(existing.events ?? []), event]
+      } else {
+        state.budgets.push({
+          id: newId(),
+          month,
+          total: body.total,
+          targets: body.targets,
+          events: [event],
+        })
+      }
+      return HttpResponse.json(monthBudget(month), { status: 201 })
+    }),
+    http.post('*/api/v1/budgets/:month/copy', async ({ request, params }) => {
+      log(request)
+      const month = String(params.month)
+      const body = (await request.json()) as { fromMonth: string; enteredByMemberId: string }
+      const source = state.budgets.find((b) => b.month === body.fromMonth && !b.removed)
+      if (!source) return problem(404, `No Budget for ${body.fromMonth} to copy`)
+      state.budgets.push({
+        id: newId(),
+        month,
+        total: source.total,
+        targets: source.targets.map((t) => ({ ...t })),
+        events: [
+          { action: 'copied', memberId: body.enteredByMemberId, at: '2026-10-06T09:00:00Z' },
+        ],
+      })
+      return HttpResponse.json(monthBudget(month), { status: 201 })
+    }),
+    http.post('*/api/v1/budgets/:month/remove', async ({ request, params }) => {
+      log(request)
+      const month = String(params.month)
+      const body = (await request.json()) as { enteredByMemberId: string }
+      const active = state.budgets.find((b) => b.month === month && !b.removed)
+      if (active) {
+        active.removed = true
+        active.events = [
+          ...(active.events ?? []),
+          { action: 'removed', memberId: body.enteredByMemberId, at: '2026-10-06T09:00:00Z' },
+        ]
+      }
+      return HttpResponse.json(monthBudget(month))
+    }),
+    http.post('*/api/v1/budgets/:month/undo', async ({ request, params }) => {
+      log(request)
+      const month = String(params.month)
+      const body = (await request.json()) as { enteredByMemberId: string }
+      const removed = [...state.budgets].reverse().find((b) => b.month === month && b.removed)
+      if (removed) {
+        removed.removed = false
+        removed.events = [
+          ...(removed.events ?? []),
+          { action: 'restored', memberId: body.enteredByMemberId, at: '2026-10-06T09:00:00Z' },
+        ]
+      }
+      return HttpResponse.json(monthBudget(month))
+    }),
+  ]
+
   server.use(
+    ...budgetHandlers(),
     http.get('*/api/v1/household', ({ request }) => {
       log(request)
       return state.household

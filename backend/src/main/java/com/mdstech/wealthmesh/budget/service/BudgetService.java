@@ -33,6 +33,7 @@ import com.mdstech.wealthmesh.budget.dto.BudgetRequest;
 import com.mdstech.wealthmesh.budget.dto.BudgetView;
 import com.mdstech.wealthmesh.budget.repository.BudgetStore;
 import com.mdstech.wealthmesh.category.domain.Category;
+import com.mdstech.wealthmesh.category.repository.CategoryRepository;
 import com.mdstech.wealthmesh.category.repository.CategoryStore;
 import com.mdstech.wealthmesh.money.Money;
 
@@ -59,15 +60,18 @@ public class BudgetService {
     private final BudgetStore store;
     private final ActivityStore activity;
     private final CategoryStore categories;
+    private final CategoryRepository categoryRepository;
     private final EntryValidator validator;
     private final TransactionalOperator transactions;
     private final Clock clock;
 
     public BudgetService(BudgetStore store, ActivityStore activity, CategoryStore categories,
-            EntryValidator validator, TransactionalOperator transactions, Clock clock) {
+            CategoryRepository categoryRepository, EntryValidator validator, TransactionalOperator transactions,
+            Clock clock) {
         this.store = store;
         this.activity = activity;
         this.categories = categories;
+        this.categoryRepository = categoryRepository;
         this.validator = validator;
         this.transactions = transactions;
         this.clock = clock;
@@ -150,6 +154,22 @@ public class BudgetService {
                 : spending.subtract(target).abs();
         return new BudgetLine(id, name, archived, target == null ? null : Money.format(target),
                 Money.format(spending), count, state, Money.format(difference), percent);
+    }
+
+    /**
+     * What the month would look like if the request were saved (the review before Confirm): the same figures as a
+     * saved Budget, computed from the request, nothing written. The save recomputes under its lock (D-028).
+     */
+    public Mono<BudgetView> review(String month, BudgetRequest request) {
+        return Mono.fromCallable(() -> new Parsed(parse(month), request)).flatMap(parsed -> {
+            LocalDate first = parsed.month.atDay(1);
+            return checked(List.copyOf(parsed.targets.keySet()), false).flatMap(found -> activity
+                    .totalsByCategory("expense", first, parsed.month.plusMonths(1).atDay(1), null).collectList()
+                    .map(spent -> assemble(parsed.month,
+                            new BudgetStore.Row(null, first, parsed.total, null), spent,
+                            found.stream().map(c -> new BudgetStore.Target(c.id(), c.name(), c.archived(),
+                                    parsed.targets.get(c.id()))).toList(), List.of(), false)));
+        });
     }
 
     /** Saves a month's Budget (a new one, or replaces the total and targets of the saved one). */
@@ -273,24 +293,36 @@ public class BudgetService {
 
     /** The categories read under a share lock, lowest id first; a merged one is refused (use its target, Q-041). */
     private Mono<Void> checkCategories(List<UUID> ids) {
+        return checked(ids, true).then();
+    }
+
+    /**
+     * The named categories, each checked as a target; `lock` reads them under a share lock (a save), else plain (a
+     * review).
+     */
+    private Mono<List<Category>> checked(List<UUID> ids, boolean lock) {
         if (ids.isEmpty()) {
-            return Mono.empty();
+            return Mono.just(List.of());
         }
-        return categories.lockShared(ids).collectList().flatMap(found -> {
-            Map<UUID, Category> byId = found.stream().collect(Collectors.toMap(Category::id, c -> c));
-            for (UUID id : ids) {
-                Category category = byId.get(id);
-                if (category == null || !"spending".equals(category.kind())) {
-                    return Mono.error(bad("Choose a spending category for each target"));
-                }
-                if (category.mergedIntoId() != null) {
-                    return categories.lockShared(List.of(category.mergedIntoId())).next().map(Category::name)
-                            .defaultIfEmpty("its target").flatMap(target -> Mono.<Void>error(bad(category.name()
-                                    + " was merged into " + target + ". Set the target on " + target + " instead.")));
-                }
+        return (lock ? categories.lockShared(ids) : categoryRepository.findAllById(ids)).collectList()
+                .flatMap(found -> validTargets(ids, found));
+    }
+
+    private Mono<List<Category>> validTargets(List<UUID> ids, List<Category> found) {
+        Map<UUID, Category> byId = found.stream().collect(Collectors.toMap(Category::id, c -> c));
+        for (UUID id : ids) {
+            Category category = byId.get(id);
+            if (category == null || !"spending".equals(category.kind())) {
+                return Mono.error(bad("Choose a spending category for each target"));
             }
-            return Mono.empty();
-        });
+            if (category.mergedIntoId() != null) {
+                return categoryRepository.findById(category.mergedIntoId()).map(Category::name)
+                        .defaultIfEmpty("its target").flatMap(target -> Mono.<List<Category>>error(bad(
+                                category.name() + " was merged into " + target + ". Set the target on " + target
+                                + " instead.")));
+            }
+        }
+        return Mono.just(found);
     }
 
     private record Parsed(YearMonth month, BigDecimal total, Map<UUID, BigDecimal> targets) {

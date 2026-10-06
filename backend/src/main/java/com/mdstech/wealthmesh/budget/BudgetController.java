@@ -51,6 +51,12 @@ public class BudgetController {
         return service.save(month, key, request).map(BudgetController::saved);
     }
 
+    /** The review before Confirm: the month as it would be saved. Writes nothing. */
+    @PostMapping("/{month}/review")
+    public Mono<BudgetView> review(@PathVariable String month, @RequestBody BudgetRequest request) {
+        return service.review(month, request);
+    }
+
     @PostMapping("/{month}/copy")
     public Mono<ResponseEntity<BudgetView>> copy(@PathVariable String month,
             @RequestHeader(name = "Idempotency-Key", required = false) String key,
