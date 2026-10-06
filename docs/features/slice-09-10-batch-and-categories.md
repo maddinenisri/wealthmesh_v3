@@ -1,7 +1,7 @@
 # Slices 09 and 10: Batch entry, category management and classes
 
 - Slice: 09 and 10 in `docs/features/INDEX.md`, merged by the merge rule (12 IDs, 3 capabilities: L7, S2, S3; IDs in `slices.txt`); feature files touched: `docs/requirements/v2/spending/expenses/record-expenses.feature`, `spending/categories/manage-categories.feature`
-- Status: done, local and not pushed (mirror of the INDEX rows; the owner said no push)
+- Status: done and pushed (2026-10-05, on the owner's word, D-002)
 - Started: 2026-10-05 16:03 (ET, session clock)  Finished: 2026-10-05  Commit: `48b87bc` (commits from `cdc3485`)
 
 ## Prompts and directions
