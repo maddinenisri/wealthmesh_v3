@@ -53,6 +53,10 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
 - [ ] A race test for a lock uses an update when a foreign key to the locked row would make an insert wait anyway (plant the
       lock's removal and see it red). A screen that lists rows is checked in a short month and at 1280px; a history row
       says what changed, not only who and when.
+- [ ] A panel or form that holds state for one row is keyed by the row (and action) and a test opens it on a second row
+      (slice 14: Change opened on another bill saved the first bill's values). A mutation error is reset when a new
+      panel opens. Assert the computed colour of each Button variant once (slice 14: `cn` dropped a label colour).
+- [ ] Every Decision written in the notes is built with a test, or struck out, before the validator runs.
 - [ ] Anything new that distinguishes accounts or entries (type, status, owner) shows in the lists, not only on the
       detail page.
 

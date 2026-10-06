@@ -1,8 +1,8 @@
 # Slice 14: Recurring bills
 
 - Slice: 14 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/spending/recurring/manage-recurring.feature` (all 10)
-- Status: in-progress (built and proved; waiting for the owner's Cowork pass, checkpoint 2)
-- Started: 2026-10-06 14:08 (session clock)  Finished:  Commit:
+- Status: done, local (not pushed; D-002)
+- Started: 2026-10-06 14:08 (session clock)  Finished: 2026-10-06  Commit: 41be33d and the Land commit after it
 
 ## Prompts and directions
 
@@ -25,7 +25,7 @@ What to watch for in slice 14
 - Preflight (2026-10-06 14:08): JDK 25 default, Node 26.4, Docker up; ports 5434, 5180, 8081 held by this project (`wm-backend`, `wm-frontend`); git clean on `main`. Registry version checks not re-run (slice 13 recorded the majors behind: Q-004, still open, not touched).
 - 2026-10-06 Q-044 answer (owner): yes, group 0.
 - 2026-10-06 Checkpoint 1 answer: approved groups 0 to 6 and the design. Q-045 no, Q-046 yes, Q-047 yes (soft delete, no Undo), Q-048 yes, Q-049 continue to the end (fallback stop after group 3; group 0 lands either way). Additions: (1) group 0 builds one shared replay-first mechanism used by every keyed writer (entry, batch, reminder, and the existing ones where it fits), not per-writer copies; tests per writer by id and by name, including an archived or merged category and a changed default class. (2) Extend the slice 12 deleted-account sweep test to cover schedules (a schedule on a deleted account and a soft-deleted schedule must not appear or block account deletion). One commit per group, local only, no push, no Claude trailer; run each new e2e assertion alone against the unfixed code; Cowork count against 8, 8, 5, 5, 5 and 7.
-- Checkpoint 2 answer:
+- 2026-10-06 Checkpoint 2 answer: owner pass (Cowork), 710px by real clicks, 1280px by opening and cancelling each panel on one bill (no save): all nine steps pass on behaviour; 8 faults (plus the button colour reported first = 9, against 8, 8, 5, 5, 5 and 7), table below. Not decided for later: Delete has no Undo (Q-047 stands), no cards in Paid from. Not verified by the owner: 1280px by eye and any save at 1280px, suggestion Dismiss, a confirmed Reschedule, Yearly, a Change after a recorded payment, the items left in the notes.
 
 ## Scope
 
@@ -175,14 +175,28 @@ Decisions the owner raised, not changed: Delete has no Undo (Q-047, owner's answ
 
 ## How it works
 
-Written after Land.
+(Written by a read-only agent from the diff and these notes; its claims were checked against the code and the repo scripts.)
+
+**What you can do.** Open **Recurring** in the main menu (`/recurring`). A suggestion appears when three or more bills share an account, category and description, about a month apart; it lists its bills and says "Estimate, not a recorded expense". Confirm it, dismiss it, or add a weekly, monthly or yearly bill by hand with an explicit first due date. Change, pause, resume and delete a schedule; each has a review with Cancel. **Record actual expense** saves the real bill (early or late) after a review that shows the Balance before and after. An overdue occurrence says "Overdue by N days" and offers Record, Reschedule or Dismiss this occurrence. The account page marks an expense that paid a recurring bill.
+
+**What changed.** `V22__recurring.sql` (schedule, occurrence, dismissal, event); `recurring/` (`RecurringController`, `RecurringService`, `RecurringStore`, `Recurrence`, `Suggestions`); `household/repository/HouseholdLock`; `GET /recurring/payments`; `features/recurring/*`, `api/recurring.ts`, `hooks/useRecurring.ts`; tests `Recurring*ApiTests`, `RecurrenceTest`, `SuggestionsTest`, `ReplayRulesApiTests`, `Recurring.test.tsx`, `15-recurring.spec.ts`. Group 0: `EntryValidator.parseForReplay` for entry, batch, reminder and historical entry saves.
+
+**Record actual expense.** (1) The client sends a key (D-024). (2) The server takes the household lock first. (3) It reads the key; a retry replays the stored result. (4) The schedule must be active and the date must be its next occurrence (else 409). (5) `EntryService.record` saves the entry under the account lock with the entry rules (account open, category, member). (6) In the same transaction the occurrence is marked paid and the next due date moves from the due date, not the paid date. A schedule alone never writes an expense or reminder row, so Balance, spending and Budgets do not move. Lock order: household, account, then category and member share locks.
+
+**Decisions.** D-048 (schedules are estimates; delete is soft with no Undo and does not bring its suggestion back), D-049 (a retry is judged on what was saved). Left: occurrences are not unique per due date in the database; a by-name retry after a category rename is 400; a shorter retry of a batch replays; some inventory races are untested.
+
+**Verify.** `npm run backend:test`, `npm run frontend:test`, `npm run frontend:lint`, `npm run e2e` (189 + new), `npm run coverage -- --require --slice 14` (10/10), then `/recurring` at 710px and 1280px.
 
 ## Handoff
 
-Written at Land.
+- Built: groups 0 to 6 (see the task list); V22; D-048, D-049; Q-044 and Q-045 to Q-049 resolved; the deleted-account sweep covers schedules.
+- Watch for: a new household-wide writer takes `HouseholdLock` first, then the account row, then the member and category share locks; a keyed save reads its key before the state and category rules and a replay uses `parseForReplay`, never `parse`; a panel that holds form state for one row is keyed by the row; a spending reader calls `ActivityStore.totalsByCategory` only; the API test base resets today to 2026-10-03 before each test, e2e runs at 2026-10-03; the e2e DB is shared, so `15-recurring` makes its own accounts and bill names.
+- Left open: occurrences are not unique per (schedule, due date); an omitted class on a retry replays the stored class, and a by-name retry after a category rename is 400 (the UI sends ids); a shorter batch retry replays (before this slice); races not built: record vs removal of its entry, record held vs archive, category merge; matrix cells archived or closed × deleted and × paused (except Resume); same-key concurrency only for Record; the menu wrap at 710px did not reproduce in headless Chromium (label shortened to "Recurring"); Back in Resume and Reschedule and "opener in view on a long list" have no e2e; the 1280px save path and suggestion Dismiss were not walked by the owner.
+- v1 showed: not running, not consulted.
+- Next: slice 15 (see `INDEX.md`).
 
 ## Retro (3 lines, also appended to `docs/process/retro.md`)
 
-- What slowed this session:
-- What went well:
-- Process change to try:
+- What slowed this session: group 0 was larger than the prompt said (a replay-mode parse, not a copy of the historical pattern); the validator's panel-reuse finding and nine Cowork faults came after 189 green tests, so the slice needed a second fix round.
+- What went well: one shared replay mechanism instead of per-writer copies; the lock races held per writer and were seen red when each lock was planted away; the household lock moved to a shared class before a second writer needed it.
+- Process change to try: key row-bound panels and assert the computed colour of each Button variant (checklist, `improvements.md`); strike or build every Decision in the notes before the validator runs.
