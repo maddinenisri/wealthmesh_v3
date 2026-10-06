@@ -114,4 +114,44 @@ describe('Archive and restore an account', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add money in' })).toBeEnabled())
     expect(await screen.findByRole('status')).toHaveTextContent('open again')
   })
+
+  it('V2_ACCOUNT_LIFECYCLE_005 deleting an unused account lands on the list with a focused status line and Undo, which brings it back', async () => {
+    const unused = { ...savings(), name: 'Test Savings', openingAmount: '0.00' }
+    const api = mockApi({ household, members: [maya], accounts: [unused] })
+    const { user } = renderRoute(`/accounts/${unused.id}`)
+    const opener = await screen.findByRole('button', { name: 'Delete account' })
+    await user.click(opener)
+    const review = await screen.findByRole('region', { name: 'Review deleting Test Savings' })
+    expect(await within(review).findByText(/no saved history/)).toBeInTheDocument()
+    await user.click(within(review).getByRole('button', { name: 'Cancel' }))
+    expect(opener).toHaveFocus()
+    await user.click(opener)
+    await user.click(await screen.findByRole('button', { name: 'Delete Test Savings' }))
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('Test Savings is deleted. Wealth does not change.')
+    await waitFor(() => expect(status).toHaveFocus())
+    expect(screen.queryByRole('row', { name: /Test Savings/ })).toBeNull()
+    await user.click(within(status).getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('is back'))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveFocus())
+    expect(await screen.findByRole('row', { name: /Test Savings/ })).toBeInTheDocument()
+    expect(api.requests.filter((line) => line.endsWith('/undo-delete'))).toHaveLength(1)
+  })
+
+  it('V2_ACCOUNT_LIFECYCLE_006 an account with saved history cannot be deleted: the reasons show and Archive or Close is offered', async () => {
+    const used = { ...savings(), balance: { amount: '0.00', asOf: '2026-09-10' } }
+    mockApi({ household, members: [maya], accounts: [used] })
+    const { user } = renderRoute(`/accounts/${used.id}`)
+    await user.click(await screen.findByRole('button', { name: 'Delete account' }))
+    const review = await screen.findByRole('region', { name: 'Review deleting Emergency Savings' })
+    expect(await within(review).findByText(/Saved history must be retained/)).toBeInTheDocument()
+    expect(review).toHaveTextContent('a starting Balance of 10000.00')
+    expect(within(review).queryByRole('button', { name: /^Delete / })).toBeNull()
+    await user.click(within(review).getByRole('button', { name: 'Review archiving instead' }))
+    expect(
+      await screen.findByRole('region', { name: 'Review archiving Emergency Savings' }),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('Active')).toBeInTheDocument()
+  })
 })

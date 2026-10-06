@@ -3,6 +3,7 @@ import { wealthKey } from './useWealth'
 import {
   changeAccountStatus,
   createAccount,
+  getAccountLifecycle,
   getAccount,
   getToday,
   listAccounts,
@@ -10,6 +11,8 @@ import {
   type AccountDetails,
   type NewAccount,
 } from '../api/accounts'
+
+type AccountAction = Parameters<typeof changeAccountStatus>[1]
 
 export const accountsKey = ['accounts'] as const
 
@@ -50,12 +53,36 @@ export function useUpdateAccount(id: string) {
 export function useChangeAccountStatus(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (action: 'archive' | 'restore' | 'close' | 'reopen') =>
-      changeAccountStatus(id, action),
+    mutationFn: (action: AccountAction) => changeAccountStatus(id, action),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: accountsKey }),
         queryClient.invalidateQueries({ queryKey: wealthKey }),
       ]),
+  })
+}
+
+/** The delete review's facts. Read fresh each time the review opens; the delete checks again on the server. */
+export function useAccountLifecycle(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...accountsKey, id, 'lifecycle'],
+    queryFn: () => getAccountLifecycle(id),
+    enabled,
+    gcTime: 0,
+  })
+}
+
+/** Deleting leaves the account list and wealth; the account's own page is dropped so it is not read again. */
+export function useDeleteAccount(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => changeAccountStatus(id, 'delete'),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: [...accountsKey, id] })
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: accountsKey }),
+        queryClient.invalidateQueries({ queryKey: wealthKey }),
+      ])
+    },
   })
 }

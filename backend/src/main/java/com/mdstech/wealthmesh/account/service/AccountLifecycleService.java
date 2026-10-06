@@ -1,6 +1,8 @@
 package com.mdstech.wealthmesh.account.service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -13,7 +15,10 @@ import org.springframework.web.server.ResponseStatusException;
 import com.mdstech.wealthmesh.account.domain.Account;
 import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.dto.AccountResponse;
+import com.mdstech.wealthmesh.account.dto.AccountLifecycle;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
+import com.mdstech.wealthmesh.account.repository.AccountUsageStore;
+import com.mdstech.wealthmesh.account.repository.AccountUsageStore.Usage;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.money.Money;
 
@@ -30,16 +35,77 @@ public class AccountLifecycleService {
     private final AccountRepository accounts;
     private final AccountService accountService;
     private final ActivityStore store;
+    private final AccountUsageStore usage;
     private final TransactionalOperator transactions;
     private final Clock clock;
 
     public AccountLifecycleService(AccountRepository accounts, AccountService accountService, ActivityStore store,
-            TransactionalOperator transactions, Clock clock) {
+            AccountUsageStore usage, TransactionalOperator transactions, Clock clock) {
         this.accounts = accounts;
         this.accountService = accountService;
         this.store = store;
+        this.usage = usage;
         this.transactions = transactions;
         this.clock = clock;
+    }
+
+    /** Why an account could not be deleted right now, for the review (the delete itself checks again under the lock). */
+    public Mono<AccountLifecycle> lifecycle(UUID id) {
+        return load(id).flatMap(account -> usage.usageOf(id).map(found -> {
+            List<String> reasons = blockers(account, found);
+            return new AccountLifecycle(reasons.isEmpty(), reasons);
+        }));
+    }
+
+    /**
+     * Deletes an unused account: soft, so Undo brings it back. Blocked, with the reasons, by saved history (entries
+     * of any kind, removed ones too, reminders, statements, starting-balance corrections) and by a non-zero opening
+     * amount, which would take money out of wealth (Q-037, D-045).
+     */
+    public Mono<AccountResponse> delete(UUID id) {
+        Mono<AccountResponse> work = store.lockAccount(id).then(Mono.defer(() -> load(id)))
+                .flatMap(account -> usage.usageOf(id).flatMap(found -> {
+                    List<String> reasons = blockers(account, found);
+                    if (!reasons.isEmpty()) {
+                        return Mono.<AccountResponse>error(conflict(account.name() + " has saved history that must be "
+                                + "retained (" + String.join("; ", reasons) + "). Archive or close it instead."));
+                    }
+                    return accountService.findById(id).flatMap(response -> usage.setDeleted(id, clock.instant())
+                            .thenReturn(response));
+                }));
+        return transactions.transactional(work);
+    }
+
+    /**
+     * Brings a deleted account back. A repeat of the same Undo returns the same account and changes nothing (D-044);
+     * so does an Undo of an account that was never deleted.
+     */
+    public Mono<AccountResponse> undoDelete(UUID id) {
+        Mono<Void> work = store.lockAccount(id)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
+                .then(Mono.defer(() -> usage.setDeleted(id, null))).then();
+        return transactions.transactional(work).then(Mono.defer(() -> accountService.findById(id)));
+    }
+
+    private static List<String> blockers(Account account, Usage found) {
+        List<String> reasons = new ArrayList<>();
+        if (found.entries() > 0) {
+            reasons.add(found.entries() + (found.entries() == 1 ? " saved entry" : " saved entries")
+                    + ", removed ones included");
+        }
+        if (found.reminders() > 0) {
+            reasons.add(found.reminders() + (found.reminders() == 1 ? " reminder" : " reminders"));
+        }
+        if (found.statements() > 0) {
+            reasons.add(found.statements() + (found.statements() == 1 ? " statement" : " statements"));
+        }
+        if (found.revisions() > 0) {
+            reasons.add("a starting-balance correction");
+        }
+        if (account.openingAmount().signum() != 0) {
+            reasons.add("a starting Balance of " + Money.format(account.openingAmount()));
+        }
+        return reasons;
     }
 
     /** Hides an account with money or debt from the active list; its Balance stays in wealth. */

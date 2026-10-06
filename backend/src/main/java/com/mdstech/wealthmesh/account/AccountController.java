@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.mdstech.wealthmesh.account.dto.AccountLifecycle;
 import com.mdstech.wealthmesh.account.dto.AccountRequest;
 import com.mdstech.wealthmesh.account.dto.AccountResponse;
 import com.mdstech.wealthmesh.account.dto.AccountUpdateRequest;
@@ -67,6 +68,21 @@ public class AccountController {
     @PostMapping("/{id}/reopen")
     public Mono<AccountResponse> reopen(@PathVariable UUID id) {
         return lifecycle.reopen(id);
+    }
+
+    @GetMapping("/{id}/lifecycle")
+    public Mono<AccountLifecycle> lifecycle(@PathVariable UUID id) {
+        return lifecycle.lifecycle(id);
+    }
+
+    @PostMapping("/{id}/delete")
+    public Mono<AccountResponse> delete(@PathVariable UUID id) {
+        return lifecycle.delete(id);
+    }
+
+    @PostMapping("/{id}/undo-delete")
+    public Mono<AccountResponse> undoDelete(@PathVariable UUID id) {
+        return lifecycle.undoDelete(id);
     }
 
     @PostMapping("/{id}/restore")

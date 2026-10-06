@@ -92,8 +92,21 @@ export const updateAccount = (id: string, details: AccountDetails) =>
     parse: parseAccount,
   })
 
-/** Archive, restore, close or reopen an account: the same account comes back with its new status (a repeat changes nothing). */
+/** Archive, restore, close, reopen, delete or undo a delete of an account: the same account comes back with its new status (a repeat changes nothing). */
 export const changeAccountStatus = (
   id: string,
-  action: 'archive' | 'restore' | 'close' | 'reopen',
+  action: 'archive' | 'restore' | 'close' | 'reopen' | 'delete' | 'undo-delete',
 ) => request(`/accounts/${id}/${action}`, { method: 'POST', parse: parseAccount })
+
+/** Why an account can or cannot be deleted right now: the review explains it before Confirm. */
+export type AccountLifecycle = { canDelete: boolean; deleteBlockedBy: string[] }
+
+export const getAccountLifecycle = (id: string) =>
+  request(`/accounts/${id}/lifecycle`, {
+    parse: (value): AccountLifecycle => {
+      const data = record(value)
+      if (typeof data.canDelete !== 'boolean' || !Array.isArray(data.deleteBlockedBy))
+        throw new Error('Unexpected response from the server.')
+      return { canDelete: data.canDelete, deleteBlockedBy: data.deleteBlockedBy.map(str) }
+    },
+  })

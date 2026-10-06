@@ -33,6 +33,12 @@ async function createAccount(
   return ((await response.json()) as { id: string }).id
 }
 
+const figures = ({ financialAssets, debts, netWorth }: Wealth) => ({
+  financialAssets,
+  debts,
+  netWorth,
+})
+
 const wealth = async (page: Page): Promise<Wealth> =>
   (await (await page.request.get('/api/v1/wealth')).json()) as Wealth
 
@@ -90,11 +96,6 @@ for (const width of [710, 1280]) {
       await expect(status).toBeInViewport({ ratio: 1 })
       await expect(page.getByRole('button', { name: 'Restore account' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Add money in' })).toBeDisabled()
-      const figures = ({ financialAssets, debts, netWorth }: Wealth) => ({
-        financialAssets,
-        debts,
-        netWorth,
-      })
       expect(figures(await wealth(page))).toEqual(figures(before))
     })
 
@@ -234,6 +235,83 @@ for (const width of [710, 1280]) {
       await expect(page.getByRole('status')).toContainText(`${name} is open again`)
       await expect(page.getByRole('status')).toBeFocused()
       await expect(page.getByRole('button', { name: 'Add money in' })).toBeEnabled()
+    })
+  })
+}
+
+for (const width of [710, 1280]) {
+  test.describe.serial(`delete and Undo at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+    const name = `Unused Account ${width}`
+    let id = ''
+
+    test(`V2_ACCOUNT_LIFECYCLE_005 deleting an unused account: Cancel returns focus, Confirm lands on the list with a focused status line, Undo brings it back once (${width}px)`, async ({
+      page,
+    }) => {
+      id = await createAccount(page, name, 'checking', '0.00')
+      const before = await wealth(page)
+      await page.goto(`/accounts/${id}`)
+      const opener = page.getByRole('button', { name: 'Delete account' })
+      await opener.click()
+      const review = page.getByRole('region', { name: `Review deleting ${name}` })
+      await expectFocusInside(review)
+      await expect(review).toContainText('no saved history')
+      await review.getByRole('button', { name: 'Cancel' }).click()
+      await expect(opener).toBeFocused()
+
+      await opener.click()
+      await page.getByRole('button', { name: `Delete ${name}` }).click()
+      await expect(page).toHaveURL(/\/accounts$/)
+      const status = page.getByRole('status')
+      await expect(status).toContainText(`${name} is deleted. Wealth does not change.`)
+      await expect(status).toBeFocused()
+      await expect(status).toBeInViewport({ ratio: 1 })
+      await expect(page.getByRole('row', { name: new RegExp(name) })).toHaveCount(0)
+      expect(figures(await wealth(page))).toEqual(figures(before))
+      await expectNoSidewaysScroll(page)
+
+      await status.getByRole('button', { name: 'Undo' }).click()
+      await expect(page.getByRole('status')).toContainText(`${name} is back`)
+      await expect(page.getByRole('status')).toBeFocused()
+      await expect(page.getByRole('row', { name: new RegExp(name) })).toHaveCount(1)
+      // A repeated Undo (a second request) changes nothing and is not an error (D-044).
+      const again = await page.request.post(`/api/v1/accounts/${id}/undo-delete`)
+      expect(again.ok()).toBeTruthy()
+      await page.goto('/accounts')
+      await expect(page.getByRole('row', { name: new RegExp(name) })).toHaveCount(1)
+    })
+
+    test(`V2_ACCOUNT_LIFECYCLE_006 an account with saved history cannot be deleted; Archive is offered and Cancel changes nothing (${width}px)`, async ({
+      page,
+    }) => {
+      const used = await createAccount(page, `Used Savings ${width}`, 'savings', '300.00')
+      const other = await createAccount(page, `Used Checking ${width}`, 'checking', '0.00')
+      const moved = await page.request.post('/api/v1/transfers', {
+        headers: { 'Idempotency-Key': `e2e-delete-move-${width}` },
+        data: {
+          fromAccountId: used,
+          toAccountId: other,
+          amount: '300.00',
+          occurredOn: '2026-09-10',
+          enteredByMemberId: await ownerId(page),
+        },
+      })
+      expect(moved.ok()).toBeTruthy()
+      await page.goto(`/accounts/${used}`)
+      const opener = page.getByRole('button', { name: 'Delete account' })
+      await opener.click()
+      const review = page.getByRole('region', { name: `Review deleting Used Savings ${width}` })
+      await expectFocusInside(review)
+      await expect(review).toContainText('Saved history must be retained')
+      await expect(review).toContainText('1 saved entry')
+      await expect(review.getByRole('button', { name: /^Delete / })).toHaveCount(0)
+      await review.getByRole('button', { name: 'Review archiving instead' }).click()
+      await expect(
+        page.getByRole('region', { name: `Review archiving Used Savings ${width}` }),
+      ).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await expect(opener).toBeFocused()
+      await expect(page.getByRole('main')).toContainText('Active')
     })
   })
 }

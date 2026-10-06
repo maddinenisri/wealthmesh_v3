@@ -290,6 +290,17 @@ export function mockApi(
     requests: [] as string[],
   }
   let nextId = 1
+  /** Accounts deleted through the API; Undo puts them back. */
+  const deletedAccounts: MockAccount[] = []
+  const deleteBlockers = (account: MockAccount): string[] => {
+    const reasons: string[] = []
+    const entries = state.activity.filter((a) => a.accountId === account.id).length
+    if (entries > 0)
+      reasons.push(`${entries} saved ${entries === 1 ? 'entry' : 'entries'}, removed ones included`)
+    if (Number(account.openingAmount) !== 0)
+      reasons.push(`a starting Balance of ${Number(account.openingAmount).toFixed(2)}`)
+    return reasons
+  }
   const categoryEvents = new Map<string, Record<string, unknown>[]>()
   const noteEvent = (
     id: string,
@@ -841,6 +852,35 @@ export function mockApi(
         return HttpResponse.json(existing)
       }),
     ),
+    http.get('*/api/v1/accounts/:id/lifecycle', ({ request, params }) => {
+      log(request)
+      const existing = state.accounts.find((a) => a.id === params.id)
+      if (!existing) return problem(404, `Account not found: ${String(params.id)}`)
+      const reasons = deleteBlockers(existing)
+      return HttpResponse.json({ canDelete: reasons.length === 0, deleteBlockedBy: reasons })
+    }),
+    http.post('*/api/v1/accounts/:id/delete', ({ request, params }) => {
+      log(request)
+      const index = state.accounts.findIndex((a) => a.id === params.id)
+      if (index < 0) return problem(404, `Account not found: ${String(params.id)}`)
+      const reasons = deleteBlockers(state.accounts[index])
+      if (reasons.length > 0)
+        return problem(
+          409,
+          `${state.accounts[index].name} has saved history that must be retained.`,
+        )
+      const [removed] = state.accounts.splice(index, 1)
+      deletedAccounts.push(removed)
+      return HttpResponse.json(removed)
+    }),
+    http.post('*/api/v1/accounts/:id/undo-delete', ({ request, params }) => {
+      log(request)
+      const back = deletedAccounts.findIndex((a) => a.id === params.id)
+      if (back >= 0) state.accounts.push(...deletedAccounts.splice(back, 1))
+      const existing = state.accounts.find((a) => a.id === params.id)
+      if (!existing) return problem(404, `Account not found: ${String(params.id)}`)
+      return HttpResponse.json(existing)
+    }),
     http.get('*/api/v1/today', ({ request }) => {
       log(request)
       return HttpResponse.json({ today })

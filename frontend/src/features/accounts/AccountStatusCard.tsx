@@ -1,23 +1,38 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router'
 import type { Account } from '../../api/accounts'
 import { Badge, Button, Card, CardTitle, FormAlert } from '../../design-system'
-import { useChangeAccountStatus } from '../../hooks/useAccounts'
+import {
+  useAccountLifecycle,
+  useChangeAccountStatus,
+  useDeleteAccount,
+} from '../../hooks/useAccounts'
 import { Panel } from '../activity/Panel'
 import { balanceText, isCard } from './cardBalance'
 import { STATUS_LABEL } from './statusLabel'
 import { useStateChangeFocus } from './useStateChangeFocus'
 
-type Review = 'archive' | 'restore' | 'close' | 'reopen'
+type Review = 'archive' | 'restore' | 'close' | 'reopen' | 'delete'
 
 /** Archive, restore, close or reopen: each reviewed first, and none of them changes money (A1, A2). */
 export function AccountStatusCard({ account }: { account: Account }) {
   const [review, setReview] = useState<Review | null>(null)
   const { message, statusRef, begin, changed } = useStateChangeFocus(review !== null)
   const change = useChangeAccountStatus(account.id)
+  const remove = useDeleteAccount(account.id)
+  const facts = useAccountLifecycle(account.id, review === 'delete')
+  const navigate = useNavigate()
   const figure = balanceText(account.type, account.balance.amount)
   const atZero = Number(account.balance.amount) === 0
 
-  const confirm = (action: Review) =>
+  // Deleting takes the account's page away, so the account list takes focus there (its status line, with Undo).
+  const confirmDelete = () =>
+    remove.mutate(undefined, {
+      onSuccess: () =>
+        navigate('/accounts', { state: { deleted: { id: account.id, name: account.name } } }),
+    })
+
+  const confirm = (action: Exclude<Review, 'delete'>) =>
     change.mutate(action, {
       onSuccess: () => {
         setReview(null)
@@ -76,6 +91,7 @@ export function AccountStatusCard({ account }: { account: Account }) {
                   restore: `Review restoring ${account.name}`,
                   close: `Review closing ${account.name}`,
                   reopen: `Review reopening ${account.name}`,
+                  delete: `Review deleting ${account.name}`,
                 }[review]
               }
             </h3>
@@ -110,25 +126,73 @@ export function AccountStatusCard({ account }: { account: Account }) {
                   it, then review closing again.
                 </p>
               )
+            ) : review === 'delete' ? (
+              <>
+                {facts.isPending && <p className="text-sm">Checking what is saved on it</p>}
+                {facts.isError && <FormAlert message={facts.error.message} />}
+                {facts.data?.canDelete && (
+                  <p className="text-sm">
+                    {account.name} has no saved history, so it can be deleted. It leaves the account
+                    list and wealth does not change. You can Undo right after.
+                  </p>
+                )}
+                {facts.data && !facts.data.canDelete && (
+                  <>
+                    <p className="text-sm">
+                      Saved history must be retained, so {account.name} cannot be deleted:
+                    </p>
+                    <ul className="list-disc pl-5 text-sm">
+                      {facts.data.deleteBlockedBy.map((reason) => (
+                        <li key={reason}>{reason}</li>
+                      ))}
+                    </ul>
+                    <p className="text-sm">
+                      Choose Archive to hide it, or Close once its Balance is zero. Nothing changes
+                      until you do.
+                    </p>
+                  </>
+                )}
+              </>
             ) : (
               <p className="text-sm">
                 {account.name} returns to the active list. Its history is as it was.
               </p>
             )}
-            <FormAlert message={change.error?.message} />
-            <div className="flex gap-2">
-              <Button
-                disabled={change.isPending || (review === 'close' && !atZero)}
-                onClick={() => confirm(review)}
-              >
-                {change.isPending
-                  ? 'Saving'
-                  : `${{ archive: 'Archive', restore: 'Restore', close: 'Close', reopen: 'Reopen' }[review]} ${account.name}`}
-              </Button>
+            <FormAlert message={(review === 'delete' ? remove.error : change.error)?.message} />
+            <div className="flex flex-wrap gap-2">
+              {review === 'delete' && facts.data && !facts.data.canDelete && (
+                <>
+                  <Button variant="secondary" onClick={() => setReview('archive')}>
+                    Review archiving instead
+                  </Button>
+                  {account.status === 'active' && (
+                    <Button variant="secondary" onClick={() => setReview('close')}>
+                      Review closing instead
+                    </Button>
+                  )}
+                </>
+              )}
+              {review === 'delete' ? (
+                facts.data?.canDelete && (
+                  <Button variant="danger" disabled={remove.isPending} onClick={confirmDelete}>
+                    {remove.isPending ? 'Deleting' : `Delete ${account.name}`}
+                  </Button>
+                )
+              ) : (
+                <Button
+                  disabled={change.isPending || (review === 'close' && !atZero)}
+                  onClick={() => confirm(review)}
+                >
+                  {change.isPending
+                    ? 'Saving'
+                    : `${{ archive: 'Archive', restore: 'Restore', close: 'Close', reopen: 'Reopen' }[review]} ${account.name}`}
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 onClick={() => {
                   change.reset()
+                  remove.reset()
                   setReview(null)
                 }}
               >
@@ -164,6 +228,16 @@ export function AccountStatusCard({ account }: { account: Account }) {
               Close account
             </Button>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              begin()
+              setReview('delete')
+            }}
+          >
+            Delete account
+          </Button>
           {account.status === 'closed' && (
             <Button
               variant="secondary"
