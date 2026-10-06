@@ -22,7 +22,8 @@ import { ChangeToTransfer } from '../transfers/ChangeToTransfer'
 import { TransferChange, type TransferTarget } from '../transfers/TransferChange'
 import { usableAccounts } from '../transfers/accountChoice'
 import { TransferForm } from '../transfers/TransferForm'
-import { accountTypeLabel } from './accountTypes'
+import { ValuedAccount } from '../values/ValuedAccount'
+import { accountTypeLabel, isValued } from './accountTypes'
 import { AccountStatusCard } from './AccountStatusCard'
 import { STATUS_LABEL } from './statusLabel'
 import { BalanceFigure } from './BalanceFigure'
@@ -75,7 +76,11 @@ export function AccountDetailPage() {
             owners={ownerNames(account.data.ownerMemberIds, members)}
           />
           <AccountStatusCard account={account.data} />
-          <Activity account={account.data} members={members} />
+          {isValued(account.data.type) ? (
+            <ValuedAccount account={account.data} />
+          ) : (
+            <Activity account={account.data} members={members} />
+          )}
         </>
       )}
     </div>

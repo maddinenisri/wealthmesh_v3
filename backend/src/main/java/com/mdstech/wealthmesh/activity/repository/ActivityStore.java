@@ -62,16 +62,40 @@ public class ActivityStore {
         public static final Delta NONE = new Delta(BigDecimal.ZERO, null);
     }
 
+    /**
+     * The latest effective dated value of each valued account (a property or other asset): not removed, not replaced
+     * by a correction, not a plan. This is the one place that says which value counts; a valued account's Balance is
+     * that value, so its change from the opening amount is read as a Delta and every `opening + delta` reader stays
+     * as it is (D-050).
+     */
+    static final String EFFECTIVE_VALUES = """
+            SELECT DISTINCT ON (v.account_id) v.account_id, v.amount, v.value_on FROM account_value v
+            WHERE v.removed_at IS NULL AND v.replaced_at IS NULL AND NOT v.planned
+            ORDER BY v.account_id, v.value_on DESC, v.created_at DESC""";
+
+    private static final String VALUED_DELTAS = "SELECT e.account_id, e.amount - ac.opening_amount AS delta, "
+            + "e.value_on AS latest FROM (" + EFFECTIVE_VALUES + ") e JOIN account ac ON ac.id = e.account_id";
+
     public Mono<Map<UUID, Delta>> deltasByAccount() {
-        return client.sql("SELECT account_id, SUM(" + SIGNED + ") AS delta, MAX(occurred_on) AS latest "
-                        + "FROM activity WHERE removed_at IS NULL GROUP BY account_id")
-                .map((row, meta) -> Map.entry(row.get("account_id", UUID.class),
-                        new Delta(row.get("delta", BigDecimal.class), row.get("latest", LocalDate.class))))
-                .all().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        return Mono.zip(
+                client.sql("SELECT account_id, SUM(" + SIGNED + ") AS delta, MAX(occurred_on) AS latest "
+                                + "FROM activity WHERE removed_at IS NULL GROUP BY account_id")
+                        .map((row, meta) -> Map.entry(row.get("account_id", UUID.class),
+                                new Delta(row.get("delta", BigDecimal.class), row.get("latest", LocalDate.class))))
+                        .all().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)),
+                client.sql(VALUED_DELTAS)
+                        .map((row, meta) -> Map.entry(row.get("account_id", UUID.class),
+                                new Delta(row.get("delta", BigDecimal.class), row.get("latest", LocalDate.class))))
+                        .all().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
+                .map(both -> {
+                    Map<UUID, Delta> all = new java.util.HashMap<>(both.getT1());
+                    all.putAll(both.getT2());
+                    return all;
+                });
     }
 
     public Mono<Delta> deltaOf(UUID accountId) {
-        return client.sql("SELECT SUM(" + SIGNED + ") AS delta, MAX(occurred_on) AS latest "
+        Mono<Delta> ledger = client.sql("SELECT SUM(" + SIGNED + ") AS delta, MAX(occurred_on) AS latest "
                         + "FROM activity WHERE removed_at IS NULL AND account_id = :account")
                 .bind("account", accountId)
                 .map((row, meta) -> {
@@ -79,6 +103,9 @@ public class ActivityStore {
                     return delta == null ? Delta.NONE : new Delta(delta, row.get("latest", LocalDate.class));
                 })
                 .one().defaultIfEmpty(Delta.NONE);
+        return client.sql(VALUED_DELTAS + " WHERE e.account_id = :account").bind("account", accountId)
+                .map((row, meta) -> new Delta(row.get("delta", BigDecimal.class), row.get("latest", LocalDate.class)))
+                .one().switchIfEmpty(ledger);
     }
 
     /** How many entries that still count are dated after `today` (a close refuses while any exist). */

@@ -14,6 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
 import com.mdstech.wealthmesh.account.domain.AccountState;
+import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.activity.service.EntryValidator;
@@ -88,6 +89,9 @@ public class ReminderService {
                                 new EntryValidator.Stored(existing.categoryId(), null, java.util.List.of()))
                         .flatMap(entry -> replay(existing, entry)))
                 .switchIfEmpty(Mono.defer(() -> Mono.fromCallable(() -> AccountState.requireOpen(account))
+                        .filter(open -> AccountType.holdsActivity(open.type()))
+                        .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "Money in and out cannot be recorded on this type of account yet")))
                         .flatMap(open -> parsed(open, request))
                         .flatMap(entry -> reminders.save(new Reminder(null, entry.accountId(), entry.kind(),
                                 entry.amount(), entry.occurredOn(), entry.description(), entry.categoryId(),

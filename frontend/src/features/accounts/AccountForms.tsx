@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useForm, useWatch, type Control } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router'
 import type { Account } from '../../api/accounts'
@@ -11,8 +12,9 @@ import {
   TextField,
 } from '../../design-system'
 import { useCreateAccount, useUpdateAccount } from '../../hooks/useAccounts'
-import { parseAmount } from '../../lib/money'
-import { ACCOUNT_TYPES } from './accountTypes'
+import { formatMoney, parseAmount } from '../../lib/money'
+import { Panel } from '../activity/Panel'
+import { ACCOUNT_TYPES, accountTypeLabel, valuedNoun } from './accountTypes'
 import { isCard } from './cardBalance'
 import { memberLabel } from './ownerNames'
 
@@ -76,9 +78,18 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       balanceSide: 'owed',
     },
   })
-  const card = isCard(useWatch({ control, name: 'type' }))
+  const typeValue = useWatch({ control, name: 'type' })
+  const card = isCard(typeValue)
+  const noun = valuedNoun(typeValue)
+  // A property or other asset is reviewed before it is saved (PROPERTY_002): the review says what it will start at.
+  const [review, setReview] = useState<SetupValues | null>(null)
+  const owners = (ids: string[]) =>
+    members
+      .filter((member) => ids.includes(member.id))
+      .map(memberLabel)
+      .join(', ')
 
-  const onSubmit = handleSubmit((values) =>
+  const save = (values: SetupValues) =>
     create
       .mutateAsync({
         type: values.type,
@@ -93,8 +104,49 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       .then(
         () => navigate('/accounts'),
         () => undefined,
-      ),
-  )
+      )
+  const onSubmit = handleSubmit((values) => {
+    if (valuedNoun(values.type)) {
+      create.reset()
+      setReview(values)
+      return undefined
+    }
+    return save(values)
+  })
+
+  if (review) {
+    const amount = review.balance.trim() === '' ? 0 : Number(parseAmount(review.balance))
+    return (
+      <Panel>
+        <section aria-labelledby="setup-review-heading" className="flex max-w-md flex-col gap-3">
+          <h2 id="setup-review-heading" className="text-lg font-semibold">
+            Review new {accountTypeLabel(review.type).toLowerCase()}
+          </h2>
+          <FormAlert message={create.error?.message} />
+          <p>
+            {review.name.trim()} will start at {formatMoney(amount)} on {review.openedOn}.
+          </p>
+          {review.balance.trim() === '' && (
+            <p className="text-sm text-ink-muted">
+              The Balance was left blank, so it starts at $0.00. Saving completes the setup.
+            </p>
+          )}
+          <p className="text-sm text-ink-muted">Owners: {owners(review.ownerMemberIds)}.</p>
+          <div className="flex gap-2">
+            <Button type="button" disabled={create.isPending} onClick={() => void save(review)}>
+              {create.isPending ? 'Saving' : 'Confirm'}
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setReview(null)}>
+              Back
+            </Button>
+            <Link to="/accounts" className={buttonStyles({ variant: 'ghost' })}>
+              Cancel
+            </Link>
+          </div>
+        </section>
+      </Panel>
+    )
+  }
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex max-w-md flex-col gap-4">
@@ -135,7 +187,9 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
           validate: (value) => {
             if (value.trim() === '') return true
             const amount = parseAmount(value)
-            return (amount !== null && !(card && amount.startsWith('-'))) || 'Enter a valid amount'
+            if (amount === null) return 'Enter a valid amount'
+            if (noun && amount.startsWith('-')) return `Enter zero or a positive ${noun} value`
+            return !(card && amount.startsWith('-')) || 'Enter a valid amount'
           },
         }}
       />
@@ -152,7 +206,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       )}
       <div className="flex gap-2">
         <Button type="submit" disabled={create.isPending}>
-          {create.isPending ? 'Saving' : 'Save account'}
+          {create.isPending ? 'Saving' : noun ? 'Review' : 'Save account'}
         </Button>
         <Link to="/accounts" className={buttonStyles({ variant: 'ghost' })}>
           Cancel

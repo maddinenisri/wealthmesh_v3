@@ -104,6 +104,10 @@ public class AccountService {
         AccountType type = AccountType.fromWire(request.type())
                 .orElseThrow(() -> bad("Unsupported account type"));
         opening = signed(type, opening, request.balanceSide());
+        if (type.valued() && opening.signum() < 0) {
+            throw bad(type == AccountType.PROPERTY ? "Enter zero or a positive property value"
+                    : "Enter zero or a positive asset value");
+        }
         LocalDate openedOn = request.openedOn() == null ? today : request.openedOn();
         if (openedOn.isAfter(today)) {
             throw bad("The opening date cannot be in the future");

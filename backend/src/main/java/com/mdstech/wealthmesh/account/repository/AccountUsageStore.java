@@ -19,10 +19,12 @@ import reactor.core.publisher.Mono;
 public class AccountUsageStore {
 
     /** Saved history by kind. `entries` counts every activity row, removed and replaced ones too. */
-    public record Usage(long entries, long reminders, long statements, long revisions, long schedules) {
+    public record Usage(long entries, long reminders, long statements, long revisions, long schedules,
+            long values) {
 
         public boolean unused() {
-            return entries == 0 && reminders == 0 && statements == 0 && revisions == 0 && schedules == 0;
+            return entries == 0 && reminders == 0 && statements == 0 && revisions == 0 && schedules == 0
+                    && values == 0;
         }
     }
 
@@ -39,12 +41,20 @@ public class AccountUsageStore {
                                (SELECT COUNT(*) FROM statement WHERE account_id = :id) AS statements,
                                (SELECT COUNT(*) FROM opening_revision WHERE account_id = :id) AS revisions,
                                (SELECT COUNT(*) FROM recurring_schedule
-                                WHERE account_id = :id AND removed_at IS NULL) AS schedules""")
+                                WHERE account_id = :id AND removed_at IS NULL) AS schedules,
+                               (SELECT COUNT(*) FROM account_value WHERE account_id = :id) AS dated_values""")
                 .bind("id", accountId)
                 .map((row, meta) -> new Usage(row.get("entries", Long.class), row.get("reminders", Long.class),
                         row.get("statements", Long.class), row.get("revisions", Long.class),
-                        row.get("schedules", Long.class)))
+                        row.get("schedules", Long.class), row.get("dated_values", Long.class)))
                 .one();
+    }
+
+    /** Plans (future-dated values kept as plans) of a valued account: a close refuses while any exist. */
+    public Mono<Long> plannedValues(UUID accountId) {
+        return client.sql("SELECT COUNT(*) AS n FROM account_value WHERE account_id = :id AND planned "
+                        + "AND removed_at IS NULL")
+                .bind("id", accountId).map((row, meta) -> row.get("n", Long.class)).one();
     }
 
     /** Records a change of state; the caller runs it in the same transaction as the change. */

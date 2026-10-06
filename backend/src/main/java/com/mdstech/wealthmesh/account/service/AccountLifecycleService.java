@@ -16,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
 import com.mdstech.wealthmesh.account.domain.AccountState;
+import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.dto.AccountEvent;
 import com.mdstech.wealthmesh.account.dto.AccountLifecycle;
 import com.mdstech.wealthmesh.account.dto.AccountResponse;
@@ -143,7 +144,16 @@ public class AccountLifecycleService {
             BigDecimal balance = account.openingAmount().add(delta.amount());
             if (balance.signum() != 0) {
                 return Mono.error(conflict("Closing " + account.name() + " needs a zero Balance. It has "
-                        + dollars(balance) + "; move it or pay it first."));
+                        + dollars(balance) + (AccountType.isValued(account.type())
+                                ? "; record a $0.00 value first (for example when it is sold)."
+                                : "; move it or pay it first.")));
+            }
+            if (AccountType.isValued(account.type())) {
+                return usage.plannedValues(account.id()).flatMap(planned -> planned > 0
+                        ? Mono.<Void>error(conflict(account.name() + " has " + planned + " planned value"
+                                + (planned == 1 ? "" : "s") + ". Remove " + (planned == 1 ? "it" : "them")
+                                + " first, then close."))
+                        : Mono.<Void>empty());
             }
             return store.countAfter(account.id(), LocalDate.now(clock)).flatMap(later -> later > 0
                     ? Mono.<Void>error(conflict(account.name() + " has " + later + " entr" + (later == 1 ? "y" : "ies")
@@ -202,6 +212,9 @@ public class AccountLifecycleService {
         }
         if (found.schedules() > 0) {
             reasons.add(counted(found.schedules(), "recurring bill", "recurring bills"));
+        }
+        if (found.values() > 0) {
+            reasons.add(counted(found.values(), "dated value", "dated values") + " (removed ones count)");
         }
         if (found.revisions() > 0) {
             reasons.add("a starting-balance correction");

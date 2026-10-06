@@ -236,7 +236,10 @@ public class OpeningRevisionService {
     /** A card's amount is changed with Update balance, not by moving its starting balance. */
     private Mono<Account> loadEditable(UUID id) {
         return load(id).filter(account -> !AccountType.isCard(account.type()))
-                .switchIfEmpty(Mono.error(EntryValidator.bad("Use Update balance")));
+                .switchIfEmpty(Mono.error(EntryValidator.bad("Use Update balance")))
+                .filter(account -> !AccountType.isValued(account.type()))
+                .switchIfEmpty(Mono.error(EntryValidator.bad(
+                        "A property or other asset moves its start by recording an earlier value")));
     }
 
     private static ResponseStatusException conflict(String message) {
