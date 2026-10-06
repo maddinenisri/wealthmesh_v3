@@ -178,6 +178,37 @@ export const dismissSuggestion = (suggestion: Suggestion, enteredByMemberId: str
     parse: parseOverview,
   })
 
+/** A change keeps the account, the name and the category: the amount, frequency and next due date. */
+export const changeSchedule = (id: string, key: string, body: ScheduleBody) =>
+  request(`/recurring/${id}`, {
+    method: 'PUT',
+    headers: { 'Idempotency-Key': key },
+    body,
+    parse: parseSchedule,
+  })
+
+export const pauseSchedule = (id: string, enteredByMemberId: string) =>
+  request(`/recurring/${id}/pause`, {
+    method: 'POST',
+    body: { enteredByMemberId },
+    parse: parseSchedule,
+  })
+
+/** Resume at an explicit, reviewed next due date: missed occurrences are not invented. */
+export const resumeSchedule = (id: string, dueOn: string, enteredByMemberId: string) =>
+  request(`/recurring/${id}/resume`, {
+    method: 'POST',
+    body: { enteredByMemberId, dueOn },
+    parse: parseSchedule,
+  })
+
+export const deleteSchedule = (id: string, enteredByMemberId: string) =>
+  request(`/recurring/${id}/delete`, {
+    method: 'POST',
+    body: { enteredByMemberId },
+    parse: parseSchedule,
+  })
+
 export const getRecurring = () => request('/recurring', { parse: parseOverview })
 
 /** What the schedule would look like if saved: the same checks, nothing is written. */

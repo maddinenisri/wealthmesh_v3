@@ -268,3 +268,153 @@ for (const [width, account, description] of [
     }
   })
 }
+
+async function makeSchedule(page: Page, account: string, description: string) {
+  const owner = await ownerId(page)
+  const id = await makeBills(page, account, description)
+  const saved = await page.request.post('/api/v1/recurring', {
+    headers: { 'Idempotency-Key': `e2e-rec-sched-${account}` },
+    data: {
+      description,
+      amount: '180.00',
+      frequency: 'monthly',
+      nextDueOn: '2026-10-05',
+      accountId: id,
+      category: 'Utilities',
+      enteredByMemberId: owner,
+    },
+  })
+  expect(saved.ok()).toBeTruthy()
+  return { id, owner }
+}
+
+for (const [width, account, description] of [
+  [710, 'Recurring Change 710', 'Power 710'],
+  [1280, 'Recurring Change 1280', 'Power 1280'],
+] as const) {
+  test.describe.serial(`Recurring schedule changes at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+
+    if (width === 710) {
+      test(`V2_RECURRING_007 changing an estimate is reviewed, Cancel keeps it, Confirm changes the future and not the paid bill (${width}px)`, async ({
+        page,
+      }) => {
+        const { id } = await makeSchedule(page, account, description)
+        await page.goto('/recurring')
+        const item = page.getByRole('listitem').filter({ hasText: description })
+        const opener = item.getByRole('button', { name: 'Change' })
+        await opener.click()
+        await page.getByLabel('Expected amount').fill('200')
+        await page.getByLabel('Frequency').selectOption({ label: 'Weekly' })
+        await page.getByLabel('Next due date').fill('2026-10-09')
+        await page.getByRole('button', { name: 'Review', exact: true }).click()
+        const review = page.getByRole('region', { name: new RegExp(`Review: ${description}`) })
+        await expectFocusInside(review)
+        await expect(review).toContainText('Was $180.00 Monthly')
+        await expect(review).toContainText('2026-10-16')
+        await expectNoSidewaysScroll(page)
+        await review.getByRole('button', { name: 'Cancel' }).click()
+        await expect(opener).toBeFocused()
+        await expect(item).toContainText('Expected $180.00, Monthly')
+
+        await opener.click()
+        await page.getByLabel('Expected amount').fill('200')
+        await page.getByLabel('Frequency').selectOption({ label: 'Weekly' })
+        await page.getByLabel('Next due date').fill('2026-10-09')
+        await page.getByRole('button', { name: 'Review', exact: true }).click()
+        await page.getByRole('button', { name: 'Confirm the change' }).click()
+        const status = page.getByRole('status')
+        await expect(status).toContainText(
+          'now expected $200.00 weekly, next due 2026-10-09, then 2026-10-16',
+        )
+        await expect(status).toBeFocused()
+        await expect(item).toContainText('Expected $200.00, Weekly')
+        const bills = (await (
+          await page.request.get(`/api/v1/accounts/${id}/activity`)
+        ).json()) as {
+          amount: string
+          occurredOn: string
+        }[]
+        expect(bills).toHaveLength(3)
+        expect(bills.map((b) => b.amount)).toEqual(['180.00', '180.00', '180.00'])
+      })
+
+      test(`V2_RECURRING_008 pause, then resume with an explicit date, invents no payment (${width}px)`, async ({
+        page,
+      }) => {
+        await page.goto('/recurring')
+        const item = page.getByRole('listitem').filter({ hasText: description })
+        const pause = item.getByRole('button', { name: 'Pause' })
+        await pause.click()
+        const review = page.getByRole('region', { name: /Review pausing/ })
+        await expectFocusInside(review)
+        await review.getByRole('button', { name: 'Cancel' }).click()
+        await expect(pause).toBeFocused()
+        await pause.click()
+        await page.getByRole('button', { name: 'Confirm pausing' }).click()
+        const status = page.getByRole('status')
+        await expect(status).toContainText('is paused')
+        await expect(status).toBeFocused()
+        await expect(item).toContainText('Paused')
+        await expect(item).not.toContainText('Overdue')
+
+        await item.getByRole('button', { name: 'Resume' }).click()
+        const resume = page.getByRole('region', { name: /Review resuming/ })
+        await expectFocusInside(resume)
+        await expect(resume.getByRole('button', { name: 'Confirm resuming' })).toBeDisabled()
+        await resume.getByLabel('Next due date').fill('2026-11-05')
+        await resume.getByRole('button', { name: 'Confirm resuming' }).click()
+        await expect(page.getByRole('status')).toContainText('next due 2026-11-05')
+        await expect(item).toContainText('Next due 2026-11-05')
+        await expectNoSidewaysScroll(page)
+      })
+    } else {
+      test(`V2_RECURRING_009 deleting an estimate is reviewed and keeps the paid bills (${width}px)`, async ({
+        page,
+      }) => {
+        const { id } = await makeSchedule(page, account, description)
+        await page.goto('/recurring')
+        const item = page.getByRole('listitem').filter({ hasText: description })
+        const opener = item.getByRole('button', { name: 'Delete' })
+        await opener.click()
+        const review = page.getByRole('region', { name: /Review deleting/ })
+        await expectFocusInside(review)
+        await review.getByRole('button', { name: 'Cancel' }).click()
+        await expect(opener).toBeFocused()
+        await expect(item).toBeVisible()
+        await opener.click()
+        await page.getByRole('button', { name: 'Confirm deleting the estimate' }).click()
+        const status = page.getByRole('status')
+        await expect(status).toContainText('is deleted')
+        await expect(status).toContainText('3 recorded bills stay')
+        await expect(status).toBeFocused()
+        await expect(page.getByRole('listitem').filter({ hasText: description })).toHaveCount(0)
+        const bills = (await (
+          await page.request.get(`/api/v1/accounts/${id}/activity`)
+        ).json()) as unknown[]
+        expect(bills).toHaveLength(3)
+      })
+
+      test(`V2_RECURRING_008 a schedule on an archived account stays listed and offers only Pause and Delete (${width}px)`, async ({
+        page,
+      }) => {
+        const { id, owner } = await makeSchedule(
+          page,
+          `${account} archived`,
+          `${description} archived`,
+        )
+        const archived = await page.request.post(`/api/v1/accounts/${id}/archive`, {
+          data: { enteredByMemberId: owner },
+        })
+        expect(archived.ok()).toBeTruthy()
+        await page.goto('/recurring')
+        const item = page.getByRole('listitem').filter({ hasText: `${description} archived` })
+        await expect(item).toContainText('archived account')
+        await expect(item.getByRole('button', { name: 'Change' })).toHaveCount(0)
+        await expect(item.getByRole('button', { name: 'Pause' })).toBeVisible()
+        await expect(item.getByRole('button', { name: 'Delete' })).toBeVisible()
+        await expectNoSidewaysScroll(page)
+      })
+    }
+  })
+}

@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { CATEGORIES, mockApi, type MockAccount } from '../../test/mockApi'
+import { CATEGORIES, mockApi, type MockAccount, type MockSchedule } from '../../test/mockApi'
 import { renderRoute } from '../../test/render'
 
 const household = { id: '11111111-1111-4111-8111-111111111111', name: 'Maya and Sam' }
@@ -212,5 +212,145 @@ describe('recurring bills: suggestions', () => {
     expect(status).toHaveFocus()
     expect(screen.queryByRole('region', { name: 'Suggestions' })).not.toBeInTheDocument()
     expect(api.activity).toHaveLength(3)
+  })
+})
+
+describe('recurring bills: change, pause, resume, delete', () => {
+  const utilities = () => CATEGORIES.find((c) => c.name === 'Utilities')!.id
+  const bill = () => ({
+    id: '55555555-5555-4555-8555-000000000001',
+    accountId: checking.id,
+    kind: 'expense',
+    amount: '180.00',
+    occurredOn: '2026-09-05',
+    description: 'Electricity',
+    categoryId: utilities(),
+    enteredByMemberId: maya.id,
+  })
+  const electricity = (): MockSchedule => ({
+    id: '66666666-6666-4666-8666-000000000001',
+    accountId: checking.id,
+    description: 'Electricity',
+    categoryId: utilities(),
+    amount: '180.00',
+    frequency: 'monthly',
+    status: 'active',
+    nextDueOn: '2026-10-05',
+    anchorDay: 5,
+    occurrences: [],
+    events: [],
+  })
+  const withSchedule = () => ({
+    ...seed(),
+    accounts: [{ ...checking, balance: { amount: '4820.00', asOf: '2026-09-05' } }],
+    activity: [bill()],
+    schedules: [electricity()],
+  })
+
+  it('V2_RECURRING_007 changing the estimate is reviewed against what it was and leaves the paid bill alone', async () => {
+    const api = mockApi(withSchedule())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    await user.click(await screen.findByRole('button', { name: 'Change' }))
+    expect(await screen.findByLabelText('Expected amount')).toHaveValue('180.00')
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+    await user.clear(screen.getByLabelText('Expected amount'))
+    await user.type(screen.getByLabelText('Expected amount'), '200.00')
+    await user.selectOptions(screen.getByLabelText('Frequency'), 'Weekly')
+    fireEvent.change(screen.getByLabelText('Next due date'), { target: { value: '2026-10-09' } })
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    const review = await screen.findByRole('region', { name: /Review: Electricity/ })
+    expect(review).toHaveTextContent('Was $180.00 Monthly, next due 2026-10-05')
+    expect(review).toHaveTextContent('Following occurrence2026-10-16')
+    expect(api.schedules[0].amount).toBe('180.00')
+    await user.click(within(review).getByRole('button', { name: 'Confirm the change' }))
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent(
+      'now expected $200.00 weekly, next due 2026-10-09, then 2026-10-16',
+    )
+    expect(status).toHaveTextContent('Bills already paid are unchanged')
+    expect(status).toHaveFocus()
+    expect(api.activity).toHaveLength(1)
+    expect(api.activity[0].amount).toBe('180.00')
+    expect(api.accounts[0].balance.amount).toBe('4820.00')
+  })
+
+  it('V2_RECURRING_005 a corrected 200.00 that is cancelled leaves the expected amount 180.00 and no expense', async () => {
+    const api = mockApi(withSchedule())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
+    const opener = await screen.findByRole('button', { name: 'Change' })
+    await user.click(opener)
+    await user.clear(await screen.findByLabelText('Expected amount'))
+    await user.type(screen.getByLabelText('Expected amount'), '200.00')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    await screen.findByRole('region', { name: /Review: Electricity/ })
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('region', { name: /Review: Electricity/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Change' })).toHaveFocus()
+    expect(screen.getByRole('region', { name: 'Schedules' })).toHaveTextContent('Expected $180.00')
+    expect(api.schedules[0].amount).toBe('180.00')
+    expect(api.activity).toHaveLength(1)
+  })
+
+  it('V2_RECURRING_008 pausing is reviewed and labels the bill Paused; resuming asks for the next due date', async () => {
+    const api = mockApi(withSchedule())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
+    await user.click(await screen.findByRole('button', { name: 'Pause' }))
+    const review = await screen.findByRole('region', { name: /Review pausing Electricity/ })
+    expect(review).toHaveTextContent('never overdue')
+    await user.click(within(review).getByRole('button', { name: 'Confirm pausing' }))
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('Electricity is paused. No expense or reminder is created')
+    const list = screen.getByRole('region', { name: 'Schedules' })
+    expect(list).toHaveTextContent('Paused')
+    expect(list).toHaveTextContent('no payment is expected until it resumes')
+    expect(api.activity).toHaveLength(1)
+
+    await user.click(await screen.findByRole('button', { name: 'Resume' }))
+    const resume = await screen.findByRole('region', { name: /Review resuming Electricity/ })
+    expect(within(resume).getByRole('button', { name: 'Confirm resuming' })).toBeDisabled()
+    fireEvent.change(within(resume).getByLabelText('Next due date'), {
+      target: { value: '2026-11-05' },
+    })
+    expect(resume).toHaveTextContent('Nothing is recorded for the months it was paused')
+    await user.click(within(resume).getByRole('button', { name: 'Confirm resuming' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Electricity is Active again: expected $180.00, next due 2026-11-05',
+    )
+    expect(screen.getByRole('region', { name: 'Schedules' })).toHaveTextContent('Active')
+    expect(api.activity).toHaveLength(1)
+  })
+
+  it('V2_RECURRING_009 deleting an estimate is reviewed, says no reminder is created and keeps the bill', async () => {
+    const api = mockApi(withSchedule())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    await user.click(await screen.findByRole('button', { name: 'Delete' }))
+    const review = await screen.findByRole('region', { name: /Review deleting the Electricity/ })
+    expect(review).toHaveTextContent('no reminder is created from it')
+    await user.click(within(review).getByRole('button', { name: 'Confirm deleting the estimate' }))
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('The Electricity estimate is deleted')
+    expect(status).toHaveTextContent('1 recorded bill stays')
+    expect(status).toHaveFocus()
+    expect(screen.getByRole('region', { name: 'Schedules' })).toHaveTextContent(
+      'No recurring bills have been saved.',
+    )
+    expect(api.activity).toHaveLength(1)
+    expect(api.reminders).toHaveLength(0)
+  })
+
+  it('V2_RECURRING_008 a schedule on an archived account stays visible and offers only Pause and Delete', async () => {
+    const seeded = withSchedule()
+    seeded.accounts = [{ ...seeded.accounts[0], status: 'archived' }]
+    mockApi(seeded)
+    renderRoute('/recurring')
+    const list = await screen.findByRole('region', { name: 'Schedules' })
+    expect(await within(list).findByText(/archived account/)).toBeInTheDocument()
+    expect(within(list).queryByRole('button', { name: 'Change' })).not.toBeInTheDocument()
+    expect(within(list).getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+    expect(within(list).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
   })
 })

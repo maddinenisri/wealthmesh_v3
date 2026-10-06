@@ -76,6 +76,38 @@ public class RecurringStore {
                 .bind("now", now).map((row, meta) -> row.get("id", UUID.class)).one();
     }
 
+    /** Replaces the amount, frequency and next due date of a schedule (a change; the anchor follows the date). */
+    public Mono<Void> update(UUID id, BigDecimal amount, String frequency, LocalDate nextDueOn) {
+        return client.sql("UPDATE recurring_schedule SET amount = :amount, frequency = :frequency, "
+                        + "next_due_on = :due, anchor_day = :anchor WHERE id = :id")
+                .bind("amount", amount).bind("frequency", frequency).bind("due", nextDueOn)
+                .bind("anchor", nextDueOn.getDayOfMonth()).bind("id", id).then();
+    }
+
+    public Mono<Void> setStatus(UUID id, String status) {
+        return client.sql("UPDATE recurring_schedule SET status = :status WHERE id = :id")
+                .bind("status", status).bind("id", id).then();
+    }
+
+    /** Moves the next occurrence and the day a monthly bill returns to, and sets the status (Resume, Reschedule). */
+    public Mono<Void> setNextDue(UUID id, LocalDate nextDueOn, String status) {
+        return client.sql("UPDATE recurring_schedule SET next_due_on = :due, anchor_day = :anchor, status = :status "
+                        + "WHERE id = :id").bind("due", nextDueOn).bind("anchor", nextDueOn.getDayOfMonth())
+                .bind("status", status).bind("id", id).then();
+    }
+
+    /** Deletes a schedule softly: it leaves every list, its bills and history stay. */
+    public Mono<Void> softDelete(UUID id, Instant at) {
+        return client.sql("UPDATE recurring_schedule SET removed_at = :at WHERE id = :id AND removed_at IS NULL")
+                .bind("at", at).bind("id", id).then();
+    }
+
+    /** The latest event of a schedule: what was done last and the date it named, for a repeat of the same action. */
+    public Mono<String> latestAction(UUID scheduleId) {
+        return client.sql("SELECT action FROM recurring_event WHERE schedule_id = :id ORDER BY at DESC, seq DESC "
+                        + "LIMIT 1").bind("id", scheduleId).map((row, meta) -> row.get("action", String.class)).one();
+    }
+
     /** The occurrences that were paid or dismissed, newest due date first. */
     public Flux<OccurrenceView> occurrences(UUID scheduleId) {
         return client.sql("SELECT due_on, outcome, paid_on, activity_id FROM recurring_occurrence "

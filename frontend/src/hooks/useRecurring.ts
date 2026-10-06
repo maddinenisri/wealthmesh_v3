@@ -1,8 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  changeSchedule,
   createSchedule,
+  deleteSchedule,
   dismissSuggestion,
   getRecurring,
+  pauseSchedule,
+  resumeSchedule,
   reviewSchedule,
   type ScheduleBody,
   type Suggestion,
@@ -36,3 +40,33 @@ export function useCreateSchedule() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: recurringKey }),
   })
 }
+
+/** A change keeps the schedule's id and key, so the form carries its own key (D-024). */
+export function useChangeSchedule(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ key, body }: { key: string; body: ScheduleBody }) =>
+      changeSchedule(id, key, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: recurringKey }),
+  })
+}
+
+/** Pause, resume and delete refresh the list; none of them touches an entry or a Balance. */
+function useScheduleAction<V>(act: (variables: V) => Promise<unknown>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: act,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: recurringKey }),
+  })
+}
+
+export const usePauseSchedule = (id: string) =>
+  useScheduleAction((memberId: string) => pauseSchedule(id, memberId))
+
+export const useResumeSchedule = (id: string) =>
+  useScheduleAction(({ dueOn, memberId }: { dueOn: string; memberId: string }) =>
+    resumeSchedule(id, dueOn, memberId),
+  )
+
+export const useDeleteSchedule = (id: string) =>
+  useScheduleAction((memberId: string) => deleteSchedule(id, memberId))

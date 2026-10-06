@@ -1,16 +1,22 @@
 package com.mdstech.wealthmesh.recurring;
 
+import java.util.UUID;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.recurring.dto.DismissSuggestionRequest;
 import com.mdstech.wealthmesh.recurring.dto.RecurringOverview;
+import com.mdstech.wealthmesh.recurring.dto.RecurringWho;
 import com.mdstech.wealthmesh.recurring.dto.ScheduleRequest;
 import com.mdstech.wealthmesh.recurring.dto.ScheduleView;
 import com.mdstech.wealthmesh.recurring.service.RecurringService;
@@ -31,6 +37,41 @@ public class RecurringController {
     @GetMapping
     public Mono<RecurringOverview> overview() {
         return service.overview();
+    }
+
+    @GetMapping("/{id}")
+    public Mono<ScheduleView> view(@PathVariable UUID id) {
+        return service.view(id);
+    }
+
+    /** Changes the amount, frequency and next due date; 201 when applied, 200 on a replay (D-024). */
+    @PutMapping("/{id}")
+    public Mono<ResponseEntity<ScheduleView>> change(@PathVariable UUID id,
+            @RequestHeader(name = "Idempotency-Key", required = false) String key,
+            @RequestBody ScheduleRequest request) {
+        return service.change(id, key, request).map(RecurringController::saved);
+    }
+
+    @PostMapping("/{id}/pause")
+    public Mono<ScheduleView> pause(@PathVariable UUID id, @RequestBody(required = false) RecurringWho who) {
+        return service.pause(id, memberOf(who));
+    }
+
+    @PostMapping("/{id}/resume")
+    public Mono<ScheduleView> resume(@PathVariable UUID id, @RequestBody(required = false) RecurringWho who) {
+        return service.resume(id, memberOf(who), who.dueOn());
+    }
+
+    @PostMapping("/{id}/delete")
+    public Mono<ScheduleView> delete(@PathVariable UUID id, @RequestBody(required = false) RecurringWho who) {
+        return service.delete(id, memberOf(who));
+    }
+
+    private static UUID memberOf(RecurringWho who) {
+        if (who == null || who.enteredByMemberId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose who entered this");
+        }
+        return who.enteredByMemberId();
     }
 
     /** Dismisses a suggestion without touching any bill; the same request again returns the same list. */

@@ -14,7 +14,7 @@ import org.springframework.http.MediaType;
  * One sweep (slice 12, owner addition 2): delete an account, then hit every read path and every writer that names an
  * account and assert it is absent. Anything added later that reads an account must be added here.
  */
-class DeletedAccountSweepApiTests extends LifecycleTestBase {
+class DeletedAccountSweepApiTests extends RecurringTestBase {
 
     private static String gone;
     private static String live;
@@ -35,8 +35,15 @@ class DeletedAccountSweepApiTests extends LifecycleTestBase {
     @DisplayName("V2_ACCOUNT_LIFECYCLE_005 after a delete the account is absent from every list, read, wealth figure, "
             + "filter and writer")
     void deletedAccountIsAbsentEverywhere() {
+        // A deleted schedule on the account does not block deleting it (an active one would: 409).
+        String schedule = created("s-sched", schedule("Sweep bill", "10.00", "monthly", "2026-10-20", gone,
+                "Utilities"));
+        act(schedule, "delete", null).expectStatus().isOk();
+        String liveSchedule = created("s-live", schedule("Live bill", "10.00", "monthly", "2026-10-20", live,
+                "Utilities"));
         act(gone, "delete").expectStatus().isOk();
         List<String> found = new ArrayList<>();
+        recurringIsAbsent(found, schedule, liveSchedule);
         listsAndFilters(found);
         readsOfTheAccount(found);
         entryWriters(found);
@@ -44,6 +51,21 @@ class DeletedAccountSweepApiTests extends LifecycleTestBase {
         movementWriters(found);
         assertThat(found).as("every path answered 404").isEmpty();
         assertBalance(live, "4990.00");
+    }
+
+    /** A schedule on a deleted account, deleted or not, is absent from the list and from every writer (slice 14). */
+    private void recurringIsAbsent(List<String> found, String schedule, String liveSchedule) {
+        webTestClient.get().uri("/api/v1/recurring").exchange().expectBody(String.class)
+                .value(body -> assertThat(body).doesNotContain("Sweep bill").doesNotContain(gone)
+                        .contains("Live bill").contains(liveSchedule));
+        expectNotFound(found, "GET recurring schedule", statusOf(scheduleOf(schedule)));
+        expectNotFound(found, "PUT recurring schedule", statusOf(change(schedule, "s-chg", schedule("Sweep bill",
+                "11.00", "monthly", "2026-10-20", gone, "Utilities"))));
+        for (String action : List.of("pause", "resume", "delete")) {
+            expectNotFound(found, "POST recurring " + action, statusOf(act(schedule, action, "2026-11-20")));
+        }
+        expectNotFound(found, "POST recurring create", statusOf(createSchedule("s-new", schedule("Sweep new",
+                "12.00", "monthly", "2026-10-20", gone, "Utilities"))));
     }
 
     private void listsAndFilters(List<String> found) {

@@ -96,12 +96,12 @@ export function ScheduleForm({
   )
 
   const body = (values: Values): ScheduleBody => ({
-    description: values.description.trim(),
+    description: changing?.description ?? values.description.trim(),
     amount: parseAmount(values.amount)!,
     frequency: values.frequency,
     nextDueOn: values.nextDueOn,
     accountId: changing?.accountId ?? values.accountId,
-    categoryId: values.categoryId,
+    categoryId: changing?.categoryId ?? values.categoryId,
     enteredByMemberId: member!.id,
   })
 
@@ -186,12 +186,18 @@ export function ScheduleForm({
           onSubmit={handleSubmit(toReview)}
         >
           <div className="grid gap-4 md:grid-cols-2">
-            <TextField
-              control={control}
-              name="description"
-              label="Name"
-              rules={{ validate: (value) => value.trim() !== '' || 'Enter what this bill is' }}
-            />
+            {changing ? (
+              <p className="text-sm">
+                <strong>{changing.description}</strong> ({changing.categoryName})
+              </p>
+            ) : (
+              <TextField
+                control={control}
+                name="description"
+                label="Name"
+                rules={{ validate: (value) => value.trim() !== '' || 'Enter what this bill is' }}
+              />
+            )}
             <TextField
               control={control}
               name="amount"
@@ -234,19 +240,21 @@ export function ScheduleForm({
                 ))}
               </SelectField>
             )}
-            <SelectField
-              control={control}
-              name="categoryId"
-              label="Category"
-              rules={{ required: 'Choose a category' }}
-            >
-              <option value="">Choose a category</option>
-              {(categories.data ?? []).map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </SelectField>
+            {!changing && (
+              <SelectField
+                control={control}
+                name="categoryId"
+                label="Category"
+                rules={{ required: 'Choose a category' }}
+              >
+                <option value="">Choose a category</option>
+                {(categories.data ?? []).map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </SelectField>
+            )}
           </div>
           <EnteredBy members={members} member={member} setMemberId={setMemberId} />
           <div className="flex gap-2">

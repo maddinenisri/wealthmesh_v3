@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -212,9 +213,141 @@ public class RecurringService {
                 .flatMap(id -> store.schedule(id).flatMap(this::view)).map(v -> new Saved(v, true));
     }
 
+    /**
+     * Changes the amount, frequency and next due date of a schedule: its future only. Paid bills are entries and are
+     * never touched (RECURRING_007). A retry replays; the account must be open, as for any change that sets money
+     * to be paid (Q-048).
+     */
+    public Mono<Saved> change(UUID id, String key, ScheduleRequest request) {
+        return Mono.fromCallable(() -> {
+            requireKey(key);
+            return parseChange(request);
+        }).flatMap(parsed -> {
+            Instant now = clock.instant();
+            Instant cutoff = now.minus(KEY_LIFETIME);
+            String fingerprint = "change|" + id + "|" + parsed.amount + "|" + parsed.frequency + "|"
+                    + parsed.nextDueOn;
+            return transactions.transactional(householdLock.lock()
+                    .flatMap(householdId -> replayed(key, cutoff, fingerprint)
+                            .switchIfEmpty(Mono.defer(() -> validator.memberLocked(householdId, parsed.memberId)
+                                    .then(Mono.defer(() -> current(id)))
+                                    .flatMap(this::openAccount)
+                                    .flatMap(s -> store.update(id, parsed.amount, parsed.frequency, parsed.nextDueOn)
+                                            .then(Mono.defer(() -> store.recordEvent(id, "changed", parsed.memberId,
+                                                    now, key, fingerprint, changes(s, parsed))))
+                                            .then(Mono.defer(() -> view(id))))
+                                    .map(v -> new Saved(v, true))))));
+        });
+    }
+
+    private static String changes(RecurringStore.Schedule was, Parsed now) {
+        List<String> parts = new ArrayList<>();
+        parts.add(was.amount().compareTo(now.amount) == 0 ? "Amount " + dollars(now.amount) + " unchanged"
+                : "Amount " + dollars(was.amount()) + " to " + dollars(now.amount));
+        parts.add(was.frequency().equals(now.frequency) ? "Frequency " + now.frequency + " unchanged"
+                : "Frequency " + was.frequency() + " to " + now.frequency);
+        parts.add(was.nextDueOn().equals(now.nextDueOn) ? "Next due " + now.nextDueOn + " unchanged"
+                : "Next due " + was.nextDueOn() + " to " + now.nextDueOn);
+        return String.join("; ", parts);
+    }
+
+    /** Pauses a schedule: no occurrence is expected, none is overdue, nothing is recorded. A repeat is the same. */
+    public Mono<ScheduleView> pause(UUID id, UUID memberId) {
+        return acting(id, memberId, false, s -> "paused".equals(s.status()) ? Mono.empty()
+                : store.setStatus(id, "paused").then(Mono.defer(() -> store.recordEvent(id, "paused", memberId,
+                        clock.instant(), null, null, "Next due " + s.nextDueOn() + " is not expected while paused"))));
+    }
+
+    /**
+     * Resumes a paused schedule at an explicit, reviewed next due date; missed occurrences are not invented
+     * (RECURRING_008). The account must be open. A repeat of the same Resume returns the same result.
+     */
+    public Mono<ScheduleView> resume(UUID id, UUID memberId, LocalDate dueOn) {
+        return Mono.fromCallable(() -> {
+            if (dueOn == null) {
+                throw bad("Enter the next due date");
+            }
+            return dueOn;
+        }).flatMap(date -> acting(id, memberId, true, s -> {
+            if ("active".equals(s.status())) {
+                return store.latestAction(id).filter("resumed"::equals).filter(a -> s.nextDueOn().equals(date))
+                        .switchIfEmpty(Mono.error(conflict("This bill is not paused"))).then();
+            }
+            return store.setNextDue(id, date, "active").then(Mono.defer(() -> store.recordEvent(id, "resumed",
+                    memberId, clock.instant(), null, null, "Next due " + date + ", expected "
+                            + dollars(s.amount()))));
+        }));
+    }
+
+    /**
+     * Deletes a schedule softly: no future reminder or expense comes from it and every paid bill stays. The bills that
+     * supported it are not offered again as a suggestion: the household said it does not want this estimate.
+     */
+    public Mono<ScheduleView> delete(UUID id, UUID memberId) {
+        return acting(id, memberId, false, s -> s.removedAt() != null ? Mono.empty()
+                : store.softDelete(id, clock.instant())
+                        .then(Mono.defer(() -> store.dismiss(s.accountId(), s.categoryId(),
+                                descriptionKey(s.description()), memberId, clock.instant())))
+                        .then(Mono.defer(() -> store.recordEvent(id, "deleted", memberId, clock.instant(), null,
+                                null, "Deleted " + s.description() + ", expected " + dollars(s.amount())))), true);
+    }
+
+    private Mono<ScheduleView> acting(UUID id, UUID memberId, boolean needsOpenAccount,
+            java.util.function.Function<RecurringStore.Schedule, Mono<Void>> apply) {
+        return acting(id, memberId, needsOpenAccount, apply, false);
+    }
+
+    /**
+     * One action on a saved schedule, under the lock order of {@link HouseholdLock}: household, the member under a
+     * share lock, the schedule, the account when money would follow, then the change and its event. A deleted
+     * schedule is gone to every action but a repeat of Delete.
+     */
+    private Mono<ScheduleView> acting(UUID id, UUID memberId, boolean needsOpenAccount,
+            java.util.function.Function<RecurringStore.Schedule, Mono<Void>> apply, boolean allowDeleted) {
+        return transactions.transactional(householdLock.lock()
+                .flatMap(householdId -> validator.memberLocked(householdId, memberId))
+                .then(Mono.defer(() -> store.scheduleAnyState(id)))
+                .switchIfEmpty(Mono.error(notFound("Recurring bill not found: " + id)))
+                .filter(s -> allowDeleted || s.removedAt() == null)
+                .switchIfEmpty(Mono.error(notFound("Recurring bill not found: " + id)))
+                .flatMap(s -> needsOpenAccount ? openAccount(s) : Mono.just(s))
+                .flatMap(apply)
+                .then(Mono.defer(() -> store.scheduleAnyState(id)))
+                .flatMap(this::view));
+    }
+
+    /** The saved, not deleted schedule; 404 when there is none. */
+    private Mono<RecurringStore.Schedule> current(UUID id) {
+        return store.schedule(id).switchIfEmpty(Mono.error(notFound("Recurring bill not found: " + id)));
+    }
+
+    /** Locks the schedule's account row and refuses it when it is archived or closed (new money needs an open one). */
+    private Mono<RecurringStore.Schedule> openAccount(RecurringStore.Schedule s) {
+        return activity.lockAccount(s.accountId()).then(Mono.defer(() -> accounts.findById(s.accountId())))
+                .switchIfEmpty(Mono.error(notFound("Account not found: " + s.accountId())))
+                .flatMap(account -> Mono.fromCallable(() -> AccountState.requireOpen(account)))
+                .thenReturn(s);
+    }
+
     /** What a schedule request must be: a name, an amount above zero, a frequency, a first due date and an account. */
     private record Parsed(String description, BigDecimal amount, String frequency, LocalDate nextDueOn,
             UUID accountId, String category, UUID categoryId, UUID memberId) {
+    }
+
+    /** A change names the amount, the frequency and the next due date; the rest of the schedule stays. */
+    private static Parsed parseChange(ScheduleRequest request) {
+        if (request == null) {
+            throw bad("Enter the change to save");
+        }
+        BigDecimal amount = EntryValidator.amount(request.amount());
+        if (!Recurrence.valid(request.frequency())) {
+            throw bad("Choose Weekly, Monthly or Yearly");
+        }
+        if (request.nextDueOn() == null) {
+            throw bad("Enter the next due date");
+        }
+        return new Parsed(null, amount, request.frequency(), request.nextDueOn(), null, null, null,
+                request.enteredByMemberId());
     }
 
     private static Parsed parse(ScheduleRequest request) {

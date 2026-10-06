@@ -139,6 +139,26 @@ class RecurringSuggestionsApiTests extends RecurringTestBase {
 
     @Order(5)
     @Test
+    @DisplayName("V2_RECURRING_009 deleting the confirmed estimate does not bring its suggestion back and keeps the "
+            + "three bills")
+    void deletedEstimateIsNotSuggestedAgain() {
+        String id = overviewScheduleId("Electricity");
+        act(id, "delete", null).expectStatus().isOk();
+        overview().expectBody().jsonPath("$.schedules.length()").isEqualTo(0)
+                .jsonPath("$.suggestions[?(@.description=='Electricity')]").isEmpty();
+        assertActivityCount(checking, 3);
+        assertBalance(checking, "4820.00");
+    }
+
+    private String overviewScheduleId(String description) {
+        java.util.concurrent.atomic.AtomicReference<String> id = new java.util.concurrent.atomic.AtomicReference<>();
+        overview().expectBody().jsonPath("$.schedules[?(@.description=='" + description + "')].id")
+                .value(java.util.List.class, ids -> id.set((String) ids.getFirst()));
+        return id.get();
+    }
+
+    @Order(6)
+    @Test
     @DisplayName("V2_RECURRING_009 dismissing needs a suggestion, an account and who; a made-up category is refused")
     void dismissIsChecked() {
         dismissSuggestion(checking, utilities, " ").expectStatus().isBadRequest();

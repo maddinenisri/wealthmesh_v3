@@ -55,6 +55,11 @@ abstract class RecurringTestBase extends LifecycleTestBase {
                 .bodyValue("{\"enteredByMemberId\": \"%s\"%s}".formatted(mayaId, date)).exchange();
     }
 
+    protected WebTestClient.ResponseSpec change(String id, String key, String body) {
+        return webTestClient.put().uri(RECURRING + "/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", key).bodyValue(body).exchange();
+    }
+
     protected WebTestClient.ResponseSpec scheduleOf(String id) {
         return webTestClient.get().uri(RECURRING + "/{id}", id).exchange();
     }

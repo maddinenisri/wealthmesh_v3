@@ -1183,6 +1183,64 @@ export function mockApi(
         }),
       )
     }),
+    http.put('*/api/v1/recurring/:id', async ({ request, params }) => {
+      log(request)
+      const body = (await request.json()) as MockScheduleBody
+      const found = state.schedules.find((s) => s.id === params.id && !s.removed)
+      if (!found) return problem(404, 'Recurring bill not found')
+      if (!(Number(body.amount) > 0)) return problem(400, 'Enter an amount greater than zero')
+      found.events.unshift({
+        action: 'changed',
+        memberId: body.enteredByMemberId,
+        at: '2026-10-06T09:00:00Z',
+        detail: `Amount $${Number(found.amount).toFixed(2)} to $${Number(body.amount).toFixed(2)}`,
+      })
+      found.amount = body.amount
+      found.frequency = body.frequency
+      found.nextDueOn = body.nextDueOn
+      found.anchorDay = Number(body.nextDueOn.slice(8))
+      return HttpResponse.json(scheduleView(found), { status: 201 })
+    }),
+    ...(['pause', 'resume', 'delete'] as const).map((action) =>
+      http.post(`*/api/v1/recurring/:id/${action}`, async ({ request, params }) => {
+        log(request)
+        const body = (await request.json()) as { enteredByMemberId: string; dueOn?: string }
+        const found = state.schedules.find((s) => s.id === params.id)
+        if (!found || (found.removed && action !== 'delete'))
+          return problem(404, 'Recurring bill not found')
+        const note = (detail: string) =>
+          found.events.unshift({
+            action: action === 'pause' ? 'paused' : action === 'resume' ? 'resumed' : 'deleted',
+            memberId: body.enteredByMemberId,
+            at: '2026-10-06T09:00:00Z',
+            detail,
+          })
+        if (action === 'pause' && found.status === 'active') {
+          found.status = 'paused'
+          note(`Next due ${found.nextDueOn} is not expected while paused`)
+        }
+        if (action === 'resume') {
+          if (!body.dueOn) return problem(400, 'Enter the next due date')
+          found.status = 'active'
+          found.nextDueOn = body.dueOn
+          found.anchorDay = Number(body.dueOn.slice(8))
+          note(`Next due ${body.dueOn}`)
+        }
+        if (action === 'delete' && !found.removed) {
+          found.removed = true
+          // A deleted estimate is not suggested again.
+          state.suggestions = state.suggestions.filter(
+            (g) =>
+              !(
+                g.accountId === found.accountId &&
+                g.description.trim().toLowerCase() === found.description.trim().toLowerCase()
+              ),
+          )
+          note(`Deleted ${found.description}`)
+        }
+        return HttpResponse.json(scheduleView(found))
+      }),
+    ),
     http.post('*/api/v1/recurring', async ({ request }) => {
       log(request)
       const key = request.headers.get('Idempotency-Key') ?? ''

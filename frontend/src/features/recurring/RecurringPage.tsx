@@ -1,21 +1,24 @@
 import { useEffect, useState } from 'react'
+import type { Member } from '../../api/household'
 import type { Schedule, Suggestion } from '../../api/recurring'
-import { Badge, Button, Card, CardTitle, PageHeader } from '../../design-system'
+import { Button, Card, CardTitle, PageHeader } from '../../design-system'
 import { useCreateSchedule, useDismissSuggestion, useRecurring } from '../../hooks/useRecurring'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney } from '../../lib/money'
 import { useAccountContext } from '../accounts/useAccountContext'
 import { useStateChangeFocus } from '../accounts/useStateChangeFocus'
 import { ActionPanel } from './ActionPanel'
-import { Bills } from './Bills'
 import { ScheduleForm } from './ScheduleForm'
+import { ScheduleItem, type ScheduleAction } from './ScheduleItem'
+import { ChangePanel, DeletePanel, PausePanel, ResumePanel } from './SchedulePanels'
 import { SuggestionItem } from './SuggestionItem'
-import { FREQUENCY_LABEL, overdueText, stateLabel } from './recurringText'
+import { FREQUENCY_LABEL } from './recurringText'
 
 type Mode =
   | { kind: 'create' }
   | { kind: 'confirm'; suggestion: Suggestion }
   | { kind: 'dismiss'; suggestion: Suggestion }
+  | { kind: ScheduleAction; schedule: Schedule }
 
 /**
  * Recurring bills (slice 14): schedules and expected amounts. A schedule is an estimate, not a recorded expense: it
@@ -148,13 +151,25 @@ export function RecurringPage() {
           ) : (
             <ul className="mt-3 flex flex-col gap-4">
               {recurring.data.schedules.map((schedule) => (
-                <ScheduleItem key={schedule.id} schedule={schedule} />
+                <ScheduleItem
+                  key={schedule.id}
+                  schedule={schedule}
+                  onAction={(action) => open({ kind: action, schedule })}
+                />
               ))}
             </ul>
           ))}
         <div className="mt-3 flex flex-wrap gap-2">
           <Button onClick={() => open({ kind: 'create' })}>Add recurring bill</Button>
         </div>
+        {mode && 'schedule' in mode && (
+          <SchedulePanel
+            mode={mode}
+            members={members ?? []}
+            onDone={done}
+            onCancel={() => setMode(null)}
+          />
+        )}
         {mode?.kind === 'create' && (
           <ScheduleForm
             heading="New recurring bill"
@@ -175,29 +190,21 @@ export function RecurringPage() {
 const saved = (schedule: Schedule) =>
   `Saved ${schedule.description}: expected ${formatMoney(Number(schedule.amount))} ${FREQUENCY_LABEL[schedule.frequency].toLowerCase()}, next due ${schedule.nextDueOn}, then ${schedule.followingDueOn}. Balance and spending are unchanged.`
 
-function ScheduleItem({ schedule }: { schedule: Schedule }) {
-  return (
-    <li className="rounded-control border border-line p-3">
-      <p>
-        <strong>{schedule.description}</strong>{' '}
-        <span className="text-ink-muted">({schedule.categoryName})</span>{' '}
-        <Badge tone={schedule.status === 'paused' ? 'brass' : 'positive'}>
-          {stateLabel(schedule)}
-        </Badge>
-      </p>
-      <p className="mt-1 text-sm">
-        Expected {formatMoney(Number(schedule.amount))}, {FREQUENCY_LABEL[schedule.frequency]}, paid
-        from {schedule.accountName}
-      </p>
-      <p className="mt-1 text-sm">
-        Next due {schedule.nextDueOn}. Following {schedule.followingDueOn}.
-      </p>
-      {schedule.overdueDays !== null && (
-        <p className="mt-1 text-sm font-medium text-negative">
-          {overdueText(schedule.overdueDays)}
-        </p>
-      )}
-      <Bills bills={schedule.bills} />
-    </li>
-  )
+/** The panel for one action on a saved schedule. */
+function SchedulePanel({
+  mode,
+  members,
+  onDone,
+  onCancel,
+}: {
+  mode: { kind: ScheduleAction; schedule: Schedule }
+  members: Member[]
+  onDone: (message: string) => void
+  onCancel: () => void
+}) {
+  const props = { schedule: mode.schedule, members, onDone, onCancel }
+  if (mode.kind === 'change') return <ChangePanel {...props} />
+  if (mode.kind === 'pause') return <PausePanel {...props} />
+  if (mode.kind === 'resume') return <ResumePanel {...props} />
+  return <DeletePanel {...props} />
 }
