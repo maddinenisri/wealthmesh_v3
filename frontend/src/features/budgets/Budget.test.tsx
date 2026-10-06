@@ -297,3 +297,46 @@ describe('Budget in the month review', () => {
     expect(review).not.toHaveTextContent('$4,000.00')
   })
 })
+
+describe('Copy a Budget', () => {
+  it('V2_BUDGET_004 copies September targets into October without copying expenses', async () => {
+    const state = mockApi({ household, members: [maya, sam], accounts: [everyday], activity: [] })
+    addCategories()
+    state.activity.push(...september())
+    state.budgets.push({
+      id: 'b1',
+      month: '2026-09',
+      total: '3600.00',
+      targets: [
+        ['Rent', '1500.00'],
+        ['Utilities', '180.00'],
+        ['Insurance', '700.00'],
+        ['Groceries', '600.00'],
+        ['Dining', '350.00'],
+        ['Travel', '270.00'],
+      ].map(([name, amount]) => ({ categoryId: idOf(name), amount })),
+    })
+    const { user } = renderRoute('/spending')
+
+    expect(await screen.findByText('No Budget for October')).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Copy September Budget' }))
+    const review = await screen.findByRole('region', {
+      name: 'Review copying a Budget into October',
+    })
+    expect(await within(review).findByText(/September total of \$3,600\.00/)).toBeInTheDocument()
+    expect(review).toHaveTextContent('No expenses are copied')
+    await user.click(within(review).getByRole('button', { name: 'Cancel' }))
+    expect(state.budgets).toHaveLength(1)
+
+    await user.click(await screen.findByRole('button', { name: 'Copy September Budget' }))
+    await user.click(
+      await screen.findByRole('button', { name: 'Confirm copying the September Budget' }),
+    )
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'October has the $3,600.00 Budget and the same category targets. October spending is $0.00.',
+    )
+    expect(state.budgets).toHaveLength(2)
+    expect(state.budgets[0].total).toBe('3600.00')
+    expect(state.activity).toHaveLength(6)
+  })
+})

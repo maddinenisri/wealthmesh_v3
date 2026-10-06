@@ -121,7 +121,14 @@ function Body({
               <Button onClick={() => open('form')}>Create Budget</Button>
               {earlier.length > 0 && (
                 <Button variant="secondary" onClick={() => open('copy')}>
-                  Copy an earlier Budget
+                  Copy{' '}
+                  {monthLabel(
+                    earlier
+                      .map((m) => m.month)
+                      .sort()
+                      .at(-1)!,
+                  )}{' '}
+                  Budget
                 </Button>
               )}
               {budget.canUndo && (

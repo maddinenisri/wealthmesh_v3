@@ -100,9 +100,9 @@ const targets: [string, string][] = [
   ['Travel', '270'],
 ]
 
-for (const [width, month, name] of [
-  [710, '2026-02', 'February'],
-  [1280, '2026-03', 'March'],
+for (const [width, month, name, copyMonth, copyName, latest, from] of [
+  [710, '2026-02', 'February', '2026-04', 'April', 'February', 'February'],
+  [1280, '2026-03', 'March', '2026-05', 'May', 'April', 'March'],
 ] as const) {
   test.describe.serial(`Budget at ${width}px`, () => {
     test.use({ viewport: { width, height: 900 } })
@@ -179,6 +179,41 @@ for (const [width, month, name] of [
       await expect(review).toContainText(`${name} Budget $3,600.00`)
       await expect(review).toContainText('$60.00 over Budget')
       await expect(review).toContainText('Category details')
+      await expectNoSidewaysScroll(page)
+    })
+
+    test(`V2_BUDGET_004 a month with no Budget offers a copy; Cancel saves nothing, Confirm copies the targets and no expenses (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto('/spending')
+      await page.getByRole('textbox', { name: 'Month' }).fill(copyMonth)
+      await expect(page.getByText(`No Budget for ${copyName}`)).toBeVisible()
+      const opener = page.getByRole('button', { name: `Copy ${latest} Budget` })
+      await opener.click()
+      const review = page.getByRole('region', {
+        name: `Review copying a Budget into ${copyName}`,
+      })
+      await expectFocusInside(review)
+      if (from !== latest)
+        await review.getByLabel('Copy from').selectOption({ label: `${from} 2026` })
+      await expect(review).toContainText('No expenses are copied')
+      await expectNoSidewaysScroll(page)
+      await review.getByRole('button', { name: 'Cancel' }).click()
+      await expect(review).toBeHidden()
+      await expect(opener).toBeFocused()
+      await expect(page.getByText(`No Budget for ${copyName}`)).toBeVisible()
+
+      await opener.click()
+      if (from !== latest)
+        await review.getByLabel('Copy from').selectOption({ label: `${from} 2026` })
+      await page.getByRole('button', { name: `Confirm copying the ${from} Budget` }).click()
+      const status = page.getByRole('status')
+      await expect(status).toContainText(
+        `${copyName} has the $3,600.00 Budget and the same category targets. ${copyName} spending is $0.00.`,
+      )
+      await expect(status).toBeFocused()
+      await expect(status).toBeInViewport({ ratio: 1 })
+      await expect(page.getByRole('table', { name: 'Budget by category' })).toContainText('$350.00')
       await expectNoSidewaysScroll(page)
     })
 
