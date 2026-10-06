@@ -182,7 +182,8 @@ export function useSaveHistoricalEntry(accountId: string) {
   })
 }
 
-function useRefreshMoney(accountId: string) {
+/** Refreshes what a saved entry changes: the account's list, Balances, wealth and the month figures. */
+export function useRefreshMoney(accountId: string) {
   const queryClient = useQueryClient()
   return () =>
     Promise.all([

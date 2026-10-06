@@ -5,7 +5,7 @@ import { stamp } from '../../lib/stamp'
 import { Bills } from './Bills'
 import { FREQUENCY_LABEL, overdueText, stateLabel } from './recurringText'
 
-export type ScheduleAction = 'change' | 'pause' | 'resume' | 'delete'
+export type ScheduleAction = 'record' | 'change' | 'pause' | 'resume' | 'delete'
 
 /**
  * A saved schedule: the estimate, its state and its next occurrences, with the actions that are possible. A schedule
@@ -53,6 +53,20 @@ export function ScheduleItem({
           {overdueText(schedule.overdueDays)}
         </p>
       )}
+      {schedule.occurrences.length > 0 && (
+        <ul className="mt-1 text-sm">
+          {schedule.occurrences.map((occurrence, index) => (
+            <li key={`${occurrence.dueOn}-${index}`}>
+              {occurrence.dueOn} occurrence:{' '}
+              {occurrence.outcome === 'dismissed'
+                ? 'dismissed, no expense recorded'
+                : occurrence.paidOn !== null && occurrence.paidOn < occurrence.dueOn
+                  ? `paid early on ${occurrence.paidOn}`
+                  : `paid on ${occurrence.paidOn}`}
+            </li>
+          ))}
+        </ul>
+      )}
       <Bills bills={schedule.bills} />
       {schedule.history.length > 0 && (
         <details className="mt-2 text-sm">
@@ -68,6 +82,11 @@ export function ScheduleItem({
         </details>
       )}
       <div className="mt-2 flex flex-wrap gap-2">
+        {open && schedule.status === 'active' && (
+          <Button size="sm" onClick={() => onAction('record')}>
+            Record actual expense
+          </Button>
+        )}
         {open && (
           <Button size="sm" variant="secondary" onClick={() => onAction('change')}>
             Change

@@ -132,6 +132,14 @@ type MockReminder = {
   enteredByMemberId: string
 }
 
+type RecordBody = {
+  dueOn: string
+  amount: string
+  paidOn: string
+  categoryId: string
+  enteredByMemberId: string
+}
+
 type MockScheduleBody = {
   description: string
   amount: string
@@ -1199,6 +1207,73 @@ export function mockApi(
       found.frequency = body.frequency
       found.nextDueOn = body.nextDueOn
       found.anchorDay = Number(body.nextDueOn.slice(8))
+      return HttpResponse.json(scheduleView(found), { status: 201 })
+    }),
+    http.post('*/api/v1/recurring/:id/record/review', async ({ request, params }) => {
+      log(request)
+      const body = (await request.json()) as RecordBody
+      const found = state.schedules.find((s) => s.id === params.id && !s.removed)
+      if (!found) return problem(404, 'Recurring bill not found')
+      if (found.nextDueOn !== body.dueOn)
+        return problem(409, `The next occurrence is ${found.nextDueOn}`)
+      if (!(Number(body.amount) > 0)) return problem(400, 'Enter an amount greater than zero')
+      if (body.paidOn > today)
+        return problem(400, 'Future activity is not saved as completed history yet')
+      const next = followingDue(body.dueOn, found.frequency, found.anchorDay)
+      return HttpResponse.json({
+        description: found.description,
+        accountName: state.accounts.find((a) => a.id === found.accountId)?.name ?? '',
+        categoryName: CATEGORIES.find((c) => c.id === body.categoryId)?.name ?? '',
+        amount: Number(body.amount).toFixed(2),
+        paidOn: body.paidOn,
+        dueOn: body.dueOn,
+        early: body.paidOn < body.dueOn,
+        nextDueOn: next,
+        followingDueOn: followingDue(next, found.frequency, found.anchorDay),
+      })
+    }),
+    http.post('*/api/v1/recurring/:id/record', async ({ request, params }) => {
+      log(request)
+      const key = request.headers.get('Idempotency-Key') ?? ''
+      const body = (await request.json()) as RecordBody
+      const found = state.schedules.find((s) => s.id === params.id && !s.removed)
+      if (!found) return problem(404, 'Recurring bill not found')
+      if (found.key === `record:${key}`) return HttpResponse.json(scheduleView(found))
+      if (found.nextDueOn !== body.dueOn)
+        return problem(409, `The next occurrence is ${found.nextDueOn}`)
+      const account = state.accounts.find((a) => a.id === found.accountId)!
+      const amount = Number(body.amount)
+      const entry: MockActivity = {
+        id: newId(),
+        accountId: account.id,
+        key,
+        kind: 'expense',
+        amount: amount.toFixed(2),
+        occurredOn: body.paidOn,
+        description: found.description,
+        categoryId: body.categoryId,
+        classification: null,
+        enteredByMemberId: body.enteredByMemberId,
+      }
+      state.activity.push(entry)
+      account.balance = {
+        amount: (Number(account.balance.amount) - amount).toFixed(2),
+        asOf: account.balance.asOf,
+      }
+      found.occurrences.unshift({
+        dueOn: body.dueOn,
+        outcome: 'paid',
+        paidOn: body.paidOn,
+        activityId: entry.id,
+      })
+      found.nextDueOn = followingDue(body.dueOn, found.frequency, found.anchorDay)
+      found.events.unshift({
+        action: 'paid',
+        memberId: body.enteredByMemberId,
+        at: '2026-10-06T09:00:00Z',
+        detail: `Paid $${amount.toFixed(2)} on ${body.paidOn} for the ${body.dueOn} occurrence`,
+      })
+      found.key = `record:${key}`
       return HttpResponse.json(scheduleView(found), { status: 201 })
     }),
     ...(['pause', 'resume', 'delete'] as const).map((action) =>

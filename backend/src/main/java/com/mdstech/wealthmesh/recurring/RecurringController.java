@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.recurring.dto.DismissSuggestionRequest;
+import com.mdstech.wealthmesh.recurring.dto.RecordRequest;
+import com.mdstech.wealthmesh.recurring.dto.RecordReview;
 import com.mdstech.wealthmesh.recurring.dto.RecurringOverview;
 import com.mdstech.wealthmesh.recurring.dto.RecurringWho;
 import com.mdstech.wealthmesh.recurring.dto.ScheduleRequest;
@@ -50,6 +52,20 @@ public class RecurringController {
             @RequestHeader(name = "Idempotency-Key", required = false) String key,
             @RequestBody ScheduleRequest request) {
         return service.change(id, key, request).map(RecurringController::saved);
+    }
+
+    /** What recording the actual expense would do, before Confirm. Writes nothing. */
+    @PostMapping("/{id}/record/review")
+    public Mono<RecordReview> reviewRecord(@PathVariable UUID id, @RequestBody RecordRequest request) {
+        return service.reviewRecord(id, request);
+    }
+
+    /** Records the actual expense of the next occurrence: 201 when saved, 200 on a replay of the key (D-024). */
+    @PostMapping("/{id}/record")
+    public Mono<ResponseEntity<ScheduleView>> record(@PathVariable UUID id,
+            @RequestHeader(name = "Idempotency-Key", required = false) String key,
+            @RequestBody RecordRequest request) {
+        return service.record(id, key, request).map(RecurringController::saved);
     }
 
     @PostMapping("/{id}/pause")

@@ -25,11 +25,15 @@ import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore.Candidate;
+import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
+import com.mdstech.wealthmesh.activity.service.EntryService;
 import com.mdstech.wealthmesh.activity.service.EntryValidator;
 import com.mdstech.wealthmesh.category.domain.Category;
 import com.mdstech.wealthmesh.household.repository.HouseholdLock;
 import com.mdstech.wealthmesh.money.Money;
 import com.mdstech.wealthmesh.recurring.dto.DismissSuggestionRequest;
+import com.mdstech.wealthmesh.recurring.dto.RecordRequest;
+import com.mdstech.wealthmesh.recurring.dto.RecordReview;
 import com.mdstech.wealthmesh.recurring.dto.RecurringOverview;
 import com.mdstech.wealthmesh.recurring.dto.ScheduleRequest;
 import com.mdstech.wealthmesh.recurring.dto.ScheduleView;
@@ -60,16 +64,19 @@ public class RecurringService {
     private final ActivityStore activity;
     private final AccountRepository accounts;
     private final EntryValidator validator;
+    private final EntryService entries;
     private final TransactionalOperator transactions;
     private final Clock clock;
 
     public RecurringService(RecurringStore store, HouseholdLock householdLock, ActivityStore activity,
-            AccountRepository accounts, EntryValidator validator, TransactionalOperator transactions, Clock clock) {
+            AccountRepository accounts, EntryValidator validator, EntryService entries,
+            TransactionalOperator transactions, Clock clock) {
         this.store = store;
         this.householdLock = householdLock;
         this.activity = activity;
         this.accounts = accounts;
         this.validator = validator;
+        this.entries = entries;
         this.transactions = transactions;
         this.clock = clock;
     }
@@ -314,6 +321,96 @@ public class RecurringService {
                 .flatMap(apply)
                 .then(Mono.defer(() -> store.scheduleAnyState(id)))
                 .flatMap(this::view));
+    }
+
+    /**
+     * What recording the actual expense of the next occurrence would do: the same checks as the save (the schedule is
+     * active and `dueOn` is its next occurrence, the account is open, the entry rules for amount, date, category),
+     * nothing written (RECURRING_003, 004).
+     */
+    public Mono<RecordReview> reviewRecord(UUID id, RecordRequest request) {
+        return Mono.fromCallable(() -> requireRecord(request)).flatMap(r -> current(id)
+                .flatMap(s -> checkRecordable(s, r.dueOn()))
+                .flatMap(s -> accounts.findById(s.accountId())
+                        .flatMap(account -> Mono.fromCallable(() -> AccountState.requireOpen(account)))
+                        .flatMap(account -> validator.parse(account, "expense", entryOf(s, r), null)
+                                .flatMap(entry -> validator.scheduleCategory(null, entry.categoryId()))
+                                .map(category -> new RecordReview(s.description(), s.accountName(), category.name(),
+                                        Money.format(EntryValidator.amount(r.amount())), r.paidOn(), r.dueOn(),
+                                        r.paidOn().isBefore(r.dueOn()),
+                                        Recurrence.following(r.dueOn(), s.frequency(), s.anchorDay()),
+                                        Recurrence.following(Recurrence.following(r.dueOn(), s.frequency(),
+                                                s.anchorDay()), s.frequency(), s.anchorDay()))))));
+    }
+
+    /**
+     * Records the actual expense of the schedule's next occurrence: one transaction saves the entry through the entry
+     * rules (so its date, category, member and the account's state apply, and Balance and spending count it on its
+     * own date) and marks the occurrence paid. The next occurrence follows the due date, not the paid date
+     * (RECURRING_003). A retry of a saved key replays (D-024); a second Record of the same occurrence is refused.
+     */
+    public Mono<Saved> record(UUID id, String key, RecordRequest request) {
+        return Mono.fromCallable(() -> {
+            requireKey(key);
+            return requireRecord(request);
+        }).flatMap(r -> {
+            Instant now = clock.instant();
+            Instant cutoff = now.minus(KEY_LIFETIME);
+            String fingerprint = "record|" + id + "|" + r.dueOn() + "|" + EntryValidator.amount(r.amount()) + "|"
+                    + r.paidOn() + "|" + r.categoryId() + "|" + r.category();
+            return transactions.transactional(householdLock.lock()
+                    .flatMap(householdId -> replayed(key, cutoff, fingerprint)
+                            .switchIfEmpty(Mono.defer(() -> recordNew(id, key, r, fingerprint, now)))));
+        });
+    }
+
+    private Mono<Saved> recordNew(UUID id, String key, RecordRequest r, String fingerprint, Instant now) {
+        return current(id).flatMap(s -> checkRecordable(s, r.dueOn()))
+                .flatMap(s -> entries.record(s.accountId(), key, "expense", entryOf(s, r))
+                        .flatMap(saved -> saved.created()
+                                ? paid(s, r, saved.activity().id(), key, fingerprint, now)
+                                : Mono.<Saved>error(conflict("This save was already used. Start a new entry."))));
+    }
+
+    private Mono<Saved> paid(RecurringStore.Schedule s, RecordRequest r, UUID activityId, String key,
+            String fingerprint, Instant now) {
+        LocalDate next = Recurrence.following(r.dueOn(), s.frequency(), s.anchorDay());
+        String detail = "Paid " + dollars(EntryValidator.amount(r.amount())) + " on " + r.paidOn()
+                + " for the " + r.dueOn() + " occurrence; next due " + next;
+        return store.addOccurrence(s.id(), r.dueOn(), "paid", r.paidOn(), activityId, r.enteredByMemberId(), now)
+                .then(Mono.defer(() -> store.advance(s.id(), next)))
+                .then(Mono.defer(() -> store.recordEvent(s.id(), "paid", r.enteredByMemberId(), now, key,
+                        fingerprint, detail)))
+                .then(Mono.defer(() -> view(s.id()))).map(v -> new Saved(v, true));
+    }
+
+    private static RecordRequest requireRecord(RecordRequest request) {
+        if (request == null || request.dueOn() == null) {
+            throw bad("Choose the occurrence to record");
+        }
+        EntryValidator.amount(request.amount());
+        if (request.paidOn() == null) {
+            throw bad("Enter the date it was paid");
+        }
+        return request;
+    }
+
+    /** The schedule must be active and the occurrence its next one: only that one can be paid or dismissed. */
+    private Mono<RecurringStore.Schedule> checkRecordable(RecurringStore.Schedule s, LocalDate dueOn) {
+        if (!"active".equals(s.status())) {
+            return Mono.error(conflict(s.description() + " is paused. Resume it first."));
+        }
+        if (!s.nextDueOn().equals(dueOn)) {
+            return Mono.error(conflict("The next occurrence of " + s.description() + " is " + s.nextDueOn()
+                    + ", not " + dueOn));
+        }
+        return Mono.just(s);
+    }
+
+    private static ExpenseRequest entryOf(RecurringStore.Schedule s, RecordRequest r) {
+        boolean named = r.categoryId() != null || r.category() != null && !r.category().isBlank();
+        return new ExpenseRequest(s.description(), r.amount(), r.paidOn(), named ? r.category() : null,
+                named ? r.categoryId() : s.categoryId(), r.enteredByMemberId(), null, null);
     }
 
     /** The saved, not deleted schedule; 404 when there is none. */

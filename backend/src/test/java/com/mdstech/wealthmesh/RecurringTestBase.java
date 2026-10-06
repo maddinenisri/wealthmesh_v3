@@ -60,6 +60,27 @@ abstract class RecurringTestBase extends LifecycleTestBase {
                 .header("Idempotency-Key", key).bodyValue(body).exchange();
     }
 
+    protected String recordBody(String dueOn, String amount, String paidOn) {
+        return recordBody(mayaId, dueOn, amount, paidOn, null);
+    }
+
+    protected String recordBody(String memberId, String dueOn, String amount, String paidOn, String category) {
+        String named = category == null ? "" : ", \"category\": \"" + category + "\"";
+        return """
+                {"dueOn": "%s", "amount": "%s", "paidOn": "%s", "enteredByMemberId": "%s"%s}"""
+                .formatted(dueOn, amount, paidOn, memberId, named);
+    }
+
+    protected WebTestClient.ResponseSpec record(String id, String key, String body) {
+        return webTestClient.post().uri(RECURRING + "/{id}/record", id).contentType(MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", key).bodyValue(body).exchange();
+    }
+
+    protected WebTestClient.ResponseSpec reviewRecord(String id, String body) {
+        return webTestClient.post().uri(RECURRING + "/{id}/record/review", id)
+                .contentType(MediaType.APPLICATION_JSON).bodyValue(body).exchange();
+    }
+
     protected WebTestClient.ResponseSpec scheduleOf(String id) {
         return webTestClient.get().uri(RECURRING + "/{id}", id).exchange();
     }

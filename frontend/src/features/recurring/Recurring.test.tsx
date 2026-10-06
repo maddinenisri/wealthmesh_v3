@@ -354,3 +354,110 @@ describe('recurring bills: change, pause, resume, delete', () => {
     expect(within(list).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
   })
 })
+
+describe('recurring bills: record the actual expense', () => {
+  const utilities = () => CATEGORIES.find((c) => c.name === 'Utilities')!.id
+  const withSchedule = () => ({
+    ...seed(),
+    accounts: [{ ...checking, balance: { amount: '4820.00', asOf: '2026-09-05' } }],
+    activity: [
+      {
+        id: '55555555-5555-4555-8555-000000000001',
+        accountId: checking.id,
+        kind: 'expense',
+        amount: '180.00',
+        occurredOn: '2026-09-05',
+        description: 'Electricity',
+        categoryId: utilities(),
+        enteredByMemberId: maya.id,
+      },
+    ],
+    schedules: [
+      {
+        id: '66666666-6666-4666-8666-000000000001',
+        accountId: checking.id,
+        description: 'Electricity',
+        categoryId: utilities(),
+        amount: '180.00',
+        frequency: 'monthly' as const,
+        status: 'active' as const,
+        nextDueOn: '2026-10-05',
+        anchorDay: 5,
+        occurrences: [],
+        events: [],
+      },
+    ],
+  })
+
+  async function openRecord(user: User, paidOn: string) {
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
+    await user.click(await screen.findByRole('button', { name: 'Record actual expense' }))
+    expect(await screen.findByLabelText('Actual amount')).toHaveValue('180.00')
+    expect(screen.getByLabelText('Category')).toHaveValue(utilities())
+    fireEvent.change(screen.getByLabelText('Payment date'), { target: { value: paidOn } })
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    return screen.findByRole('region', { name: /Review recording Electricity/ })
+  }
+
+  it('V2_RECURRING_003 reviews an early payment, changes nothing until Confirm, then marks the occurrence paid early', async () => {
+    const api = mockApi(withSchedule())
+    const { user } = renderRoute('/recurring')
+    const review = await openRecord(user, '2026-09-30')
+    expect(review).toHaveTextContent('Everyday Checking')
+    expect(review).toHaveTextContent('Utilities')
+    expect(review).toHaveTextContent('$180.00')
+    expect(review).toHaveTextContent('Early payment date2026-09-30')
+    expect(review).toHaveTextContent('Next scheduled occurrence2026-11-05')
+    expect(review).toHaveTextContent('Nothing changes until you confirm')
+    expect(api.activity).toHaveLength(1)
+    expect(api.accounts[0].balance.amount).toBe('4820.00')
+
+    await user.click(within(review).getByRole('button', { name: 'Confirm saving the expense' }))
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('paid early on 2026-09-30')
+    expect(status).toHaveTextContent('The next occurrence is 2026-11-05')
+    expect(status).toHaveFocus()
+    const list = screen.getByRole('region', { name: 'Schedules' })
+    expect(
+      await within(list).findByText(/2026-10-05 occurrence: paid early on 2026-09-30/),
+    ).toBeInTheDocument()
+    expect(list).toHaveTextContent('Next due 2026-11-05')
+    expect(api.activity).toHaveLength(2)
+    expect(api.accounts[0].balance.amount).toBe('4640.00')
+  })
+
+  it('V2_RECURRING_004 Cancel and Back from the review save no expense and leave the occurrence unpaid', async () => {
+    const api = mockApi(withSchedule())
+    const { user } = renderRoute('/recurring')
+    const review = await openRecord(user, '2026-09-30')
+    await user.click(within(review).getByRole('button', { name: 'Back' }))
+    expect(await screen.findByLabelText('Payment date')).toHaveValue('2026-09-30')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    await user.click(
+      within(await screen.findByRole('region', { name: /Review recording/ })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    )
+    expect(screen.queryByRole('region', { name: /Review recording/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Record actual expense' })).toHaveFocus()
+    expect(screen.getByRole('region', { name: 'Schedules' })).toHaveTextContent(
+      'Next due 2026-10-05',
+    )
+    expect(api.activity).toHaveLength(1)
+    expect(api.accounts[0].balance.amount).toBe('4820.00')
+    expect(api.requests).not.toContain(`POST /api/v1/recurring/${api.schedules[0].id}/record`)
+  })
+
+  it('V2_RECURRING_003 a payment date after today is refused in the form', async () => {
+    const api = mockApi(withSchedule())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
+    await user.click(await screen.findByRole('button', { name: 'Record actual expense' }))
+    fireEvent.change(await screen.findByLabelText('Payment date'), {
+      target: { value: '2026-10-05' },
+    })
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    expect(await screen.findByText('A payment date cannot be after today')).toBeInTheDocument()
+    expect(api.activity).toHaveLength(1)
+  })
+})

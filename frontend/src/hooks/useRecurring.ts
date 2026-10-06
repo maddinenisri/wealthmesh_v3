@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRefreshMoney } from './useActivity'
 import {
   changeSchedule,
   createSchedule,
@@ -6,6 +7,9 @@ import {
   dismissSuggestion,
   getRecurring,
   pauseSchedule,
+  recordActual,
+  reviewRecordActual,
+  type RecordBody,
   resumeSchedule,
   reviewSchedule,
   type ScheduleBody,
@@ -70,3 +74,18 @@ export const useResumeSchedule = (id: string) =>
 
 export const useDeleteSchedule = (id: string) =>
   useScheduleAction((memberId: string) => deleteSchedule(id, memberId))
+
+/** A review writes nothing: it asks the server what recording the actual expense would do. */
+export const useReviewRecord = (id: string) =>
+  useMutation({ mutationFn: (body: RecordBody) => reviewRecordActual(id, body) })
+
+/** Recording saves a real expense, so the account, wealth and the month figures refresh with the list. */
+export function useRecordActual(id: string, accountId: string) {
+  const queryClient = useQueryClient()
+  const refreshMoney = useRefreshMoney(accountId)
+  return useMutation({
+    mutationFn: ({ key, body }: { key: string; body: RecordBody }) => recordActual(id, key, body),
+    onSuccess: () =>
+      Promise.all([queryClient.invalidateQueries({ queryKey: recurringKey }), refreshMoney()]),
+  })
+}

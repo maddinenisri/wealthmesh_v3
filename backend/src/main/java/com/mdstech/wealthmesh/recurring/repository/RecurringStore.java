@@ -96,6 +96,25 @@ public class RecurringStore {
                 .bind("status", status).bind("id", id).then();
     }
 
+    /** Moves the next occurrence after an occurrence was paid or dismissed; the anchor day stays. */
+    public Mono<Void> advance(UUID id, LocalDate nextDueOn) {
+        return client.sql("UPDATE recurring_schedule SET next_due_on = :due WHERE id = :id")
+                .bind("due", nextDueOn).bind("id", id).then();
+    }
+
+    /** Records that an occurrence was paid (with the entry that paid it) or dismissed. */
+    public Mono<Void> addOccurrence(UUID scheduleId, LocalDate dueOn, String outcome, LocalDate paidOn,
+            UUID activityId, UUID memberId, Instant at) {
+        DatabaseClient.GenericExecuteSpec spec = client.sql("INSERT INTO recurring_occurrence "
+                        + "(schedule_id, due_on, outcome, paid_on, activity_id, member_id, at) "
+                        + "VALUES (:schedule, :due, :outcome, :paid, :activity, :member, :at)")
+                .bind("schedule", scheduleId).bind("due", dueOn).bind("outcome", outcome)
+                .bind("member", memberId).bind("at", at);
+        spec = paidOn == null ? spec.bindNull("paid", LocalDate.class) : spec.bind("paid", paidOn);
+        spec = activityId == null ? spec.bindNull("activity", UUID.class) : spec.bind("activity", activityId);
+        return spec.then();
+    }
+
     /** Deletes a schedule softly: it leaves every list, its bills and history stay. */
     public Mono<Void> softDelete(UUID id, Instant at) {
         return client.sql("UPDATE recurring_schedule SET removed_at = :at WHERE id = :id AND removed_at IS NULL")

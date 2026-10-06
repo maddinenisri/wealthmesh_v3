@@ -418,3 +418,100 @@ for (const [width, account, description] of [
     }
   })
 }
+
+async function makeOneBill(page: Page, account: string, description: string, dueOn: string) {
+  const owner = await ownerId(page)
+  const id = await makeAccount(page, account)
+  const saved = await page.request.post(`/api/v1/accounts/${id}/expenses`, {
+    headers: { 'Idempotency-Key': `e2e-rec-one-${account}` },
+    data: {
+      description,
+      amount: '180.00',
+      occurredOn: '2026-09-05',
+      category: 'Utilities',
+      enteredByMemberId: owner,
+    },
+  })
+  expect(saved.ok()).toBeTruthy()
+  const schedule = await page.request.post('/api/v1/recurring', {
+    headers: { 'Idempotency-Key': `e2e-rec-one-sched-${account}` },
+    data: {
+      description,
+      amount: '180.00',
+      frequency: 'monthly',
+      nextDueOn: dueOn,
+      accountId: id,
+      category: 'Utilities',
+      enteredByMemberId: owner,
+    },
+  })
+  expect(schedule.ok()).toBeTruthy()
+  return id
+}
+
+async function balanceOf(page: Page, id: string) {
+  const detail = (await (await page.request.get(`/api/v1/accounts/${id}`)).json()) as {
+    balance: { amount: string }
+  }
+  return detail.balance.amount
+}
+
+for (const [width, account, description, dueOn, paidOn] of [
+  [710, 'Recurring Record 710', 'Heat 710', '2026-10-05', '2026-09-30'],
+  [1280, 'Recurring Record 1280', 'Heat 1280', '2026-10-05', '2026-10-03'],
+] as const) {
+  test.describe.serial(`Recurring actual expense at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+
+    test(`V2_RECURRING_004 and 003 an early payment is reviewed, Cancel and Back save nothing, Confirm records it on its own date (${width}px)`, async ({
+      page,
+    }) => {
+      const id = await makeOneBill(page, account, description, dueOn)
+      await page.goto('/recurring')
+      const item = page.getByRole('listitem').filter({ hasText: description })
+      const opener = item.getByRole('button', { name: 'Record actual expense' })
+      await opener.click()
+      const form = page.getByRole('region', { name: `Record actual expense for ${description}` })
+      await expectFocusInside(form)
+      await expect(page.getByLabel('Actual amount')).toHaveValue('180.00')
+      await page.getByLabel('Payment date').fill(paidOn)
+      await page.getByRole('button', { name: 'Review', exact: true }).click()
+      const review = page.getByRole('region', { name: `Review recording ${description}` })
+      await expectFocusInside(review)
+      await expect(review).toContainText('Utilities')
+      await expect(review).toContainText('Early payment date' + paidOn)
+      await expect(review).toContainText('Next scheduled occurrence2026-11-05')
+      await expect(review).toContainText('Nothing changes until you confirm')
+      await expectNoSidewaysScroll(page)
+      expect(await balanceOf(page, id)).toBe('4820.00')
+
+      await review.getByRole('button', { name: 'Back' }).click()
+      await expect(page.getByLabel('Payment date')).toHaveValue(paidOn)
+      await page.getByRole('button', { name: 'Review', exact: true }).click()
+      await review.getByRole('button', { name: 'Cancel' }).click()
+      await expect(opener).toBeFocused()
+      await expect(item).toContainText('Next due 2026-10-05')
+      expect(await balanceOf(page, id)).toBe('4820.00')
+
+      await opener.click()
+      await page.getByLabel('Payment date').fill(paidOn)
+      await page.getByRole('button', { name: 'Review', exact: true }).click()
+      await page.getByRole('button', { name: 'Confirm saving the expense' }).click()
+      const status = page.getByRole('status')
+      await expect(status).toContainText(`paid early on ${paidOn}`)
+      await expect(status).toContainText('The next occurrence is 2026-11-05')
+      await expect(status).toBeFocused()
+      await expect(status).toBeInViewport({ ratio: 1 })
+      await expect(item).toContainText(`2026-10-05 occurrence: paid early on ${paidOn}`)
+      await expect(item).toContainText('Next due 2026-11-05')
+      expect(await balanceOf(page, id)).toBe('4640.00')
+      const entries = (await (
+        await page.request.get(`/api/v1/accounts/${id}/activity`)
+      ).json()) as {
+        occurredOn: string
+      }[]
+      expect(entries.map((entry) => entry.occurredOn).sort()).toEqual(['2026-09-05', paidOn])
+      await expectNoSidewaysScroll(page)
+    })
+  })
+}

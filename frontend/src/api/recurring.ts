@@ -209,6 +209,56 @@ export const deleteSchedule = (id: string, enteredByMemberId: string) =>
     parse: parseSchedule,
   })
 
+/** What recording the actual expense of an occurrence would do; nothing is written. */
+export type RecordReview = {
+  description: string
+  accountName: string
+  categoryName: string
+  amount: string
+  paidOn: string
+  dueOn: string
+  early: boolean
+  nextDueOn: string
+  followingDueOn: string
+}
+
+/** The actual expense of the schedule's next occurrence: its due date, the amount, when it was paid, the category. */
+export type RecordBody = {
+  dueOn: string
+  amount: string
+  paidOn: string
+  categoryId: string
+  enteredByMemberId: string
+}
+
+function parseRecordReview(value: unknown): RecordReview {
+  const data = record(value)
+  if (typeof data.early !== 'boolean') throw bad()
+  return {
+    description: str(data.description),
+    accountName: str(data.accountName),
+    categoryName: str(data.categoryName),
+    amount: str(data.amount),
+    paidOn: str(data.paidOn),
+    dueOn: str(data.dueOn),
+    early: data.early,
+    nextDueOn: str(data.nextDueOn),
+    followingDueOn: str(data.followingDueOn),
+  }
+}
+
+export const reviewRecordActual = (id: string, body: RecordBody) =>
+  request(`/recurring/${id}/record/review`, { method: 'POST', body, parse: parseRecordReview })
+
+/** `key` identifies one form instance: a repeated Confirm returns the stored result (D-024). */
+export const recordActual = (id: string, key: string, body: RecordBody) =>
+  request(`/recurring/${id}/record`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+    body,
+    parse: parseSchedule,
+  })
+
 export const getRecurring = () => request('/recurring', { parse: parseOverview })
 
 /** What the schedule would look like if saved: the same checks, nothing is written. */

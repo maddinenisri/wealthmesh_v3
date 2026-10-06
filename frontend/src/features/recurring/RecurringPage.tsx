@@ -9,6 +9,7 @@ import { useAccountContext } from '../accounts/useAccountContext'
 import { useStateChangeFocus } from '../accounts/useStateChangeFocus'
 import { ActionPanel } from './ActionPanel'
 import { ScheduleForm } from './ScheduleForm'
+import { RecordPanel } from './RecordPanel'
 import { ScheduleItem, type ScheduleAction } from './ScheduleItem'
 import { ChangePanel, DeletePanel, PausePanel, ResumePanel } from './SchedulePanels'
 import { SuggestionItem } from './SuggestionItem'
@@ -203,6 +204,7 @@ function SchedulePanel({
   onCancel: () => void
 }) {
   const props = { schedule: mode.schedule, members, onDone, onCancel }
+  if (mode.kind === 'record') return <RecordPanel {...props} />
   if (mode.kind === 'change') return <ChangePanel {...props} />
   if (mode.kind === 'pause') return <PausePanel {...props} />
   if (mode.kind === 'resume') return <ResumePanel {...props} />
