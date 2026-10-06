@@ -1,7 +1,7 @@
 # Slice 14: Recurring bills
 
 - Slice: 14 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/spending/recurring/manage-recurring.feature` (all 10)
-- Status: done, local (not pushed; D-002)
+- Status: done, pushed
 - Started: 2026-10-06 14:08 (session clock)  Finished: 2026-10-06  Commit: 41be33d and the Land commit after it
 
 ## Prompts and directions
@@ -191,6 +191,7 @@ Decisions the owner raised, not changed: Delete has no Undo (Q-047, owner's answ
 
 - Built: groups 0 to 6 (see the task list); V22; D-048, D-049; Q-044 and Q-045 to Q-049 resolved; the deleted-account sweep covers schedules.
 - Watch for: a new household-wide writer takes `HouseholdLock` first, then the account row, then the member and category share locks; a keyed save reads its key before the state and category rules and a replay uses `parseForReplay`, never `parse`; a panel that holds form state for one row is keyed by the row; a spending reader calls `ActivityStore.totalsByCategory` only; the API test base resets today to 2026-10-03 before each test, e2e runs at 2026-10-03; the e2e DB is shared, so `15-recurring` makes its own accounts and bill names.
+- Cleanup decided by the owner (2026-10-06): the unique occurrence constraint and the by-name retry after a category rename become group 0 of slice 15; the untested inventory cells and the shorter-batch retry stay logged here; Q-004 waits for a small session after Milestone C; the Milestone B process review waits for Milestone C.
 - Left open: occurrences are not unique per (schedule, due date); an omitted class on a retry replays the stored class, and a by-name retry after a category rename is 400 (the UI sends ids); a shorter batch retry replays (before this slice); races not built: record vs removal of its entry, record held vs archive, category merge; matrix cells archived or closed × deleted and × paused (except Resume); same-key concurrency only for Record; the menu wrap at 710px did not reproduce in headless Chromium (label shortened to "Recurring"); Back in Resume and Reschedule and "opener in view on a long list" have no e2e; the 1280px save path and suggestion Dismiss were not walked by the owner.
 - v1 showed: not running, not consulted.
 - Next: slice 15 (see `INDEX.md`).
