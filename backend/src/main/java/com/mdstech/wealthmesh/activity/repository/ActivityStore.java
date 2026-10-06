@@ -42,9 +42,19 @@ public class ActivityStore {
             WHERE a.removed_at IS NULL""";
 
     private final DatabaseClient client;
+    private final PortionStore portions;
 
-    public ActivityStore(DatabaseClient client) {
+    public ActivityStore(DatabaseClient client, PortionStore portions) {
         this.client = client;
+        this.portions = portions;
+    }
+
+    /** Adds the portions of the split payments in a list (one query for the whole list). */
+    private Flux<ActivityResponse> withPortions(Flux<ActivityResponse> rows) {
+        return rows.collectList().flatMap(list -> portions.shownFor(list.stream().map(ActivityResponse::id).toList())
+                        .map(byActivity -> list.stream()
+                                .map(a -> a.withPortions(byActivity.getOrDefault(a.id(), List.of()))).toList()))
+                .flatMapMany(Flux::fromIterable);
     }
 
     /** A change to an account's Balance: total effect of its activity and the date of the latest entry. */
@@ -106,12 +116,14 @@ public class ActivityStore {
     }
 
     public Flux<ActivityResponse> forAccount(UUID accountId) {
-        return client.sql(ENTRY_COLUMNS + " AND a.account_id = :account ORDER BY a.occurred_on DESC, a.created_at DESC")
-                .bind("account", accountId).map(ActivityStore::entry).all();
+        return withPortions(client.sql(ENTRY_COLUMNS
+                        + " AND a.account_id = :account ORDER BY a.occurred_on DESC, a.created_at DESC")
+                .bind("account", accountId).map(ActivityStore::entry).all());
     }
 
     public Mono<ActivityResponse> byId(UUID id) {
-        return client.sql(ENTRY_COLUMNS + " AND a.id = :id").bind("id", id).map(ActivityStore::entry).one();
+        return withPortions(client.sql(ENTRY_COLUMNS + " AND a.id = :id").bind("id", id)
+                .map(ActivityStore::entry).all()).next();
     }
 
     /**
@@ -145,7 +157,7 @@ public class ActivityStore {
         if (accountId != null) {
             spec = spec.bind("account", accountId);
         }
-        return spec.map(ActivityStore::entry).all();
+        return withPortions(spec.map(ActivityStore::entry).all());
     }
 
     /** Total of one kind (expense or income) in a month; removed rows never count. */
@@ -335,6 +347,6 @@ public class ActivityStore {
                 row.get("created_at", java.time.OffsetDateTime.class).toInstant(), row.get("reason", String.class),
                 row.get("movement_id", UUID.class), row.get("counter_account_id", UUID.class),
                 row.get("counter_account_name", String.class), row.get("classification", String.class),
-                Boolean.TRUE.equals(row.get("category_archived", Boolean.class)));
+                Boolean.TRUE.equals(row.get("category_archived", Boolean.class)), List.of());
     }
 }

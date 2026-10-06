@@ -2,8 +2,10 @@ package com.mdstech.wealthmesh.activity.dto;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
+/** One ledger row as listed. `portions` is empty unless the expense is split; a split has no category of its own. */
 public record ActivityResponse(
         UUID id,
         UUID accountId,
@@ -21,5 +23,12 @@ public record ActivityResponse(
         UUID counterAccountId,
         String counterAccountName,
         String classification,
-        boolean categoryArchived) {
+        boolean categoryArchived,
+        List<PortionResponse> portions) {
+
+    public ActivityResponse withPortions(List<PortionResponse> shown) {
+        return new ActivityResponse(id, accountId, accountName, kind, amount, occurredOn, description, categoryId,
+                categoryName, enteredByMemberId, createdAt, reason, movementId, counterAccountId, counterAccountName,
+                classification, categoryArchived, shown);
+    }
 }

@@ -46,6 +46,21 @@ public class CategoryStore {
                 .bind("ids", ids).map((row, meta) -> category(row)).all();
     }
 
+    /**
+     * Reads the categories under a share lock, lowest id first (the order a merge or archive locks them in), so a split
+     * save that names several cannot wait on a writer that holds one of them and wants another.
+     */
+    public Flux<Category> lockShared(List<UUID> ids) {
+        return client.sql("SELECT " + COLUMNS + " FROM category WHERE id IN (:ids) ORDER BY id FOR SHARE")
+                .bind("ids", ids).map((row, meta) -> category(row)).all();
+    }
+
+    /** The id of the active category of this kind with this name, read without a lock (lock it by id afterwards). */
+    public Mono<UUID> activeIdByName(String kind, String name) {
+        return client.sql("SELECT id FROM category WHERE kind = :kind AND name = :name AND archived_at IS NULL")
+                .bind("kind", kind).bind("name", name).map((row, meta) -> row.get("id", UUID.class)).one();
+    }
+
     /** True while another category was merged into this one and that merge has not been undone. */
     public Mono<Boolean> isLiveMergeTarget(UUID id) {
         return client.sql("SELECT EXISTS (SELECT 1 FROM category WHERE merged_into_id = :id) AS live")

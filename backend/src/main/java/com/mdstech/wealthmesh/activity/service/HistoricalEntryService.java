@@ -2,6 +2,7 @@ package com.mdstech.wealthmesh.activity.service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.dao.DuplicateKeyException;
@@ -83,7 +84,8 @@ public class HistoricalEntryService {
             Instant cutoff) {
         return validator.parse(withNoDateCheck(account, request), request.kind(), request.entry())
                 .flatMap(entry -> openings.storedMatches(existing.idempotencyKey(), cutoff, request.startRevision())
-                        .flatMap(sameStart -> sameStart && entry.matches(existing) && existing.replacesId() == null
+                        .flatMap(sameStart -> sameStart && entry.matches(existing, List.of())
+                                && existing.replacesId() == null
                                 ? store.byId(existing.id()).map(a -> new EntryService.Saved(a, false))
                                 : Mono.error(conflict(
                                         "This save was already used with different details. Start a new entry."))));

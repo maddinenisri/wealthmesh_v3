@@ -4,8 +4,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
@@ -16,11 +20,15 @@ import org.springframework.web.server.ResponseStatusException;
 import com.mdstech.wealthmesh.account.domain.Account;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.domain.Activity;
+import com.mdstech.wealthmesh.activity.domain.Portion;
 import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
 import com.mdstech.wealthmesh.activity.dto.HistoryEntry;
+import com.mdstech.wealthmesh.activity.dto.PortionRequest;
 import com.mdstech.wealthmesh.activity.dto.ReplacementRequest;
 import com.mdstech.wealthmesh.activity.repository.ActivityRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
+import com.mdstech.wealthmesh.activity.repository.PortionStore;
+import com.mdstech.wealthmesh.money.Money;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -35,12 +43,15 @@ public class EntryChangeService {
     private final EntryValidator validator;
     private final ActivityRepository activities;
     private final ActivityStore store;
+    private final PortionStore portions;
     private final Clock clock;
     private final TransactionalOperator transactions;
     private final MoveTarget moveTarget;
 
     public EntryChangeService(AccountRepository accounts, EntryValidator validator, ActivityRepository activities,
-            ActivityStore store, Clock clock, TransactionalOperator transactions, MoveTarget moveTarget) {
+            ActivityStore store, PortionStore portions, Clock clock, TransactionalOperator transactions,
+            MoveTarget moveTarget) {
+        this.portions = portions;
         this.transactions = transactions;
         this.moveTarget = moveTarget;
         this.accounts = accounts;
@@ -106,22 +117,25 @@ public class EntryChangeService {
         return Mono.fromCallable(() -> requireKey(key))
                 .then(Mono.defer(() -> store.expireKey(key, cutoff)))
                 .then(Mono.defer(() -> original(accountId, activityId, true)))
-                .flatMap(original -> moveTarget.resolve(accountId, request.accountId()).flatMap(account -> validator
-                        .parse(account, replacementKind(original), keepClass(original, request), original.categoryId())
+                .flatMap(original -> portions.of(original.id()).flatMap(before -> moveTarget
+                        .resolve(accountId, request.accountId()).flatMap(account -> validator
+                        .parseSplittable(account, replacementKind(original), keepClass(original, request, before),
+                                kept(original, before))
                         .doOnNext(entry -> checkFeeMatchesCorrection(original, entry))
                         .doOnNext(entry -> checkStaysPut(original, entry))
                         .flatMap(entry -> activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
                                 .flatMap(existing -> replay(existing, entry, activityId))
                                 .switchIfEmpty(Mono.defer(() -> original.removedAt() != null
                                         ? Mono.error(conflict("This entry was already changed or removed."))
-                                        : swap(original, entry, key, request.reason(), now, cutoff, account))))))
+                                        : swap(original, entry, key, request.reason(), now, cutoff, account,
+                                                kept(original, before))))))))
                 .onErrorMap(DuplicateKeyException.class,
                         e -> conflict("This save was already used. Start a new entry."));
     }
 
     /** One transaction: the original leaves the totals only if the replacement is saved, and only once. */
     Mono<EntryService.Saved> swap(Activity original, EntryValidator.Entry entry, String key, String reason,
-            Instant now, Instant cutoff, Account target) {
+            Instant now, Instant cutoff, Account target, Set<UUID> kept) {
         // Under the locks: a request with this key that finished while this one waited is replayed, and the person
         // who entered it is checked again, so a deactivate in between is not missed (D-034).
         Mono<EntryService.Saved> swapped = lockBoth(original.accountId(), entry.accountId())
@@ -130,6 +144,8 @@ public class EntryChangeService {
                         .switchIfEmpty(Mono.defer(() -> validator.memberLocked(target, entry.memberId())
                                 .then(Mono.defer(() -> validator.checkCategoryLocked(entry.categoryId(),
                                         original.categoryId())))
+                                .then(Mono.defer(() -> validator.checkPortionCategoriesLocked(entry.portions(),
+                                        kept)))
                                 .then(Mono.defer(() -> swapLocked(original, entry, key, reason, now)))))));
         return transactions.transactional(swapped);
     }
@@ -145,6 +161,7 @@ public class EntryChangeService {
                 .then(Mono.defer(() -> activities.save(new Activity(null, entry.accountId(), entry.kind(),
                         entry.amount(), entry.occurredOn(), entry.description(), entry.categoryId(), entry.memberId(),
                         key, now, note, original.id(), null, null, entry.classification()))))
+                .flatMap(saved -> portions.insert(saved.id(), entry.portions()).thenReturn(saved))
                 .flatMap(saved -> store.byId(saved.id())).map(a -> new EntryService.Saved(a, true));
     }
 
@@ -162,24 +179,47 @@ public class EntryChangeService {
     }
 
     private Mono<EntryService.Saved> replay(Activity existing, EntryValidator.Entry entry, UUID activityId) {
-        if (!activityId.equals(existing.replacesId()) || !entry.matches(existing)) {
-            return Mono.error(conflict("This save was already used with different details. Start a new entry."));
-        }
-        return store.byId(existing.id()).map(a -> new EntryService.Saved(a, false));
+        return portions.of(existing.id()).flatMap(stored -> {
+            if (!activityId.equals(existing.replacesId()) || !entry.matches(existing, stored)) {
+                return Mono.<EntryService.Saved>error(
+                        conflict("This save was already used with different details. Start a new entry."));
+            }
+            return store.byId(existing.id()).map(a -> new EntryService.Saved(a, false));
+        });
     }
 
     /**
      * An edit that names no class and keeps the category keeps the class the entry was saved with, so an override
-     * (an Essential grocery marked Discretionary) is not lost by correcting the date.
+     * (an Essential grocery marked Discretionary) is not lost by correcting the date. A split entry's portions are
+     * carried when the edit names neither portions nor a category, so moving or re-dating it keeps its split
+     * (SPLITS_002); an empty list removes the split.
      */
-    private static ExpenseRequest keepClass(Activity original, ReplacementRequest request) {
+    private static ExpenseRequest keepClass(Activity original, ReplacementRequest request, List<Portion> before) {
         ExpenseRequest entry = request.asEntry();
+        if (entry.portions() == null && !before.isEmpty() && !namesCategory(request)) {
+            return new ExpenseRequest(entry.description(), entry.amount(), entry.occurredOn(), null, null,
+                    entry.enteredByMemberId(), null, before.stream().map(EntryChangeService::carried).toList());
+        }
         boolean sameCategory = Objects.equals(request.categoryId(), original.categoryId())
                 && (request.category() == null || request.category().isBlank());
         return entry.classification() == null && sameCategory && original.classification() != null
                 ? new ExpenseRequest(entry.description(), entry.amount(), entry.occurredOn(), entry.category(),
-                        entry.categoryId(), entry.enteredByMemberId(), original.classification())
+                        entry.categoryId(), entry.enteredByMemberId(), original.classification(), entry.portions())
                 : entry;
+    }
+
+    private static boolean namesCategory(ReplacementRequest request) {
+        return request.categoryId() != null || request.category() != null && !request.category().isBlank();
+    }
+
+    private static PortionRequest carried(Portion p) {
+        return new PortionRequest(null, p.categoryId(), p.classification(), Money.format(p.amount()));
+    }
+
+    /** The categories the entry has now (its own, or its portions'), which a correction may keep when archived. */
+    private static Set<UUID> kept(Activity original, List<Portion> before) {
+        return Stream.concat(Stream.ofNullable(original.categoryId()), before.stream().map(Portion::categoryId))
+                .collect(Collectors.toSet());
     }
 
     /** A correction can only be replaced by the expense that explains it (slice 03, V2_CHECKING_014). */

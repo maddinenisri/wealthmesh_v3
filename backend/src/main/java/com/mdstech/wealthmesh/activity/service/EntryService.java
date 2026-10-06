@@ -19,6 +19,7 @@ import com.mdstech.wealthmesh.activity.dto.ActivityResponse;
 import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
 import com.mdstech.wealthmesh.activity.repository.ActivityRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
+import com.mdstech.wealthmesh.activity.repository.PortionStore;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -38,11 +39,13 @@ public class EntryService {
     private final EntryValidator validator;
     private final ActivityRepository activities;
     private final ActivityStore store;
+    private final PortionStore portions;
     private final Clock clock;
     private final TransactionalOperator transactions;
 
     public EntryService(AccountRepository accounts, EntryValidator validator, ActivityRepository activities,
-            ActivityStore store, Clock clock, TransactionalOperator transactions) {
+            ActivityStore store, PortionStore portions, Clock clock, TransactionalOperator transactions) {
+        this.portions = portions;
         this.transactions = transactions;
         this.accounts = accounts;
         this.validator = validator;
@@ -63,7 +66,7 @@ public class EntryService {
                 .then(Mono.defer(() -> load(accountId)))
                 .flatMap(account -> transactions.transactional(store.lockAccount(account.id())
                         .then(Mono.defer(() -> load(accountId)))
-                        .flatMap(fresh -> validator.parse(fresh, kind, request)
+                        .flatMap(fresh -> validator.parseSplittable(fresh, kind, request, java.util.Set.of())
                                 // The member is read again under a share lock, so a deactivate cannot slip in (D-034).
                                 .flatMap(entry -> validator.memberLocked(fresh, entry.memberId()).thenReturn(entry)))
                         .flatMap(entry -> save(entry, key))));
@@ -75,6 +78,7 @@ public class EntryService {
         Mono<Saved> insert = activities.save(new Activity(null, entry.accountId(), entry.kind(), entry.amount(),
                         entry.occurredOn(), entry.description(), entry.categoryId(), entry.memberId(), key, now,
                         null, null, null, null, entry.classification()))
+                .flatMap(saved -> portions.insert(saved.id(), entry.portions()).thenReturn(saved))
                 .flatMap(saved -> store.byId(saved.id())).map(a -> new Saved(a, true));
         return store.expireKey(key, cutoff)
                 .then(activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
@@ -87,12 +91,14 @@ public class EntryService {
     }
 
     private Mono<Saved> replay(Activity existing, EntryValidator.Entry entry) {
-        boolean same = entry.matches(existing) && existing.replacesId() == null;
-        if (!same) {
-            return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
-                    "This save was already used with different details. Start a new entry."));
-        }
-        return store.byId(existing.id()).map(a -> new Saved(a, false));
+        return portions.of(existing.id()).flatMap(stored -> {
+            boolean same = entry.matches(existing, stored) && existing.replacesId() == null;
+            if (!same) {
+                return Mono.<Saved>error(new ResponseStatusException(HttpStatus.CONFLICT,
+                        "This save was already used with different details. Start a new entry."));
+            }
+            return store.byId(existing.id()).map(a -> new Saved(a, false));
+        });
     }
 
     private static String requireKey(String key) {

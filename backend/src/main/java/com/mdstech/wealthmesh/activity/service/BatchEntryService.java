@@ -73,7 +73,8 @@ public class BatchEntryService {
         return Flux.range(0, request.entries().size()).concatMap(i -> {
             ExpenseRequest row = request.entries().get(i);
             ExpenseRequest withMember = new ExpenseRequest(row.description(), row.amount(), row.occurredOn(),
-                    row.category(), row.categoryId(), request.enteredByMemberId(), row.classification());
+                    row.category(), row.categoryId(), request.enteredByMemberId(), row.classification(),
+                    row.portions());
             return validator.parse(account, "expense", withMember, null)
                     .onErrorMap(ResponseStatusException.class, e -> new ResponseStatusException(e.getStatusCode(),
                             "Row " + (i + 1) + ": " + e.getReason()));
@@ -106,7 +107,7 @@ public class BatchEntryService {
     /** All entries stored and every one identical: the same batch again. Anything else is a different request. */
     private Mono<Saved> replay(List<Stored> stored, List<EntryValidator.Entry> entries) {
         boolean same = stored.size() == entries.size() && stored.stream().allMatch(
-                s -> entries.get(s.index()).matches(s.activity()) && s.activity().replacesId() == null);
+                s -> entries.get(s.index()).matches(s.activity(), List.of()) && s.activity().replacesId() == null);
         if (!same) {
             return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
                     "This save was already used with different details. Start a new entry."));
