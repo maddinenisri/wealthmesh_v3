@@ -77,4 +77,41 @@ describe('Archive and restore an account', () => {
     const row = await screen.findByRole('row', { name: /Emergency Savings/ })
     expect(row).toHaveTextContent('Archived')
   })
+
+  it('V2_ACCOUNT_LIFECYCLE_003 closing with money left explains the zero rule and cannot be confirmed', async () => {
+    mockApi({ household, members: [maya], accounts: [savings()] })
+    const { user } = renderRoute(`/accounts/${savings().id}`)
+    await user.click(await screen.findByRole('button', { name: 'Close account' }))
+    const review = await screen.findByRole('region', { name: 'Review closing Emergency Savings' })
+    expect(review).toHaveTextContent('Closing needs a zero Balance')
+    expect(review).toHaveTextContent('$10,000.00')
+    expect(review).toHaveTextContent('record a transfer')
+    expect(within(review).getByRole('button', { name: 'Close Emergency Savings' })).toBeDisabled()
+  })
+
+  it('V2_ACCOUNT_LIFECYCLE_003 a zero account closes, focus goes to the status line, entries are off until Reopen', async () => {
+    const zero = { ...savings(), balance: { amount: '0.00', asOf: '2026-09-01' } }
+    mockApi({ household, members: [maya], accounts: [zero] })
+    const { user } = renderRoute(`/accounts/${zero.id}`)
+    const opener = await screen.findByRole('button', { name: 'Close account' })
+    await user.click(opener)
+    const review = await screen.findByRole('region', { name: 'Review closing Emergency Savings' })
+    await user.click(within(review).getByRole('button', { name: 'Cancel' }))
+    expect(opener).toHaveFocus()
+    await user.click(opener)
+    await user.click(
+      within(await screen.findByRole('region', { name: /Review closing/ })).getByRole('button', {
+        name: 'Close Emergency Savings',
+      }),
+    )
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('Emergency Savings is closed with a $0.00 Balance')
+    await waitFor(() => expect(status).toHaveFocus())
+    expect(screen.getByRole('button', { name: 'Add money in' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Reopen account' }))
+    const reopen = await screen.findByRole('region', { name: 'Review reopening Emergency Savings' })
+    await user.click(within(reopen).getByRole('button', { name: 'Reopen Emergency Savings' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add money in' })).toBeEnabled())
+    expect(await screen.findByRole('status')).toHaveTextContent('open again')
+  })
 })

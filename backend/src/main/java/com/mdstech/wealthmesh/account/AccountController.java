@@ -59,6 +59,16 @@ public class AccountController {
         return lifecycle.archive(id);
     }
 
+    @PostMapping("/{id}/close")
+    public Mono<AccountResponse> close(@PathVariable UUID id) {
+        return lifecycle.close(id);
+    }
+
+    @PostMapping("/{id}/reopen")
+    public Mono<AccountResponse> reopen(@PathVariable UUID id) {
+        return lifecycle.reopen(id);
+    }
+
     @PostMapping("/{id}/restore")
     public Mono<AccountResponse> restore(@PathVariable UUID id) {
         return lifecycle.restore(id);

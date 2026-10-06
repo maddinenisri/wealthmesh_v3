@@ -1,6 +1,8 @@
 package com.mdstech.wealthmesh.account.service;
 
+import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -13,6 +15,7 @@ import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.dto.AccountResponse;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
+import com.mdstech.wealthmesh.money.Money;
 
 import reactor.core.publisher.Mono;
 
@@ -52,11 +55,51 @@ public class AccountLifecycleService {
     }
 
     /**
+     * Closes an account whose Balance is exactly zero (the money moved or the debt paid) and that has no entry dated
+     * after today. A closed account takes no new money and no change until it is reopened.
+     */
+    public Mono<AccountResponse> close(UUID id) {
+        return move(id, AccountState.CLOSED, AccountState.ACTIVE,
+                account -> account.status().equals(AccountState.ARCHIVED)
+                        ? "Restore " + account.name() + " before closing it."
+                        : "Reopen " + account.name() + " before closing it.",
+                this::requireZero);
+    }
+
+    /** Reopens a closed account explicitly; it returns to the active list with its history. */
+    public Mono<AccountResponse> reopen(UUID id) {
+        return move(id, AccountState.ACTIVE, AccountState.CLOSED,
+                account -> account.name() + " is archived. Restore it instead.");
+    }
+
+    /** Closing needs an accounted-for zero Balance and nothing dated after today (read under the account lock). */
+    private Mono<Void> requireZero(Account account) {
+        return store.deltaOf(account.id()).flatMap(delta -> {
+            BigDecimal balance = account.openingAmount().add(delta.amount());
+            if (balance.signum() != 0) {
+                return Mono.error(conflict("Closing " + account.name() + " needs a zero Balance. It has "
+                        + Money.format(balance) + "; move it or pay it first."));
+            }
+            return store.countAfter(account.id(), LocalDate.now(clock)).flatMap(later -> later > 0
+                    ? Mono.<Void>error(conflict(account.name() + " has " + later + " entr" + (later == 1 ? "y" : "ies")
+                            + " dated after today. Remove or date " + (later == 1 ? "it" : "them")
+                            + " first, then close."))
+                    : Mono.<Void>empty());
+        });
+    }
+
+    /**
      * Sets `target` when the account is in `from`; an account already in `target` is returned as it is (a repeat);
      * any other state is refused with `otherwise`.
      */
     private Mono<AccountResponse> move(UUID id, String target, String from,
             java.util.function.Function<Account, String> otherwise) {
+        return move(id, target, from, otherwise, account -> Mono.empty());
+    }
+
+    private Mono<AccountResponse> move(UUID id, String target, String from,
+            java.util.function.Function<Account, String> otherwise,
+            java.util.function.Function<Account, Mono<Void>> precondition) {
         Mono<Account> work = store.lockAccount(id).then(Mono.defer(() -> load(id))).flatMap(account -> {
             if (target.equals(account.status())) {
                 return Mono.just(account);
@@ -64,9 +107,9 @@ public class AccountLifecycleService {
             if (!from.equals(account.status())) {
                 return Mono.error(conflict(otherwise.apply(account)));
             }
-            return accounts.save(new Account(account.id(), account.householdId(), account.type(), account.name(),
-                    account.institution(), account.openedOn(), account.openingAmount(), target, account.createdAt(),
-                    clock.instant()));
+            return precondition.apply(account).then(Mono.defer(() -> accounts.save(new Account(account.id(),
+                    account.householdId(), account.type(), account.name(), account.institution(),
+                    account.openedOn(), account.openingAmount(), target, account.createdAt(), clock.instant()))));
         });
         return transactions.transactional(work).flatMap(saved -> accountService.findById(saved.id()));
     }

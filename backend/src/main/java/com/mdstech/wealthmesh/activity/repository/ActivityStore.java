@@ -81,6 +81,14 @@ public class ActivityStore {
                 .one().defaultIfEmpty(Delta.NONE);
     }
 
+    /** How many entries that still count are dated after `today` (a close refuses while any exist). */
+    public Mono<Long> countAfter(UUID accountId, LocalDate today) {
+        return client.sql("SELECT COUNT(*) AS n FROM activity WHERE removed_at IS NULL AND account_id = :account "
+                        + "AND occurred_on > :today")
+                .bind("account", accountId).bind("today", today)
+                .map((row, meta) -> row.get("n", Long.class)).one();
+    }
+
     /** The date of the account's earliest entry that still counts; empty when it has none. */
     public Mono<LocalDate> earliestOf(UUID accountId) {
         return client.sql("SELECT MIN(occurred_on) AS earliest FROM activity "

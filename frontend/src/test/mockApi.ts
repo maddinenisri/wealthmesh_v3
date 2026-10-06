@@ -827,12 +827,17 @@ export function mockApi(
       existing.active = true
       return HttpResponse.json(memberBody(existing))
     }),
-    ...(['archive', 'restore'] as const).map((action) =>
+    ...(['archive', 'restore', 'close', 'reopen'] as const).map((action) =>
       http.post(`*/api/v1/accounts/:id/${action}`, ({ request, params }) => {
         log(request)
         const existing = state.accounts.find((a) => a.id === params.id)
         if (!existing) return problem(404, `Account not found: ${String(params.id)}`)
-        existing.status = action === 'archive' ? 'archived' : 'active'
+        if (action === 'close' && Number(existing.balance.amount) !== 0)
+          return problem(
+            409,
+            `Closing ${existing.name} needs a zero Balance. It has ${existing.balance.amount}; move it or pay it first.`,
+          )
+        existing.status = { archive: 'archived', close: 'closed' }[action as string] ?? 'active'
         return HttpResponse.json(existing)
       }),
     ),

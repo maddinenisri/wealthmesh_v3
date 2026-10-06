@@ -171,3 +171,69 @@ for (const width of [710, 1280]) {
     })
   })
 }
+
+for (const width of [710, 1280]) {
+  test.describe.serial(`close and reopen at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+    const name = `Closing Savings ${width}`
+    let id = ''
+    let checking = ''
+
+    test(`V2_ACCOUNT_LIFECYCLE_003 closing with money left explains the zero rule and keeps Confirm off (${width}px)`, async ({
+      page,
+    }) => {
+      id = await createAccount(page, name, 'savings', '1000.00')
+      checking = await createAccount(page, `Closing Checking ${width}`, 'checking', '5000.00')
+      await page.goto(`/accounts/${id}`)
+      const opener = page.getByRole('button', { name: 'Close account' })
+      await opener.click()
+      const review = page.getByRole('region', { name: `Review closing ${name}` })
+      await expectFocusInside(review)
+      await expect(review).toContainText('Closing needs a zero Balance')
+      await expect(review).toContainText('$1,000.00')
+      await expect(page.getByRole('button', { name: `Close ${name}` })).toBeDisabled()
+      await expectNoSidewaysScroll(page)
+      await review.getByRole('button', { name: 'Cancel' }).click()
+      await expect(opener).toBeFocused()
+    })
+
+    test(`V2_ACCOUNT_LIFECYCLE_003 after moving the money the account closes, focus lands on the status line, entries are off until Reopen (${width}px)`, async ({
+      page,
+    }) => {
+      const before = await wealth(page)
+      const moved = await page.request.post('/api/v1/transfers', {
+        headers: { 'Idempotency-Key': `e2e-close-move-${width}` },
+        data: {
+          fromAccountId: id,
+          toAccountId: checking,
+          amount: '1000.00',
+          occurredOn: '2026-09-10',
+          enteredByMemberId: await ownerId(page),
+        },
+      })
+      expect(moved.ok()).toBeTruthy()
+      await page.goto(`/accounts/${id}`)
+      await page.getByRole('button', { name: 'Close account' }).click()
+      await expect(page.getByRole('region', { name: `Review closing ${name}` })).toContainText(
+        'closed with a $0.00 Balance',
+      )
+      await page.getByRole('button', { name: `Close ${name}` }).click()
+      const status = page.getByRole('status')
+      await expect(status).toContainText(`${name} is closed with a $0.00 Balance`)
+      await expect(status).toBeFocused()
+      await expect(status).toBeInViewport({ ratio: 1 })
+      await expect(page.getByRole('button', { name: 'Add money in' })).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Add transfer' })).toBeDisabled()
+      const after = await wealth(page)
+      expect(after.netWorth).toBe(before.netWorth)
+
+      await page.getByRole('button', { name: 'Reopen account' }).click()
+      const reopen = page.getByRole('region', { name: `Review reopening ${name}` })
+      await expectFocusInside(reopen)
+      await page.getByRole('button', { name: `Reopen ${name}` }).click()
+      await expect(page.getByRole('status')).toContainText(`${name} is open again`)
+      await expect(page.getByRole('status')).toBeFocused()
+      await expect(page.getByRole('button', { name: 'Add money in' })).toBeEnabled()
+    })
+  })
+}

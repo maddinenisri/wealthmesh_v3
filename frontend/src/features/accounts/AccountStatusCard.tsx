@@ -7,23 +7,27 @@ import { balanceText, isCard } from './cardBalance'
 import { STATUS_LABEL } from './statusLabel'
 import { useStateChangeFocus } from './useStateChangeFocus'
 
-type Review = 'archive' | 'restore'
+type Review = 'archive' | 'restore' | 'close' | 'reopen'
 
-/** Archive or restore: reviewed first, nothing about money changes (A1). */
+/** Archive, restore, close or reopen: each reviewed first, and none of them changes money (A1, A2). */
 export function AccountStatusCard({ account }: { account: Account }) {
   const [review, setReview] = useState<Review | null>(null)
   const { message, statusRef, begin, changed } = useStateChangeFocus(review !== null)
   const change = useChangeAccountStatus(account.id)
   const figure = balanceText(account.type, account.balance.amount)
+  const atZero = Number(account.balance.amount) === 0
 
   const confirm = (action: Review) =>
     change.mutate(action, {
       onSuccess: () => {
         setReview(null)
         changed(
-          action === 'archive'
-            ? `${account.name} is archived. Its ${figure} stays in wealth.`
-            : `${account.name} is active again with its ${figure} and complete history.`,
+          {
+            archive: `${account.name} is archived. Its ${figure} stays in wealth.`,
+            restore: `${account.name} is active again with its ${figure} and complete history.`,
+            close: `${account.name} is closed with a ${figure} Balance. Its history is kept.`,
+            reopen: `${account.name} is open again. Its history is as it was.`,
+          }[action],
         )
       },
     })
@@ -48,6 +52,11 @@ export function AccountStatusCard({ account }: { account: Account }) {
           {message}
         </p>
       )}
+      {account.status === 'closed' && !message && (
+        <p className="mt-2 max-w-prose text-sm text-ink-muted">
+          Closed: it takes no new entries and no changes until you reopen it. Its history stays.
+        </p>
+      )}
       {account.status === 'archived' && !message && (
         <p className="mt-2 max-w-prose text-sm text-ink-muted">
           Archived: hidden from the active list and from new entries, transfers and payments. Its{' '}
@@ -61,9 +70,14 @@ export function AccountStatusCard({ account }: { account: Account }) {
             className="mt-3 flex max-w-md flex-col gap-3 rounded-control border border-line bg-sunken p-4"
           >
             <h3 id="status-review-heading" className="font-medium">
-              {review === 'archive'
-                ? `Review archiving ${account.name}`
-                : `Review restoring ${account.name}`}
+              {
+                {
+                  archive: `Review archiving ${account.name}`,
+                  restore: `Review restoring ${account.name}`,
+                  close: `Review closing ${account.name}`,
+                  reopen: `Review reopening ${account.name}`,
+                }[review]
+              }
             </h3>
             {review === 'archive' ? (
               <>
@@ -78,20 +92,38 @@ export function AccountStatusCard({ account }: { account: Account }) {
                   account at its bank.
                 </p>
               </>
-            ) : (
+            ) : review === 'restore' ? (
               <p className="text-sm">
                 {account.name} returns to the active list with the same Balance ({figure}) and
                 complete history.
               </p>
+            ) : review === 'close' ? (
+              atZero ? (
+                <p className="text-sm">
+                  {account.name} will be marked closed with a {figure} Balance and its history kept.
+                  It takes no new entries until you reopen it. Wealth does not change.
+                </p>
+              ) : (
+                <p className="text-sm">
+                  Closing needs a zero Balance. {account.name} has {figure}, which must be accounted
+                  for first: {isCard(account.type) ? 'record a payment' : 'record a transfer'} for
+                  it, then review closing again.
+                </p>
+              )
+            ) : (
+              <p className="text-sm">
+                {account.name} returns to the active list. Its history is as it was.
+              </p>
             )}
             <FormAlert message={change.error?.message} />
             <div className="flex gap-2">
-              <Button disabled={change.isPending} onClick={() => confirm(review)}>
+              <Button
+                disabled={change.isPending || (review === 'close' && !atZero)}
+                onClick={() => confirm(review)}
+              >
                 {change.isPending
                   ? 'Saving'
-                  : review === 'archive'
-                    ? `Archive ${account.name}`
-                    : `Restore ${account.name}`}
+                  : `${{ archive: 'Archive', restore: 'Restore', close: 'Close', reopen: 'Reopen' }[review]} ${account.name}`}
               </Button>
               <Button
                 variant="ghost"
@@ -118,6 +150,30 @@ export function AccountStatusCard({ account }: { account: Account }) {
               }}
             >
               Archive account
+            </Button>
+          )}
+          {account.status === 'active' && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                begin()
+                setReview('close')
+              }}
+            >
+              Close account
+            </Button>
+          )}
+          {account.status === 'closed' && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                begin()
+                setReview('reopen')
+              }}
+            >
+              Reopen account
             </Button>
           )}
           {account.status === 'archived' && (

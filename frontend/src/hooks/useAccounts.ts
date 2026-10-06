@@ -46,11 +46,12 @@ export function useUpdateAccount(id: string) {
   })
 }
 
-/** Archive or restore: the account, the list and wealth all read the new status. */
+/** Archive, restore, close or reopen: the account, the list and wealth all read the new status. */
 export function useChangeAccountStatus(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (action: 'archive' | 'restore') => changeAccountStatus(id, action),
+    mutationFn: (action: 'archive' | 'restore' | 'close' | 'reopen') =>
+      changeAccountStatus(id, action),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: accountsKey }),
