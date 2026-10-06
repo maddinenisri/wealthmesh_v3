@@ -85,7 +85,7 @@ Every shared row or state this slice changes, with each reader and writer (grep 
 | `V2_SPLITS_004` | `SplitRemoveApiTests`, `RepeatUndoApiTests` (API); `SplitRemove.test.tsx` (UI); `11g-splits.spec.ts` (e2e) |
 | `V2_SPLITS_005` | `SplitCorrectApiTests.moveCarriesPortions` (API); `SplitCorrect.test.tsx` (UI); `11g-splits.spec.ts` (e2e) |
 
-Planted-defect proof (lock removed, test goes red): member share lock (`SplitRaceApiTests`, `CategoryGuardsApiTests` for Q-035), category share lock by id and by name, portion recheck in the correction, account lock in `record`, account lock in Undo. Counts at the end of Prove: 357 backend tests, 179 UI tests, 127 e2e.
+Planted-defect proof (lock removed, test goes red): member share lock (`SplitRaceApiTests`, `CategoryGuardsApiTests` for Q-035), category share lock by id and by name, portion recheck in the correction, account lock in `record`, account lock in Undo. Counts at the end of Prove: 355 backend tests (run in full, 0 failed), 179 UI tests, 127 e2e.
 
 ## Validator report (independent agent, after the build)
 
