@@ -173,6 +173,25 @@ class SplitCorrectApiTests extends SplitTestBase {
                 .expectBody().jsonPath("$.length()").isEqualTo(1);
     }
 
+    @Order(9)
+    @Test
+    @DisplayName("V2_SPLITS_002 a split that was really a transfer is replaced by one; its split stays in history")
+    void splitChangedToTransfer() {
+        String split = saveSplit(account, "conv-1", split(mayaId, "Was a transfer", "50.00", "2026-09-14",
+                p("Groceries", null, "30.00"), p("Dining", null, "20.00")));
+        assertBalance(account, "4950.00");
+        webTestClient.post().uri("/api/v1/accounts/{a}/activity/{id}/transfer", account, split)
+                .contentType(MediaType.APPLICATION_JSON).header("Idempotency-Key", "conv-key")
+                .bodyValue("{\"toAccountId\": \"%s\", \"enteredByMemberId\": \"%s\", \"reason\": \"Moved money\"}"
+                        .formatted(savings, mayaId)).exchange().expectStatus().isCreated();
+        assertBalance(account, "4950.00");
+        webTestClient.get().uri("/api/v1/spending?month=2026-09&accountId=" + account).exchange().expectBody()
+                .jsonPath("$.total").isEqualTo("0.00").jsonPath("$.categories.length()").isEqualTo(0);
+        webTestClient.get().uri("/api/v1/accounts/{id}/activity/history", account).exchange().expectBody()
+                .jsonPath("$[?(@.id=='" + split + "')].status").isEqualTo("replaced")
+                .jsonPath("$[?(@.id=='" + split + "')].portions.length()").isEqualTo(2);
+    }
+
     private String latestId(String accountId) {
         java.util.concurrent.atomic.AtomicReference<String> id = new java.util.concurrent.atomic.AtomicReference<>();
         webTestClient.get().uri("/api/v1/accounts/{id}/activity", accountId).exchange().expectBody()
