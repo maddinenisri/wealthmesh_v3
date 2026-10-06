@@ -12,7 +12,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.mdstech.wealthmesh.account.dto.AccountEvent;
 import com.mdstech.wealthmesh.account.dto.AccountLifecycle;
+import com.mdstech.wealthmesh.account.dto.LifecycleRequest;
 import com.mdstech.wealthmesh.account.dto.AccountRequest;
 import com.mdstech.wealthmesh.account.dto.AccountResponse;
 import com.mdstech.wealthmesh.account.dto.AccountUpdateRequest;
@@ -56,18 +58,21 @@ public class AccountController {
     }
 
     @PostMapping("/{id}/archive")
-    public Mono<AccountResponse> archive(@PathVariable UUID id) {
-        return lifecycle.archive(id);
+    public Mono<AccountResponse> archive(@PathVariable UUID id,
+            @RequestBody(required = false) LifecycleRequest request) {
+        return lifecycle.archive(id, memberOf(request));
     }
 
     @PostMapping("/{id}/close")
-    public Mono<AccountResponse> close(@PathVariable UUID id) {
-        return lifecycle.close(id);
+    public Mono<AccountResponse> close(@PathVariable UUID id,
+            @RequestBody(required = false) LifecycleRequest request) {
+        return lifecycle.close(id, memberOf(request));
     }
 
     @PostMapping("/{id}/reopen")
-    public Mono<AccountResponse> reopen(@PathVariable UUID id) {
-        return lifecycle.reopen(id);
+    public Mono<AccountResponse> reopen(@PathVariable UUID id,
+            @RequestBody(required = false) LifecycleRequest request) {
+        return lifecycle.reopen(id, memberOf(request));
     }
 
     @GetMapping("/{id}/lifecycle")
@@ -76,17 +81,29 @@ public class AccountController {
     }
 
     @PostMapping("/{id}/delete")
-    public Mono<AccountResponse> delete(@PathVariable UUID id) {
-        return lifecycle.delete(id);
+    public Mono<AccountResponse> delete(@PathVariable UUID id,
+            @RequestBody(required = false) LifecycleRequest request) {
+        return lifecycle.delete(id, memberOf(request));
     }
 
     @PostMapping("/{id}/undo-delete")
-    public Mono<AccountResponse> undoDelete(@PathVariable UUID id) {
-        return lifecycle.undoDelete(id);
+    public Mono<AccountResponse> undoDelete(@PathVariable UUID id,
+            @RequestBody(required = false) LifecycleRequest request) {
+        return lifecycle.undoDelete(id, memberOf(request));
     }
 
     @PostMapping("/{id}/restore")
-    public Mono<AccountResponse> restore(@PathVariable UUID id) {
-        return lifecycle.restore(id);
+    public Mono<AccountResponse> restore(@PathVariable UUID id,
+            @RequestBody(required = false) LifecycleRequest request) {
+        return lifecycle.restore(id, memberOf(request));
+    }
+
+    @GetMapping("/{id}/events")
+    public Flux<AccountEvent> events(@PathVariable UUID id) {
+        return lifecycle.events(id);
+    }
+
+    private static UUID memberOf(LifecycleRequest request) {
+        return request == null ? null : request.enteredByMemberId();
     }
 }

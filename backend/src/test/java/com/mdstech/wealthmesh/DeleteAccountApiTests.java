@@ -64,7 +64,7 @@ class DeleteAccountApiTests extends LifecycleTestBase {
         assertBalance(savings, "0.00");
         webTestClient.get().uri("/api/v1/accounts/{id}/lifecycle", savings).exchange().expectBody()
                 .jsonPath("$.canDelete").isEqualTo(false)
-                .jsonPath("$.deleteBlockedBy[0]").isEqualTo("1 saved entry, removed ones included");
+                .jsonPath("$.deleteBlockedBy[0]").isEqualTo("1 saved entry (removed ones count)");
         assertRefused(act(savings, "delete"), "has saved history that must be retained");
         assertRefused(act(savings, "delete"), "Archive or close it instead");
         assertBalance(savings, "0.00");
@@ -85,7 +85,7 @@ class DeleteAccountApiTests extends LifecycleTestBase {
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange().expectStatus().isOk();
         assertActivityCount(removed, 0);
-        assertRefused(act(removed, "delete"), "1 saved entry, removed ones included");
+        assertRefused(act(removed, "delete"), "1 saved entry (removed ones count)");
 
         String reminder = account("With Reminder", "0.00");
         post(reminder, "reminders", "d-rem", """
@@ -100,7 +100,7 @@ class DeleteAccountApiTests extends LifecycleTestBase {
         assertRefused(act(statement, "delete"), "1 statement");
 
         String funded = account("Funded No Activity", "100.00");
-        assertRefused(act(funded, "delete"), "a starting Balance of 100.00");
+        assertRefused(act(funded, "delete"), "a starting Balance of $100.00");
         assertStatus(funded, "active");
     }
 

@@ -48,6 +48,15 @@ async function createAccount(
   return ((await response.json()) as { id: string }).id
 }
 
+// Each test gets a fresh browser, so the "Entering as" choice is made again (D-025): every review shows who is entering.
+test.beforeEach(async ({ page }) => {
+  const id = await ownerId(page)
+  await page.addInitScript(
+    (member) => window.localStorage.setItem('wealthmesh.enteringAs', member),
+    id,
+  )
+})
+
 const figures = ({ financialAssets, debts, netWorth }: Wealth) => ({
   financialAssets,
   debts,
@@ -141,6 +150,10 @@ for (const width of [710, 1280]) {
       const status = page.getByRole('status')
       await expect(status).toContainText('is active again with its $10,000.00')
       await expect(status).toBeFocused()
+      // Cowork 1: the change is kept in the account's history, with who and when.
+      const history = page.getByRole('region', { name: 'Status history' })
+      await expect(history).toContainText(/Archived by .+ · \d{4}-\d{2}-\d{2} \d{2}:\d{2}/)
+      await expect(history).toContainText(/Restored by /)
       await expect(page.getByRole('button', { name: 'Add money in' })).toBeEnabled()
       await page.goto('/accounts')
       await expect(page.getByRole('row', { name: new RegExp(name) })).toContainText('$10,000.00')
@@ -322,7 +335,8 @@ for (const width of [710, 1280]) {
       const review = page.getByRole('region', { name: `Review deleting Used Savings ${width}` })
       await expectFocusInside(review)
       await expect(review).toContainText('Saved history must be retained')
-      await expect(review).toContainText('1 saved entry')
+      await expect(review).toContainText('1 saved entry (removed ones count)')
+      await expect(review).toContainText('a starting Balance of $300.00')
       await expect(review.getByRole('button', { name: /^Delete / })).toHaveCount(0)
       await review.getByRole('button', { name: 'Review archiving instead' }).click()
       const archiving = page.getByRole('region', { name: `Review archiving Used Savings ${width}` })
@@ -337,6 +351,74 @@ for (const width of [710, 1280]) {
       await page.getByRole('button', { name: 'Cancel' }).click()
       await expect(opener).toBeFocused()
       await expect(page.getByRole('main')).toContainText('Active')
+    })
+  })
+}
+
+for (const width of [710, 1280]) {
+  test.describe.serial(`closed card from the other side at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+
+    test(`V2_ACCOUNT_LIFECYCLE_004 a payment to a closed card cannot be edited or removed from the bank's page, and the Cards total reads owed, not a minus sign (${width}px)`, async ({
+      page,
+    }) => {
+      const owner = await ownerId(page)
+      const bank = await createAccount(page, `Paying Checking ${width}`, 'checking', '1000.00')
+      const cardName = `Paid Card ${width}`
+      const made = await page.request.post('/api/v1/accounts', {
+        data: {
+          type: 'credit_card',
+          name: cardName,
+          institution: 'Harbor Cards',
+          ownerMemberIds: [owner],
+          openedOn: '2026-09-01',
+          openingBalance: '200.00',
+          balanceSide: 'owed',
+        },
+      })
+      expect(made.ok()).toBeTruthy()
+      const card = ((await made.json()) as { id: string }).id
+      const paid = await page.request.post('/api/v1/card-payments', {
+        headers: { 'Idempotency-Key': `e2e-closed-card-${width}` },
+        data: {
+          fromAccountId: bank,
+          toAccountId: card,
+          amount: '200.00',
+          occurredOn: '2026-09-10',
+          enteredByMemberId: owner,
+        },
+      })
+      expect(paid.ok()).toBeTruthy()
+      expect((await page.request.post(`/api/v1/accounts/${card}/close`)).ok()).toBeTruthy()
+
+      // Cowork 2: the bank's page offers no Edit or Remove for it, and says why.
+      await page.goto(`/accounts/${bank}`)
+      const remove = page.getByRole('button', { name: new RegExp(`^Remove .*${cardName}`) })
+      await expect(remove).toBeDisabled()
+      await expect(remove).toHaveAttribute('title', /is closed/)
+      await expect(
+        page.getByRole('button', { name: new RegExp(`^Edit .*${cardName}`) }),
+      ).toBeDisabled()
+
+      // Cowork 5: the Cards group total says owed or Card credit, never a minus sign. One card owes, so the total is negative.
+      const owing = await page.request.post('/api/v1/accounts', {
+        data: {
+          type: 'credit_card',
+          name: `Owing Card ${width}`,
+          institution: 'Harbor Cards',
+          ownerMemberIds: [owner],
+          openedOn: '2026-09-01',
+          openingBalance: '50.00',
+          balanceSide: 'owed',
+        },
+      })
+      expect(owing.ok()).toBeTruthy()
+      await page.goto('/')
+      const cards = page.getByRole('region', { name: 'Cards', exact: true })
+      await expect(
+        cards.getByRole('heading', { name: 'Cards' }).locator('xpath=..'),
+      ).not.toContainText('-$')
+      await expectNoSidewaysScroll(page)
     })
   })
 }

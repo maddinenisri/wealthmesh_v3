@@ -21,6 +21,7 @@ export function ActivityList({
   onEditCorrection,
   onRemove,
   onUndo,
+  lockedBy,
 }: {
   accountId: string
   accountType?: string
@@ -33,6 +34,8 @@ export function ActivityList({
   onRemove?: (entry: Activity) => void
   /** Starts bringing a removed entry back from the history table. */
   onUndo?: (entry: HistoryEntry) => void
+  /** Why an entry cannot change because the other account it touches is closed; the buttons stay off with that reason. */
+  lockedBy?: (counterAccountId: string | null) => string | undefined
 }) {
   const activity = useAccountActivity(accountId)
   const [showHistory, setShowHistory] = useState(false)
@@ -132,7 +135,8 @@ export function ActivityList({
                           variant="ghost"
                           size="sm"
                           aria-label={`Edit ${rowName(entry)}`}
-                          disabled={!onEdit}
+                          disabled={!onEdit || !!lockedBy?.(entry.counterAccountId)}
+                          title={lockedBy?.(entry.counterAccountId)}
                           onClick={() => onEdit?.(entry)}
                         >
                           Edit
@@ -141,7 +145,8 @@ export function ActivityList({
                           variant="ghost"
                           size="sm"
                           aria-label={`Remove ${rowName(entry)}`}
-                          disabled={!onRemove}
+                          disabled={!onRemove || !!lockedBy?.(entry.counterAccountId)}
+                          title={lockedBy?.(entry.counterAccountId)}
                           onClick={() => onRemove?.(entry)}
                         >
                           Remove
@@ -159,7 +164,14 @@ export function ActivityList({
         <Button variant="ghost" size="sm" onClick={() => setShowHistory((open) => !open)}>
           {showHistory ? 'Hide history' : 'Show history'}
         </Button>
-        {showHistory && <EntryHistory accountId={accountId} opening={opening} onUndo={onUndo} />}
+        {showHistory && (
+          <EntryHistory
+            accountId={accountId}
+            opening={opening}
+            onUndo={onUndo}
+            lockedBy={lockedBy}
+          />
+        )}
       </div>
     </>
   )

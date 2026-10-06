@@ -37,7 +37,7 @@ Process notes for the session
 
 - Preflight (2026-10-06 08:04): JDK 25 default, Node 26.4, Docker up; ports 5434, 5180, 8081 held by this project (`wm-backend`, `wm-frontend`); v1 on 3000 not running (not needed).
 - 2026-10-06 Checkpoint 1 answer: approved the task list and the design. Q-037: block deleting an account with a non-zero opening amount (409 pointing to Archive or Close); record as a decision noting it deviates from foundations 10 ("no activity beyond the opening row"). Q-038: yes, an archived account's entries stay editable, removable and restorable; a closed account's do not. Additions: (1) Close refuses while any entry dated after today exists, with a raw-API test; (2) one sweep test: delete an account, then hit every read path and chooser and assert it is absent; (3) `useStateChangeFocus` for every new panel exit, with slices 09 to 11 panel exits listed as a backlog in the notes, not retrofitted. Stop rule: if one hits, drop group 4 (delete and Undo) to a later session; keep groups 5 and 6. Build in order, one commit per group, local only, no push, no Claude trailer. Run each new e2e assertion alone against the unfixed code. Report the Cowork count against 8, 8 and 5.
-- 2026-10-06 Checkpoint 2 answer:
+- 2026-10-06 Checkpoint 2 answer: owner pass (Cowork) at 710px, window in front, all five steps pass; 5 faults (against 8, 8 and 5), none of them focus; 1280px by page contents on LC Used Savings only (screenshot too small to judge by eye). Table below.
 
 ## Scope
 
@@ -168,6 +168,13 @@ next session reads), and mark the answer and date in both places when resolved.
 
 | # | Check | Result | Fault seen | Test added |
 | --- | --- | --- | --- | --- |
+| 1 | 8 | fixed | Archive and Restore leave no trace in history (who, when) | `AccountEventsApiTests`, `AccountStatusCard.test.tsx` (status history, Confirm waits for who), e2e restore step reads "Archived by .. · date" and "Restored by" (red on the old code) |
+| 2 | 1, 3 | fixed | Edit and Remove stay enabled on the open side of a payment to a closed card, then Confirm is refused after a full review | e2e "closed card from the other side" (red on the old code); `ActivityList` and `EntryHistory` take `lockedBy` and say why |
+| 3 | 6 | fixed | The delete-refused review said "a starting Balance of 1000.00" | `DeleteAccountApiTests`, e2e delete refused reads "$300.00" (red on the old code); close refusal reads "$1,000.00" too |
+| 4 | wording | fixed | "1 saved entry, removed ones included" | now "1 saved entry (removed ones count)"; same tests |
+| 5 | 6 | fixed | Cards total "-$988.00" while every card line says owed or Card credit | e2e "closed card from the other side" (red with the fix removed); the Cards total reads "$988.00 owed" |
+
+Count: 5 against 8, 8 and 5; no 710px table fault and no focus fault. Also from the owner's note: LC Everyday Checking started at $6,000.00 (it holds the $1,000 transfer in), and the "deleted" status line with Undo stays after a reload until Undo is clicked (it now clears after Undo; kept on purpose before it, because a reload lands on the same deleted state).
 
 ## How it works
 

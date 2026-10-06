@@ -292,13 +292,26 @@ export function mockApi(
   let nextId = 1
   /** Accounts deleted through the API; Undo puts them back. */
   const deletedAccounts: MockAccount[] = []
+  /** State changes by account id, newest first, as the server keeps them. */
+  const accountEvents = new Map<string, { action: string; memberId: string | null; at: string }[]>()
+  const noteAccountEvent = (id: string, action: string, memberId: unknown) =>
+    accountEvents.set(id, [
+      {
+        action,
+        memberId: typeof memberId === 'string' ? memberId : null,
+        at: '2026-10-06T09:00:00Z',
+      },
+      ...(accountEvents.get(id) ?? []),
+    ])
   const deleteBlockers = (account: MockAccount): string[] => {
     const reasons: string[] = []
     const entries = state.activity.filter((a) => a.accountId === account.id).length
     if (entries > 0)
-      reasons.push(`${entries} saved ${entries === 1 ? 'entry' : 'entries'}, removed ones included`)
+      reasons.push(`${entries} saved ${entries === 1 ? 'entry' : 'entries'} (removed ones count)`)
     if (Number(account.openingAmount) !== 0)
-      reasons.push(`a starting Balance of ${Number(account.openingAmount).toFixed(2)}`)
+      reasons.push(
+        `a starting Balance of ${Number(account.openingAmount).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`,
+      )
     return reasons
   }
   const categoryEvents = new Map<string, Record<string, unknown>[]>()
@@ -839,8 +852,9 @@ export function mockApi(
       return HttpResponse.json(memberBody(existing))
     }),
     ...(['archive', 'restore', 'close', 'reopen'] as const).map((action) =>
-      http.post(`*/api/v1/accounts/:id/${action}`, ({ request, params }) => {
+      http.post(`*/api/v1/accounts/:id/${action}`, async ({ request, params }) => {
         log(request)
+        const body = (await request.json().catch(() => ({}))) as { enteredByMemberId?: unknown }
         const existing = state.accounts.find((a) => a.id === params.id)
         if (!existing) return problem(404, `Account not found: ${String(params.id)}`)
         if (action === 'close' && Number(existing.balance.amount) !== 0)
@@ -849,9 +863,18 @@ export function mockApi(
             `Closing ${existing.name} needs a zero Balance. It has ${existing.balance.amount}; move it or pay it first.`,
           )
         existing.status = { archive: 'archived', close: 'closed' }[action as string] ?? 'active'
+        noteAccountEvent(
+          existing.id,
+          { archive: 'archived', restore: 'restored', close: 'closed', reopen: 'reopened' }[action],
+          body.enteredByMemberId,
+        )
         return HttpResponse.json(existing)
       }),
     ),
+    http.get('*/api/v1/accounts/:id/events', ({ request, params }) => {
+      log(request)
+      return HttpResponse.json(accountEvents.get(String(params.id)) ?? [])
+    }),
     http.get('*/api/v1/accounts/:id/lifecycle', ({ request, params }) => {
       log(request)
       const existing = state.accounts.find((a) => a.id === params.id)

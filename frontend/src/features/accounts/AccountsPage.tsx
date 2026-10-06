@@ -16,6 +16,7 @@ import { accountTypeLabel } from './accountTypes'
 import { BalanceFigure } from './BalanceFigure'
 import { STATUS_LABEL } from './statusLabel'
 import { ownerNames } from './ownerNames'
+import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useStateChangeFocus } from './useStateChangeFocus'
 import { useAccountContext } from './useAccountContext'
 
@@ -28,7 +29,8 @@ export function AccountsPage() {
     ?.deleted
   const [deleted] = useState(arrived)
   const [undone, setUndone] = useState(false)
-  const undo = useChangeAccountStatus(deleted?.id ?? '')
+  const { member } = useEnteringAs(members)
+  const undo = useChangeAccountStatus(deleted?.id ?? '', member?.id)
   const { message, statusRef, changed } = useStateChangeFocus(
     false,
     deleted ? `${deleted.name} is deleted. Wealth does not change.` : undefined,

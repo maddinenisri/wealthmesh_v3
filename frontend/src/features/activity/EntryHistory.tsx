@@ -4,6 +4,7 @@ import { Amount, Button, Table, Td, Th } from '../../design-system'
 import { useAccountHistory } from '../../hooks/useActivity'
 import { useOpeningRevisions } from '../../hooks/useStartingBalance'
 import { formatMoney } from '../../lib/money'
+import { stamp } from '../../lib/stamp'
 import { BalanceFigure } from '../accounts/BalanceFigure'
 import { PortionList } from './PortionList'
 import { shownAmount } from './signedAmount'
@@ -12,24 +13,20 @@ import { isMovement, movementName } from './transferRows'
 const STATUS = { effective: 'Effective', replaced: 'Replaced', removed: 'Removed' } as const
 const ACTION = { replaced: 'Replaced', removed: 'Removed', restored: 'Restored' } as const
 
-/** "2026-10-04 17:50" in the viewer's time zone, the same style as every date in the app. */
-function stamp(iso: string): string {
-  const date = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
 /** Every saved entry of an account, including ones that were replaced or removed, newest first. */
 export function EntryHistory({
   accountId,
   opening,
   onUndo,
+  lockedBy,
 }: {
   accountId: string
   /** The initial Balance lives on the account, not in the activity, so history shows it as its own row. */
   opening?: { amount: string; on: string; type?: string }
   /** Starts bringing a removed entry back; left out while another form is open. */
   onUndo?: (entry: HistoryEntry) => void
+  /** Why a movement cannot be restored while the other account it touches is closed. */
+  lockedBy?: (counterAccountId: string | null) => string | undefined
 }) {
   const history = useAccountHistory(accountId, true)
   const revisions = useOpeningRevisions(accountId)
@@ -163,7 +160,8 @@ export function EntryHistory({
                             (entry.portions.length > 0 ? 'split expense' : entry.categoryName) ??
                             'entry')
                       }`}
-                      disabled={!onUndo}
+                      disabled={!onUndo || !!lockedBy?.(entry.counterAccountId)}
+                      title={lockedBy?.(entry.counterAccountId)}
                       onClick={() => onUndo?.(entry)}
                     >
                       Undo

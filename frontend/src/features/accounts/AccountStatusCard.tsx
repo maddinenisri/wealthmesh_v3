@@ -3,14 +3,29 @@ import { useNavigate } from 'react-router'
 import type { Account } from '../../api/accounts'
 import { Badge, Button, Card, CardTitle, FormAlert } from '../../design-system'
 import {
+  useAccountEvents,
   useAccountLifecycle,
   useChangeAccountStatus,
   useDeleteAccount,
 } from '../../hooks/useAccounts'
+import { useEnteringAs } from '../../hooks/useEnteringAs'
+import { stamp } from '../../lib/stamp'
+import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
 import { balanceText, isCard } from './cardBalance'
+import { memberLabel } from './ownerNames'
 import { STATUS_LABEL } from './statusLabel'
+import { useAccountContext } from './useAccountContext'
 import { useStateChangeFocus } from './useStateChangeFocus'
+
+const EVENT_LABEL: Record<string, string> = {
+  archived: 'Archived',
+  restored: 'Restored',
+  closed: 'Closed',
+  reopened: 'Reopened',
+  deleted: 'Deleted',
+  undeleted: 'Deleted, then brought back',
+}
 
 type Review = 'archive' | 'restore' | 'close' | 'reopen' | 'delete'
 
@@ -18,8 +33,11 @@ type Review = 'archive' | 'restore' | 'close' | 'reopen' | 'delete'
 export function AccountStatusCard({ account }: { account: Account }) {
   const [review, setReview] = useState<Review | null>(null)
   const { message, statusRef, begin, changed } = useStateChangeFocus(review !== null)
-  const change = useChangeAccountStatus(account.id)
-  const remove = useDeleteAccount(account.id)
+  const { members } = useAccountContext()
+  const { member, setMemberId } = useEnteringAs(members)
+  const change = useChangeAccountStatus(account.id, member?.id)
+  const remove = useDeleteAccount(account.id, member?.id)
+  const events = useAccountEvents(account.id)
   const facts = useAccountLifecycle(account.id, review === 'delete')
   const navigate = useNavigate()
   const figure = balanceText(account.type, account.balance.amount)
@@ -158,6 +176,7 @@ export function AccountStatusCard({ account }: { account: Account }) {
                 {account.name} returns to the active list. Its history is as it was.
               </p>
             )}
+            <EnteredBy members={members ?? []} member={member} setMemberId={setMemberId} />
             <FormAlert message={(review === 'delete' ? remove.error : change.error)?.message} />
             <div className="flex flex-wrap gap-2">
               {review === 'delete' && facts.data && !facts.data.canDelete && (
@@ -174,13 +193,17 @@ export function AccountStatusCard({ account }: { account: Account }) {
               )}
               {review === 'delete' ? (
                 facts.data?.canDelete && (
-                  <Button variant="danger" disabled={remove.isPending} onClick={confirmDelete}>
+                  <Button
+                    variant="danger"
+                    disabled={remove.isPending || !member}
+                    onClick={confirmDelete}
+                  >
                     {remove.isPending ? 'Deleting' : `Delete ${account.name}`}
                   </Button>
                 )
               ) : (
                 <Button
-                  disabled={change.isPending || (review === 'close' && !atZero)}
+                  disabled={change.isPending || !member || (review === 'close' && !atZero)}
                   onClick={() => confirm(review)}
                 >
                   {change.isPending
@@ -264,6 +287,25 @@ export function AccountStatusCard({ account }: { account: Account }) {
           )}
         </div>
       }
+      {events.data && events.data.length > 0 && (
+        <section aria-labelledby="status-history-heading" className="mt-4">
+          <h3 id="status-history-heading" className="text-sm font-medium">
+            Status history
+          </h3>
+          <ul className="mt-1 text-sm text-ink-muted">
+            {events.data.map((event) => (
+              <li key={`${event.at}-${event.action}`}>
+                {EVENT_LABEL[event.action] ?? event.action}
+                {event.memberId &&
+                  members?.find((m) => m.id === event.memberId) &&
+                  ` by ${memberLabel(members.find((m) => m.id === event.memberId)!)}`}
+                {' · '}
+                {stamp(event.at)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </Card>
   )
 }

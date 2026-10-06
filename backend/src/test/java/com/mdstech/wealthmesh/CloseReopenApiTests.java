@@ -26,7 +26,7 @@ class CloseReopenApiTests extends LifecycleTestBase {
     void closeSavingsAfterMovingMoney() {
         checking = account("Everyday Checking", "5000.00");
         savings = savings("Emergency Savings", "1000.00", "2026-09-01");
-        assertRefused(act(savings, "close"), "needs a zero Balance. It has 1000.00");
+        assertRefused(act(savings, "close"), "needs a zero Balance. It has $1,000.00");
         assertStatus(savings, "active");
         transfer("c-move", savings, checking, "1000.00", "2026-09-10");
         act(savings, "close").expectStatus().isOk().expectBody().jsonPath("$.status").isEqualTo("closed")
@@ -65,7 +65,7 @@ class CloseReopenApiTests extends LifecycleTestBase {
         String bank = account("Card Bank", "5000.00");
         String card = card("Everyday Credit Card", "1000.00", "owed", "2026-09-01");
         webTestClient.get().uri("/api/v1/wealth").exchange().expectBody().jsonPath("$.debts").isEqualTo("1000.00");
-        assertRefused(act(card, "close"), "needs a zero Balance. It has -1000.00");
+        assertRefused(act(card, "close"), "needs a zero Balance. It has -$1,000.00");
         payment(bank, card, "1000.00", "2026-09-12");
         act(card, "close").expectStatus().isOk().expectBody().jsonPath("$.status").isEqualTo("closed")
                 .jsonPath("$.balance.amount").isEqualTo("0.00");
@@ -80,7 +80,7 @@ class CloseReopenApiTests extends LifecycleTestBase {
     @DisplayName("V2_ACCOUNT_LIFECYCLE_004 a card with a Card credit is not at zero, so it cannot close")
     void cardCreditCannotClose() {
         String credit = card("Travel Card", "50.00", "credit", "2026-09-01");
-        assertRefused(act(credit, "close"), "needs a zero Balance. It has 50.00");
+        assertRefused(act(credit, "close"), "needs a zero Balance. It has $50.00");
     }
 
     @Order(5)

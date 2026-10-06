@@ -3,9 +3,12 @@ package com.mdstech.wealthmesh.account.repository;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.mdstech.wealthmesh.account.dto.AccountEvent;
+
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Repository;
 
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -39,6 +42,26 @@ public class AccountUsageStore {
                 .map((row, meta) -> new Usage(row.get("entries", Long.class), row.get("reminders", Long.class),
                         row.get("statements", Long.class), row.get("revisions", Long.class)))
                 .one();
+    }
+
+    /** Records a change of state; the caller runs it in the same transaction as the change. */
+    public Mono<Void> recordEvent(UUID accountId, String action, UUID memberId, Instant at) {
+        DatabaseClient.GenericExecuteSpec spec = client.sql(
+                        "INSERT INTO account_event (account_id, action, member_id, at) "
+                                + "VALUES (:id, :action, :member, :at)")
+                .bind("id", accountId).bind("action", action).bind("at", at);
+        spec = memberId == null ? spec.bindNull("member", UUID.class) : spec.bind("member", memberId);
+        return spec.then();
+    }
+
+    /** The account's changes of state, newest first. */
+    public Flux<AccountEvent> eventsOf(UUID accountId) {
+        return client.sql("SELECT action, member_id, at FROM account_event WHERE account_id = :id "
+                        + "ORDER BY at DESC, seq DESC")
+                .bind("id", accountId)
+                .map((row, meta) -> new AccountEvent(row.get("action", String.class), row.get("member_id", UUID.class),
+                        row.get("at", Instant.class)))
+                .all();
     }
 
     /** Marks the account deleted (rows touched: 1) or clears the mark (Undo). Run under the account lock. */

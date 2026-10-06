@@ -145,7 +145,7 @@ describe('Archive and restore an account', () => {
     await user.click(await screen.findByRole('button', { name: 'Delete account' }))
     const review = await screen.findByRole('region', { name: 'Review deleting Emergency Savings' })
     expect(await within(review).findByText(/Saved history must be retained/)).toBeInTheDocument()
-    expect(review).toHaveTextContent('a starting Balance of 10000.00')
+    expect(review).toHaveTextContent('a starting Balance of $10,000.00')
     expect(within(review).queryByRole('button', { name: /^Delete / })).toBeNull()
     await user.click(within(review).getByRole('button', { name: 'Review archiving instead' }))
     expect(
@@ -153,5 +153,26 @@ describe('Archive and restore an account', () => {
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.getByText('Active')).toBeInTheDocument()
+  })
+
+  it("V2_ACCOUNT_LIFECYCLE_001 a change is kept in the account's status history with who made it and when", async () => {
+    mockApi({ household, members: [maya], accounts: [savings()] })
+    const { user } = renderRoute(`/accounts/${savings().id}`)
+    await user.click(await screen.findByRole('button', { name: 'Archive account' }))
+    const review = await screen.findByRole('region', { name: 'Review archiving Emergency Savings' })
+    expect(review).toHaveTextContent('Entered by: Maya')
+    await user.click(within(review).getByRole('button', { name: 'Archive Emergency Savings' }))
+    const history = await screen.findByRole('region', { name: 'Status history' })
+    expect(await within(history).findByText(/Archived by Maya/)).toBeInTheDocument()
+    expect(history).toHaveTextContent('2026-10-06')
+  })
+
+  it('V2_ACCOUNT_LIFECYCLE_003 Confirm waits for who is entering', async () => {
+    window.localStorage.removeItem('wealthmesh.enteringAs')
+    mockApi({ household, members: [maya], accounts: [savings()] })
+    const { user } = renderRoute(`/accounts/${savings().id}`)
+    await user.click(await screen.findByRole('button', { name: 'Archive account' }))
+    const review = await screen.findByRole('region', { name: 'Review archiving Emergency Savings' })
+    expect(within(review).getByRole('button', { name: 'Archive Emergency Savings' })).toBeDisabled()
   })
 })

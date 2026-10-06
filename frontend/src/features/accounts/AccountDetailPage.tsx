@@ -383,6 +383,12 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
           accountType={account.type}
           opening={{ amount: account.openingAmount, on: account.openedOn, type: account.type }}
           members={members}
+          lockedBy={(counterId) => {
+            const other = counterId ? accounts.data?.find((a) => a.id === counterId) : undefined
+            return other?.status === 'closed'
+              ? `${other.name} is closed. Reopen it to change this.`
+              : undefined
+          }}
           onEdit={
             canChange
               ? (entry) => {

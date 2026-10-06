@@ -96,7 +96,31 @@ export const updateAccount = (id: string, details: AccountDetails) =>
 export const changeAccountStatus = (
   id: string,
   action: 'archive' | 'restore' | 'close' | 'reopen' | 'delete' | 'undo-delete',
-) => request(`/accounts/${id}/${action}`, { method: 'POST', parse: parseAccount })
+  memberId?: string,
+) =>
+  request(`/accounts/${id}/${action}`, {
+    method: 'POST',
+    body: memberId ? { enteredByMemberId: memberId } : {},
+    parse: parseAccount,
+  })
+
+/** One change of an account's state: who entered it (null when unknown) and when. */
+export type AccountEvent = { action: string; memberId: string | null; at: string }
+
+export const getAccountEvents = (id: string) =>
+  request(`/accounts/${id}/events`, {
+    parse: (value): AccountEvent[] => {
+      if (!Array.isArray(value)) throw new Error('Unexpected response from the server.')
+      return value.map((item) => {
+        const data = record(item)
+        return {
+          action: str(data.action),
+          memberId: data.memberId == null ? null : str(data.memberId),
+          at: str(data.at),
+        }
+      })
+    },
+  })
 
 /** Why an account can or cannot be deleted right now: the review explains it before Confirm. */
 export type AccountLifecycle = { canDelete: boolean; deleteBlockedBy: string[] }

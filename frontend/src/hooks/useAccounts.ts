@@ -3,6 +3,7 @@ import { wealthKey } from './useWealth'
 import {
   changeAccountStatus,
   createAccount,
+  getAccountEvents,
   getAccountLifecycle,
   getAccount,
   getToday,
@@ -50,10 +51,10 @@ export function useUpdateAccount(id: string) {
 }
 
 /** Archive, restore, close or reopen: the account, the list and wealth all read the new status. */
-export function useChangeAccountStatus(id: string) {
+export function useChangeAccountStatus(id: string, memberId?: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (action: AccountAction) => changeAccountStatus(id, action),
+    mutationFn: (action: AccountAction) => changeAccountStatus(id, action, memberId),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: accountsKey }),
@@ -73,10 +74,10 @@ export function useAccountLifecycle(id: string, enabled: boolean) {
 }
 
 /** Deleting leaves the account list and wealth; the account's own page is dropped so it is not read again. */
-export function useDeleteAccount(id: string) {
+export function useDeleteAccount(id: string, memberId?: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => changeAccountStatus(id, 'delete'),
+    mutationFn: () => changeAccountStatus(id, 'delete', memberId),
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: [...accountsKey, id] })
       return Promise.all([
@@ -85,4 +86,9 @@ export function useDeleteAccount(id: string) {
       ])
     },
   })
+}
+
+/** Who changed the account's state and when, newest first. */
+export function useAccountEvents(id: string) {
+  return useQuery({ queryKey: [...accountsKey, id, 'events'], queryFn: () => getAccountEvents(id) })
 }

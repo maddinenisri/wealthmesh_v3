@@ -16,7 +16,7 @@ import { useAccounts } from '../../hooks/useAccounts'
 import { useWealth } from '../../hooks/useWealth'
 import { accountTypeLabel } from '../accounts/accountTypes'
 import { BalanceFigure } from '../accounts/BalanceFigure'
-import { isCard } from '../accounts/cardBalance'
+import { cardSide, isCard } from '../accounts/cardBalance'
 import { STATUS_LABEL } from '../accounts/statusLabel'
 import { ownerNames } from '../accounts/ownerNames'
 import { useAccountContext } from '../accounts/useAccountContext'
@@ -142,6 +142,7 @@ function AccountsAndWealth() {
           <AccountGroup
             id="cards-heading"
             title="Cards"
+            card
             total={wealth.data?.cards.total}
             accounts={accounts.data.filter((account) => isCard(account.type))}
             members={members}
@@ -188,6 +189,7 @@ function AccountGroup({
   accounts,
   members,
   note,
+  card = false,
 }: {
   id: string
   title: string
@@ -195,6 +197,8 @@ function AccountGroup({
   accounts: Account[]
   members: Parameters<typeof ownerNames>[1]
   note?: string
+  /** A card group reads "owed" or "Card credit", never a minus sign. */
+  card?: boolean
 }) {
   if (accounts.length === 0) return null
   return (
@@ -203,7 +207,15 @@ function AccountGroup({
         <h3 id={id} className="font-medium">
           {title}
         </h3>
-        {total !== undefined && <Amount value={Number(total)} />}
+        {total !== undefined &&
+          (card ? (
+            <span>
+              <Amount value={Math.abs(Number(total))} />{' '}
+              <span className="text-sm text-ink-muted">{cardSide(total)}</span>
+            </span>
+          ) : (
+            <Amount value={Number(total)} />
+          ))}
       </div>
       {note && <p className="text-sm text-ink-muted">{note}</p>}
       <ul className="mt-2 divide-y divide-line border-y border-line">
