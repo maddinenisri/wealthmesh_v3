@@ -4,8 +4,8 @@ Copy this file to `docs/features/slice-NN-<name>.md` at the start of the session
 the session working it. Keep it short; it exists so the next session needs no memory of this one.
 
 - Slice: 12 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/lifecycle/manage-accounts.feature` (006 of 7: 007 is the draft, slice 17), `accounts/checking/activity.feature`, `household/overview/understand-wealth.feature`
-- Status: done, local (not pushed: owner said no push, D-002)
-- Started: 2026-10-06 08:04 (session clock)  Finished: 2026-10-06  Commit: `919cb35` (commits from `c59f23b`)
+- Status: done and pushed (2026-10-06, on the owner's word, D-002)
+- Started: 2026-10-06 08:04 (session clock)  Finished: 2026-10-06  Commit: `0b0e4ff` (commits from `c59f23b`)
 
 ## Prompts and directions
 
