@@ -4,7 +4,7 @@ Copy this file to `docs/features/slice-NN-<name>.md` at the start of the session
 the session working it. Keep it short; it exists so the next session needs no memory of this one.
 
 - Slice: 12 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/lifecycle/manage-accounts.feature` (006 of 7: 007 is the draft, slice 17), `accounts/checking/activity.feature`, `household/overview/understand-wealth.feature`
-- Status: in-progress (checkpoint 1 pending)
+- Status: in-progress (checkpoint 2: app ready to look at)
 - Started: 2026-10-06 08:04 (session clock)  Finished:   Commit:
 
 ## Prompts and directions
@@ -143,6 +143,16 @@ Every shared row or state this slice changes, with each reader and writer (grep 
 Mutation checks (defect planted, test went red, defect removed): `AccountState.requireOpen` switched off (guards class red); reminder read the stale
 account, expense re-read without the gate, remove without the account lock (each its race test red); close without the lock and delete without the lock
 (each its race test red); the focus helper with Confirm not focusing, Cancel not returning focus, arrival not focusing (each e2e assertion red on its own).
+
+## Validator report (independent agent, commit 2e69c18) and what was done
+
+Checklist: 9 defects and 6 failed items reported. Fixed in `ed78c32`: (1) a reminder save racing a delete answered 200 with nothing saved (the re-read under the lock had
+no 404); (2) no test for the closed-state gates of starting-balance correction, correction replacement, transfer and payment replace or remove, convert from a closed
+account and a move from a closed source (new `ClosedAccountGuardsApiTests`, two new races, each gate proven red by planting its removal); (4) `hasCard` ignored status;
+(8) a reload after Undo said "deleted" again; (9) Bank money took every non-card type. Not fixed, recorded: (3) a retry after an archive is 409 for entry writers
+and a replay for movements (Q-040); (5) a repeat delete is 404 (D-045 now says so); (6) a soft-deleted account keeps its `account_owner` rows, so a member who owns
+only a deleted account cannot be deleted until Undo or another owner (handoff); (7) a move target deleted while the move waits shows the tracking-start message
+instead of 404 (handoff). Process items (notes, retro) are written at Land.
 
 ## Open questions
 
