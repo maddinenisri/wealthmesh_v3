@@ -81,9 +81,10 @@ export function EntryHistory({
                     ? 'Balance correction'
                     : isMovement(entry)
                       ? movementName(entry).replace(/^./, (letter) => letter.toUpperCase())
-                      : (entry.description ?? '')}
+                      : (entry.description ?? (entry.portions.length > 0 ? 'Split expense' : ''))}
                   {entry.portions.length > 0 ? (
                     <span className="block lg:hidden">
+                      <span className="block text-caption text-ink-muted">Split</span>
                       <PortionList portions={entry.portions} />
                     </span>
                   ) : (

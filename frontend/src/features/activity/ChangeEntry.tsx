@@ -46,13 +46,17 @@ export function ChangeEntry({
   entry,
   members,
   onDone,
+  onChanged,
 }: {
   mode: 'remove' | 'undo'
   account: Account
   entry: ChangeTarget
   members: Member[]
   onDone: () => void
+  /** Called after the change is saved, with a sentence saying what changed. */
+  onChanged?: (message: string) => void
 }) {
+  const split = !!entry.portions && entry.portions.length > 0
   const income = entry.kind === 'income'
   // A refund raises the Balance like money in, and lowers the month's spending instead of raising it.
   const refund = entry.kind === 'refund'
@@ -81,8 +85,10 @@ export function ChangeEntry({
       <FormAlert message={change.error?.message} />
       <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
         <Item label="Entry">
-          {entry.portions && entry.portions.length > 0
-            ? `${entry.description || 'Split expense'} (split)`
+          {split
+            ? entry.description
+              ? `${entry.description} (split)`
+              : 'Split expense'
             : `${entry.description || entry.categoryName} (${entry.categoryName})`}
         </Item>
         {entry.portions && entry.portions.length > 0 && (
@@ -107,7 +113,16 @@ export function ChangeEntry({
       <EnteredBy members={members} member={member} setMemberId={setMemberId} />
       <div className="mt-4 flex gap-2">
         <Button
-          onClick={() => member && change.mutate(member.id, { onSuccess: onDone })}
+          onClick={() =>
+            member &&
+            change.mutate(member.id, {
+              onSuccess: () => {
+                const name = entry.description || (split ? 'split expense' : entry.categoryName)
+                onChanged?.(`${mode === 'remove' ? 'Removed' : 'Restored'} ${name}.`)
+                onDone()
+              },
+            })
+          }
           disabled={change.isPending || !member}
         >
           {change.isPending ? 'Saving' : mode === 'remove' ? 'Confirm removal' : 'Confirm Undo'}

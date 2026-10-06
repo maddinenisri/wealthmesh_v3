@@ -323,5 +323,94 @@ test.describe.serial('split expenses', () => {
       }
       expect(after.balance.amount).toBe('4868.00')
     })
+
+    test(`V2_SPLITS_001 focus stays in the split form after Back and after Remove portion at ${width}px`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await ensureGifts(request)
+      const id = await account(request, `Focus Split ${width}`)
+      await seedLongList(request, id)
+      await page.goto(`/accounts/${id}`)
+      await page.getByLabel('Entering as').selectOption({ label: OWNER })
+      await page.getByRole('button', { name: 'Split an expense' }).click()
+      await fillSplit(page, '30.00')
+      await page.getByRole('button', { name: 'Review' }).click()
+      await page.getByRole('button', { name: 'Back' }).click()
+      // Back returns to the form with focus on its heading, not on the page body.
+      await expect(page.getByRole('heading', { name: 'Split an expense' })).toBeFocused()
+      await expect(page.getByLabel('Portion amount 2', { exact: true })).toHaveValue('30.00')
+
+      await page.getByRole('button', { name: 'Add a portion' }).click()
+      await page.getByRole('button', { name: 'Remove portion 3' }).click()
+      await expect(page.getByLabel('Category 2', { exact: true })).toBeFocused()
+      await expect(page.getByLabel('Category 3', { exact: true })).toHaveCount(0)
+    })
+
+    test(`V2_SPLITS_004 after Confirm removal and Confirm Undo focus and a message say what changed at ${width}px`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await ensureGifts(request)
+      const id = await account(request, `Notice Split ${width}`)
+      await seedLongList(request, id)
+      await saveSplit(request, id)
+      await page.goto(`/accounts/${id}`)
+      await page.getByLabel('Entering as').selectOption({ label: OWNER })
+      await page.getByRole('button', { name: 'Remove Mixed shop' }).click()
+      const review = page.getByRole('region', { name: 'Review removal' })
+      // A split has no category of its own, so it is not named "(split)" twice.
+      await expect(review).toContainText('Mixed shop (split)')
+      await review.getByRole('button', { name: 'Confirm removal' }).click()
+      await expect(page.getByRole('heading', { name: 'Activity' })).toBeFocused()
+      await expect(page.getByRole('status').filter({ hasText: 'Removed Mixed shop' })).toBeVisible()
+
+      await page.getByRole('button', { name: 'Show history' }).click()
+      await page.getByRole('button', { name: 'Undo Mixed shop' }).click()
+      await page
+        .getByRole('region', { name: 'Review Undo' })
+        .getByRole('button', {
+          name: 'Confirm Undo',
+        })
+        .click()
+      await expect(page.getByRole('heading', { name: 'Activity' })).toBeFocused()
+      await expect(
+        page.getByRole('status').filter({ hasText: 'Restored Mixed shop' }),
+      ).toBeVisible()
+    })
+
+    test(`V2_SPLITS_001 a split with no description is named in history and the removal review at ${width}px`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await ensureGifts(request)
+      const id = await account(request, `Nameless Split ${width}`)
+      const response = await request.post(`/api/v1/accounts/${id}/expenses`, {
+        headers: { 'Idempotency-Key': `${id}-nameless` },
+        data: {
+          amount: '60.00',
+          occurredOn: '2026-10-02',
+          enteredByMemberId: await ownerId(request),
+          portions: [
+            { category: 'Groceries', amount: '40.00' },
+            { category: 'Gifts', amount: '20.00' },
+          ],
+        },
+      })
+      expect(response.status()).toBe(201)
+      await page.goto(`/accounts/${id}`)
+      await page.getByLabel('Entering as').selectOption({ label: OWNER })
+      await page.getByRole('button', { name: 'Show history' }).click()
+      const row = page.getByRole('row').filter({ hasText: '2026-10-02' }).last()
+      await expect(row).toContainText('Split expense')
+      await page.getByRole('button', { name: 'Remove split expense' }).click()
+      const review = page.getByRole('region', { name: 'Review removal' })
+      await expect(
+        review.getByRole('definition').filter({ hasText: /^Split expense$/ }),
+      ).toBeVisible()
+    })
   }
 })

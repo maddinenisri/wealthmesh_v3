@@ -118,6 +118,13 @@ The dev stack was restarted on the new build (Flyway to V17, the old backend had
 
 | # | Check | Result | Fault seen | Test added |
 | --- | --- | --- | --- | --- |
+| 1 | 1 | Back from the review left focus on the page body | focus did not return to the form | `11g-splits.spec.ts` focus after Back (failed before the fix) |
+| 2 | 1 | After Confirm (save, edit, removal, Undo) focus fell to the body and nothing said what changed | no message, no stated focus | Activity heading takes focus and a status line says what changed; e2e for removal and Undo (the serial run stopped at fault 1 before it, so this one was not seen red) |
+| 3 | 1 | "Remove portion n" dropped focus to the body | focus lost with the button | e2e, focus moves to the portion that took its place (not seen red, same reason) |
+| 4 | 7 | History showed the portions but not the word "Split" or a name for a split with no description | wording | e2e nameless split in history (not seen red, same reason) |
+| 5 | wording | Removal and Undo review said "Split expense (split)" | wording | e2e, same test as 4 (not seen red) |
+
+Count: **5 faults** after 133 e2e tests, against 8 and 8 for slices 08 and 09/10. The 710px table fault did **not** recur (no sideways page scroll, tables fit); the focus faults **did** (1 to 3). Owner could not verify positions by eye (window in the background): panel position from a scrolled page, where the page sits after Cancel or Confirm, Spending category entries under the category list at 710px (about 140px under the fold by the DOM reading) and 1280px by eye are open for a pass in the foreground. Left in the dev data: one split on Everyday Checking (2026-10-02, $120.00, Groceries $80 and Gifts $40, with its history), Balance $2,383.00.
 
 ## How it works
 

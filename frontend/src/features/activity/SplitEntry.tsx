@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import type { Account } from '../../api/accounts'
 import type { Activity } from '../../api/activity'
@@ -78,7 +78,8 @@ export function SplitEntry({
   today: string
   /** A split payment being corrected: the form starts from it and saving replaces it. */
   editing?: Activity
-  onDone: (saved?: boolean) => void
+  /** Called when the panel closes; a message means something was saved (the page says so and focuses there). */
+  onDone: (savedMessage?: string) => void
 }) {
   const onCard = isCard(account.type)
   const noun = onCard ? 'purchase' : 'expense'
@@ -90,7 +91,7 @@ export function SplitEntry({
   const { member, setMemberId } = useEnteringAs(members)
   const [reviewing, setReviewing] = useState<Values | null>(null)
   const [key] = useState(newKey)
-  const { control, handleSubmit } = useForm<Values>({
+  const { control, handleSubmit, setFocus } = useForm<Values>({
     defaultValues: {
       description: editing?.description ?? '',
       amount: editing?.amount ?? '',
@@ -129,11 +130,15 @@ export function SplitEntry({
   )
 
   const inReview = reviewing !== null
+  const wasInReview = useRef(false)
   useEffect(() => {
-    if (!inReview) return
-    const heading = document.getElementById('split-review-heading')
-    heading?.scrollIntoView?.({ block: 'start' })
-    heading?.focus({ preventScroll: true })
+    // The review and the form swap in place: whichever comes up is scrolled to and focused (also after Back).
+    const heading = document.getElementById(inReview ? 'split-review-heading' : 'split-heading')
+    if (inReview || wasInReview.current) {
+      heading?.scrollIntoView?.({ block: 'start' })
+      heading?.focus({ preventScroll: true })
+    }
+    wasInReview.current = inReview
   }, [inReview])
 
   const categoryName = (id: string) => categories.data?.find((c) => c.id === id)?.name ?? ''
@@ -146,6 +151,7 @@ export function SplitEntry({
 
   const confirm = () => {
     if (!reviewing || !member) return
+    const name = reviewing.description.trim() || 'split expense'
     const split = {
       description: reviewing.description.trim(),
       amount: parseAmount(reviewing.amount)!,
@@ -167,10 +173,10 @@ export function SplitEntry({
             ...(moving ? { accountId: target.id } : {}),
           },
         },
-        { onSuccess: () => onDone(true) },
+        { onSuccess: () => onDone(`Changed ${name}.`) },
       )
     } else {
-      record.mutate({ key, split }, { onSuccess: () => onDone(true) })
+      record.mutate({ key, split }, { onSuccess: () => onDone(`Saved ${name}.`) })
     }
   }
 
@@ -387,7 +393,16 @@ export function SplitEntry({
               />
               {fields.length > 2 && (
                 <div className="flex items-end sm:col-span-3">
-                  <Button variant="ghost" size="sm" onClick={() => remove(index)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      remove(index)
+                      // The button is gone: focus goes to the portion that took its place, or the one before.
+                      const next = Math.min(index, fields.length - 2)
+                      requestAnimationFrame(() => setFocus(`portions.${next}.categoryId`))
+                    }}
+                  >
                     Remove portion {n}
                   </Button>
                 </div>

@@ -186,6 +186,8 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
   )
   const [transfer, setTransfer] = useState<TransferPanel | null>(null)
   const [batching, setBatching] = useState(false)
+  // What was just saved or changed, shown under the Activity heading, which takes focus.
+  const [notice, setNotice] = useState<string | null>(null)
   // A new split expense, or a split payment being corrected (SPLITS_001, SPLITS_002).
   const [splitting, setSplitting] = useState<{ editing?: ActivityEntry } | null>(null)
   const accounts = useAccounts()
@@ -211,8 +213,26 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
       )
     }
   }
-  const remember = useReturnFocus(
+  // The row that changed is what the person came for; the opener may be gone, so focus goes to the heading.
+  const announce = (message: string) => {
+    remember.cancel()
+    setNotice(message)
+    requestAnimationFrame(() => {
+      const heading = document.getElementById('activity-heading')
+      heading?.scrollIntoView?.({ block: 'start' })
+      heading?.focus({ preventScroll: true })
+    })
+  }
+  const returnFocus = useReturnFocus(
     !!adding || !!editing || !!correcting || !!changing || !!transfer || batching || !!splitting,
+  )
+  // Opening any panel clears the last message.
+  const remember = Object.assign(
+    () => {
+      setNotice(null)
+      returnFocus()
+    },
+    { cancel: returnFocus.cancel },
   )
 
   return (
@@ -252,15 +272,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             editing={splitting.editing}
             onDone={(saved) => {
               setSplitting(null)
-              if (saved) {
-                // The row that changed is what the person came for; the opener may be gone (an edit replaces it).
-                remember.cancel()
-                requestAnimationFrame(() => {
-                  const heading = document.getElementById('activity-heading')
-                  heading?.scrollIntoView?.({ block: 'start' })
-                  heading?.focus({ preventScroll: true })
-                })
-              }
+              if (saved) announce(saved)
             }}
           />
         </Panel>
@@ -342,6 +354,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             entry={changing.entry}
             members={members}
             onDone={() => setChanging(null)}
+            onChanged={announce}
           />
         </Panel>
       )}
@@ -349,6 +362,11 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
         <CardTitle id="activity-heading" tabIndex={-1} className="text-lg outline-none">
           Activity
         </CardTitle>
+        {notice && ready && (
+          <p role="status" className="mt-2 max-w-md rounded-control border border-line p-3 text-sm">
+            {notice}
+          </p>
+        )}
         <ActivityList
           accountId={account.id}
           accountType={account.type}
