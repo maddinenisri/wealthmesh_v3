@@ -63,7 +63,9 @@ public class EntryService {
                 .then(Mono.defer(() -> load(accountId)))
                 .flatMap(account -> transactions.transactional(store.lockAccount(account.id())
                         .then(Mono.defer(() -> load(accountId)))
-                        .flatMap(fresh -> validator.parse(fresh, kind, request))
+                        .flatMap(fresh -> validator.parse(fresh, kind, request)
+                                // The member is read again under a share lock, so a deactivate cannot slip in (D-034).
+                                .flatMap(entry -> validator.memberLocked(fresh, entry.memberId()).thenReturn(entry)))
                         .flatMap(entry -> save(entry, key))));
     }
 

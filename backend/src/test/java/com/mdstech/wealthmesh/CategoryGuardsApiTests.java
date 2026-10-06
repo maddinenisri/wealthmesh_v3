@@ -197,6 +197,27 @@ class CategoryGuardsApiTests extends LedgerApiTestBase {
                 .exchange();
     }
 
+    @Order(7)
+    @Test
+    @DisplayName("V2_CATEGORIES_001 a plain expense save waits for a member being deactivated and then refuses them "
+            + "(Q-035: the member is read under a share lock)")
+    void plainSaveWaitsForMemberRow() throws Exception {
+        String own = account("Member Race Checking", "100.00");
+        Connection held = holdUncommitted("UPDATE wealthmesh.household_member SET active = false WHERE id = $1", samId);
+        try {
+            CompletableFuture<Integer> status = CompletableFuture.supplyAsync(() -> status(
+                    post(own, "expenses", "q035", entry(samId, "x", "5.00", "2026-09-10", "Groceries"))));
+            Thread.sleep(600);
+            assertThat(status).as("the save waits for the member row").isNotDone();
+            commit(held);
+            assertThat(status.get(10, TimeUnit.SECONDS)).isEqualTo(400);
+        } finally {
+            close(held);
+            webTestClient.post().uri("/api/v1/household-members/{id}/restore", samId).exchange().expectStatus().isOk();
+        }
+        assertActivityCount(own, 0);
+    }
+
     private static int status(WebTestClient.ResponseSpec spec) {
         return spec.returnResult(String.class).getStatus().value();
     }
