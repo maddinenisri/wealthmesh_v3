@@ -243,9 +243,13 @@ for (const width of [710, 1280]) {
       const after = await wealth(page)
       expect(after.netWorth).toBe(before.netWorth)
 
-      await page.getByRole('button', { name: 'Reopen account' }).click()
+      const reopener = page.getByRole('button', { name: 'Reopen account' })
+      await reopener.click()
       const reopen = page.getByRole('region', { name: `Review reopening ${name}` })
       await expectFocusInside(reopen)
+      await reopen.getByRole('button', { name: 'Cancel' }).click()
+      await expect(reopener).toBeFocused()
+      await reopener.click()
       await page.getByRole('button', { name: `Reopen ${name}` }).click()
       await expect(page.getByRole('status')).toContainText(`${name} is open again`)
       await expect(page.getByRole('status')).toBeFocused()
@@ -321,9 +325,8 @@ for (const width of [710, 1280]) {
       await expect(review).toContainText('1 saved entry')
       await expect(review.getByRole('button', { name: /^Delete / })).toHaveCount(0)
       await review.getByRole('button', { name: 'Review archiving instead' }).click()
-      await expect(
-        page.getByRole('region', { name: `Review archiving Used Savings ${width}` }),
-      ).toBeVisible()
+      const archiving = page.getByRole('region', { name: `Review archiving Used Savings ${width}` })
+      await expectFocusInside(archiving)
       await page.getByRole('button', { name: 'Cancel' }).click()
       await expect(opener).toBeFocused()
       await expect(page.getByRole('main')).toContainText('Active')

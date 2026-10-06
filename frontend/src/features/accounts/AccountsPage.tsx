@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import {
   Badge,
   Button,
@@ -23,6 +23,7 @@ export function AccountsPage() {
   const accounts = useAccounts()
   const { members } = useAccountContext()
   // A delete on the account's own page lands here: the status line says so, takes focus and offers Undo (A3).
+  const navigate = useNavigate()
   const arrived = (useLocation().state as { deleted?: { id: string; name: string } } | null)
     ?.deleted
   const [deleted] = useState(arrived)
@@ -65,6 +66,8 @@ export function AccountsPage() {
                 undo.mutate('undo-delete', {
                   onSuccess: () => {
                     setUndone(true)
+                    // A reload must not say "deleted" again for an account that is back.
+                    navigate('.', { replace: true, state: null })
                     changed(`${deleted.name} is back with its Balance and no new activity.`)
                   },
                 })

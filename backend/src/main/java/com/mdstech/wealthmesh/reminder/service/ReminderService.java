@@ -70,6 +70,8 @@ public class ReminderService {
                 // The account is read again under the lock: an archive or close that committed first refuses the save.
                 .flatMap(first -> transactions.transactional(activityStore.lockAccount(first.id())
                         .then(Mono.defer(() -> accounts.findById(first.id())))
+                        .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                                "Account not found: " + accountId)))
                         .map(AccountState::requireOpen)
                         .flatMap(account -> validator.parseReminder(account, request.kind(), request.asEntry())
                                 .flatMap(entry -> validator.memberLocked(account, entry.memberId())

@@ -146,5 +146,41 @@ class AccountStateRaceApiTests extends LifecycleTestBase {
         String to = fresh();
         String movement = transfer("r-mv", from, to, "5.00", "2026-09-06");
         refusedAfter(CLOSED, to, () -> removeTransfer(movement, mayaId));
+        String replaced = fresh();
+        String other = fresh();
+        String second = transfer("r-mv2", replaced, other, "5.00", "2026-09-06");
+        refusedAfter(CLOSED, replaced, () -> replaceTransfer(second, "r-mv3", replaced, other, "6.00", "2026-09-06",
+                "Fix"));
+    }
+
+    @Order(6)
+    @Test
+    @DisplayName("V2_ACCOUNT_LIFECYCLE_003 a close racing a starting-balance correction or a correction of a "
+            + "correction wins")
+    void closeBeatsBalanceRewrites() throws Exception {
+        String a = fresh();
+        refusedAfter(CLOSED, a, () -> post(a, "starting-balance-corrections", "r-sb", """
+                {"openingAmount": "150.00", "openedOn": "2026-09-01", "reason": "Fix",
+                 "enteredByMemberId": "%s"}""".formatted(mayaId)));
+        String b = fresh();
+        java.util.concurrent.atomic.AtomicReference<String> id = new java.util.concurrent.atomic.AtomicReference<>();
+        post(b, "balance-corrections", "r-corr", """
+                {"requestedBalance": "900.00", "asOn": "2026-09-08", "reason": "Fee", "enteredByMemberId": "%s"}"""
+                .formatted(mayaId)).expectStatus().isCreated().expectBody().jsonPath("$.id")
+                .value(String.class, id::set);
+        refusedAfter(CLOSED, b, () -> post(b, "balance-corrections", "r-corr2", """
+                {"requestedBalance": "800.00", "asOn": "2026-09-08", "reason": "Redo", "enteredByMemberId": "%s",
+                 "replacesId": "%s"}""".formatted(mayaId, id.get())));
+    }
+
+    @Order(7)
+    @Test
+    @DisplayName("V2_ACCOUNT_LIFECYCLE_005 a delete racing a reminder save wins: the reminder finds no account")
+    void deleteBeatsReminder() throws Exception {
+        String a = fresh();
+        String deleted = "UPDATE wealthmesh.account SET deleted_at = now() WHERE id = $1";
+        assertThat(afterUncommitted(a, deleted, () -> post(a, "reminders", "r-del", """
+                {"kind": "expense", "description": "Bill", "amount": "5.00", "dueOn": "2026-10-20",
+                 "category": "Dining", "enteredByMemberId": "%s"}""".formatted(mayaId)))).isEqualTo(404);
     }
 }

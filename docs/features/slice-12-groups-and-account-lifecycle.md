@@ -70,6 +70,7 @@ Proposed, pending checkpoint 1 (to promote after approval as D-045 and D-046):
   Each takes the account row `FOR UPDATE` (`lockAccount`) and re-reads status and Balance under it. No `account_event` table, no entered-by (members
   have none either; `updated_at` moves). A read-only `GET /accounts/{id}/lifecycle` gives the review its facts (`balance`, `canClose`, `canDelete`,
   and why not: history rows, opening amount) so scenario 006 can show "history must be retained" before Confirm; the 409 on the write is the guard.
+  (The first draft also said the close review would list reminders that stay; that was not built, a reminder is not Balance.)
   Transitions: active to archived, active to closed, archived or closed back to active. A closed account must be reopened before it can be archived.
 - **Close needs an accounted-for zero (A2):** the Balance as of today is exactly 0 under the lock, else 409 with the amount ("transfer or pay it first"). Close also refuses (409) while any entry dated after today exists (owner addition 1).
   A card with a Card credit is not zero. Reminders (future dated) are not Balance; they are listed in the review ("1 reminder will stay").

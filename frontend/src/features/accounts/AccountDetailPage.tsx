@@ -20,6 +20,7 @@ import { ChangeEntry, type ChangeTarget } from '../activity/ChangeEntry'
 import { isMovement } from '../activity/transferRows'
 import { ChangeToTransfer } from '../transfers/ChangeToTransfer'
 import { TransferChange, type TransferTarget } from '../transfers/TransferChange'
+import { usableAccounts } from '../transfers/accountChoice'
 import { TransferForm } from '../transfers/TransferForm'
 import { accountTypeLabel } from './accountTypes'
 import { AccountStatusCard } from './AccountStatusCard'
@@ -199,7 +200,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
   const [splitting, setSplitting] = useState<{ editing?: ActivityEntry } | null>(null)
   const accounts = useAccounts()
   // "Pay a card" needs a card to pay (Q-034).
-  const hasCard = (accounts.data ?? []).some((candidate) => isCard(candidate.type))
+  const hasCard = usableAccounts(accounts.data).some((candidate) => isCard(candidate.type))
   const today = useToday()
   const ready =
     !adding &&

@@ -51,7 +51,7 @@ public class WealthService {
     }
 
     private static WealthSummary summarize(List<Line> lines) {
-        List<Line> bank = lines.stream().filter(l -> !AccountType.isCard(l.type())).toList();
+        List<Line> bank = lines.stream().filter(l -> AccountType.paysCards(l.type())).toList();
         List<Line> cards = lines.stream().filter(l -> AccountType.isCard(l.type())).toList();
         BigDecimal assets = lines.stream().map(WealthService::amount).filter(b -> b.signum() > 0)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
