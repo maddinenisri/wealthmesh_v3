@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.activity.service.EntryValidator;
@@ -66,9 +67,13 @@ public class ReminderService {
                         "Account not found: " + accountId)))
                 // The account row is locked first, then the category and member are read and the key looked up, all in
                 // one transaction (checklist: a keyed save reads its key under the lock; D-034).
-                .flatMap(account -> transactions.transactional(activityStore.lockAccount(account.id())
-                        .then(Mono.defer(() -> validator.parseReminder(account, request.kind(), request.asEntry())))
-                        .flatMap(entry -> validator.memberLocked(account, entry.memberId()).thenReturn(entry))
+                // The account is read again under the lock: an archive or close that committed first refuses the save.
+                .flatMap(first -> transactions.transactional(activityStore.lockAccount(first.id())
+                        .then(Mono.defer(() -> accounts.findById(first.id())))
+                        .map(AccountState::requireOpen)
+                        .flatMap(account -> validator.parseReminder(account, request.kind(), request.asEntry())
+                                .flatMap(entry -> validator.memberLocked(account, entry.memberId())
+                                        .thenReturn(entry)))
                         .flatMap(entry -> saveLocked(key, entry, now, cutoff))))
                 .onErrorMap(DuplicateKeyException.class, e -> new ResponseStatusException(HttpStatus.CONFLICT,
                         "This save was already used. Start a new entry."));

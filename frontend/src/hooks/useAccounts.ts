@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { wealthKey } from './useWealth'
 import {
+  changeAccountStatus,
   createAccount,
   getAccount,
   getToday,
@@ -42,5 +43,18 @@ export function useUpdateAccount(id: string) {
   return useMutation({
     mutationFn: (details: AccountDetails) => updateAccount(id, details),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: accountsKey }),
+  })
+}
+
+/** Archive or restore: the account, the list and wealth all read the new status. */
+export function useChangeAccountStatus(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (action: 'archive' | 'restore') => changeAccountStatus(id, action),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: accountsKey }),
+        queryClient.invalidateQueries({ queryKey: wealthKey }),
+      ]),
   })
 }

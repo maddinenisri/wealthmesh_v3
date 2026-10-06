@@ -12,6 +12,7 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.domain.Activity;
@@ -142,6 +143,7 @@ public class BatchEntryService {
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
                 .flatMap(account -> AccountType.holdsActivity(account.type()) ? Mono.just(account)
                         : Mono.error(EntryValidator.bad("Money in and out cannot be recorded on this type of "
-                                + "account yet")));
+                                + "account yet")))
+                .map(AccountState::requireOpen);
     }
 }

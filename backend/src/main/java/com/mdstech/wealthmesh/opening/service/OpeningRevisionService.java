@@ -16,6 +16,7 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
@@ -136,6 +137,7 @@ public class OpeningRevisionService {
     private Mono<Saved> locked(UUID accountId, String key, Instant cutoff, OpeningRequest request, UUID memberId,
             Instant now) {
         Mono<Saved> work = activityStore.lockAccount(accountId).then(Mono.defer(() -> loadEditable(accountId)))
+                .map(AccountState::requireNotClosed)
                 .flatMap(account -> revisions.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
                         .flatMap(existing -> replay(existing, request, memberId))
                         .switchIfEmpty(Mono.defer(() -> applyLocked(account, key, request, memberId, now))));

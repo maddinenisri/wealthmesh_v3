@@ -18,6 +18,7 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.domain.Activity;
 import com.mdstech.wealthmesh.activity.domain.Portion;
@@ -71,7 +72,11 @@ public class EntryChangeService {
     public Mono<HistoryEntry> remove(UUID accountId, UUID activityId, UUID memberId) {
         Instant now = clock.instant();
         Mono<Long> removed = original(accountId, activityId)
-                .flatMap(original -> actor(accountId, memberId)
+                // The account row is locked so a close (which needs a zero Balance) cannot slip in between.
+                .flatMap(original -> store.lockAccount(accountId)
+                        .then(Mono.defer(() -> accounts.findById(accountId)))
+                        .map(AccountState::requireNotClosed)
+                        .then(Mono.defer(() -> actor(accountId, memberId)))
                         .then(Mono.defer(() -> store.markRemoved(activityId, memberId, now))))
                 .filter(updated -> updated > 0)
                 .switchIfEmpty(Mono.error(conflict("This entry was already changed or removed.")))
@@ -86,7 +91,8 @@ public class EntryChangeService {
     public Mono<HistoryEntry> undo(UUID accountId, UUID activityId, UUID memberId) {
         Mono<Long> restored = original(accountId, activityId)
                 .flatMap(original -> actor(accountId, memberId)
-                        .then(Mono.defer(() -> lockedStart(accountId, original.occurredOn())))
+                        .then(Mono.defer(() -> lockedStart(accountId, original.occurredOn(),
+                                AccountState::requireNotClosed)))
                         .then(Mono.defer(() -> store.clearRemoved(activityId))))
                 .flatMap(updated -> updated > 0
                         ? store.recordEvent(activityId, "restored", memberId, clock.instant())
@@ -98,8 +104,10 @@ public class EntryChangeService {
      * Locks the account row and checks, on its current row, that a date is not before the tracking start. The start
      * may have moved since the entry was saved or the form was opened.
      */
-    private Mono<Void> lockedStart(UUID accountId, LocalDate date) {
+    private Mono<Void> lockedStart(UUID accountId, LocalDate date,
+            java.util.function.UnaryOperator<Account> state) {
         return store.lockAccount(accountId).then(Mono.defer(() -> accounts.findById(accountId)))
+                .map(state)
                 .filter(account -> !date.isBefore(account.openedOn()))
                 .switchIfEmpty(Mono.error(conflict("This entry is dated before the account's tracking start.")))
                 .then();
@@ -163,7 +171,12 @@ public class EntryChangeService {
     private Mono<EntryService.Saved> swapLocked(Activity original, EntryValidator.Entry entry, String key,
             String reason, Instant now) {
         String note = reason == null || reason.isBlank() ? null : reason.strip();
-        return lockedStart(entry.accountId(), entry.occurredOn())
+        // The entry's own account may be archived; a different (target) account must be active; none may be closed.
+        boolean moving = !original.accountId().equals(entry.accountId());
+        return lockedStart(entry.accountId(), entry.occurredOn(),
+                moving ? AccountState::requireOpen : AccountState::requireNotClosed)
+                .then(Mono.defer(() -> moving ? accounts.findById(original.accountId())
+                        .map(AccountState::requireNotClosed).then() : Mono.<Void>empty()))
                 .then(Mono.defer(() -> store.markRemoved(original.id(), entry.memberId(), now)))
                 .filter(updated -> updated > 0)
                 .switchIfEmpty(Mono.error(conflict("This entry was already changed or removed.")))

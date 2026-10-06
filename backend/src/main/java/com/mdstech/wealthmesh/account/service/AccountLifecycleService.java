@@ -1,0 +1,82 @@
+package com.mdstech.wealthmesh.account.service;
+
+import java.time.Clock;
+import java.util.UUID;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.reactive.TransactionalOperator;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountState;
+import com.mdstech.wealthmesh.account.dto.AccountResponse;
+import com.mdstech.wealthmesh.account.repository.AccountRepository;
+import com.mdstech.wealthmesh.activity.repository.ActivityStore;
+
+import reactor.core.publisher.Mono;
+
+/**
+ * Archive, restore, close, reopen and delete an account (A1 to A3). It follows the member lifecycle of slice 05: each
+ * write takes the account row `FOR UPDATE`, reads the status again under it, and a repeat of the same action returns
+ * the same result. None of it writes money. The review before each action lives in the UI.
+ */
+@Service
+public class AccountLifecycleService {
+
+    private final AccountRepository accounts;
+    private final AccountService accountService;
+    private final ActivityStore store;
+    private final TransactionalOperator transactions;
+    private final Clock clock;
+
+    public AccountLifecycleService(AccountRepository accounts, AccountService accountService, ActivityStore store,
+            TransactionalOperator transactions, Clock clock) {
+        this.accounts = accounts;
+        this.accountService = accountService;
+        this.store = store;
+        this.transactions = transactions;
+        this.clock = clock;
+    }
+
+    /** Hides an account with money or debt from the active list; its Balance stays in wealth. */
+    public Mono<AccountResponse> archive(UUID id) {
+        return move(id, AccountState.ARCHIVED, AccountState.ACTIVE,
+                account -> "Reopen " + account.name() + " before archiving it.");
+    }
+
+    /** Brings an archived account back to the active list with its Balance and history. */
+    public Mono<AccountResponse> restore(UUID id) {
+        return move(id, AccountState.ACTIVE, AccountState.ARCHIVED,
+                account -> account.name() + " is closed. Reopen it instead.");
+    }
+
+    /**
+     * Sets `target` when the account is in `from`; an account already in `target` is returned as it is (a repeat);
+     * any other state is refused with `otherwise`.
+     */
+    private Mono<AccountResponse> move(UUID id, String target, String from,
+            java.util.function.Function<Account, String> otherwise) {
+        Mono<Account> work = store.lockAccount(id).then(Mono.defer(() -> load(id))).flatMap(account -> {
+            if (target.equals(account.status())) {
+                return Mono.just(account);
+            }
+            if (!from.equals(account.status())) {
+                return Mono.error(conflict(otherwise.apply(account)));
+            }
+            return accounts.save(new Account(account.id(), account.householdId(), account.type(), account.name(),
+                    account.institution(), account.openedOn(), account.openingAmount(), target, account.createdAt(),
+                    clock.instant()));
+        });
+        return transactions.transactional(work).flatMap(saved -> accountService.findById(saved.id()));
+    }
+
+    private Mono<Account> load(UUID id) {
+        return accounts.findById(id).switchIfEmpty(Mono.error(
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)));
+    }
+
+    private static ResponseStatusException conflict(String message) {
+        return new ResponseStatusException(HttpStatus.CONFLICT, message);
+    }
+}

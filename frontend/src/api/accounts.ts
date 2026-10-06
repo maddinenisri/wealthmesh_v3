@@ -91,3 +91,7 @@ export const updateAccount = (id: string, details: AccountDetails) =>
     },
     parse: parseAccount,
   })
+
+/** Archive or restore an account: the same account comes back with its new status (a repeat changes nothing). */
+export const changeAccountStatus = (id: string, action: 'archive' | 'restore') =>
+  request(`/accounts/${id}/${action}`, { method: 'POST', parse: parseAccount })

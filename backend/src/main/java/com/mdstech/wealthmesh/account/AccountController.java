@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.mdstech.wealthmesh.account.dto.AccountRequest;
 import com.mdstech.wealthmesh.account.dto.AccountResponse;
 import com.mdstech.wealthmesh.account.dto.AccountUpdateRequest;
+import com.mdstech.wealthmesh.account.service.AccountLifecycleService;
 import com.mdstech.wealthmesh.account.service.AccountService;
 
 import reactor.core.publisher.Flux;
@@ -25,9 +26,11 @@ import reactor.core.publisher.Mono;
 public class AccountController {
 
     private final AccountService service;
+    private final AccountLifecycleService lifecycle;
 
-    public AccountController(AccountService service) {
+    public AccountController(AccountService service, AccountLifecycleService lifecycle) {
         this.service = service;
+        this.lifecycle = lifecycle;
     }
 
     @GetMapping
@@ -49,5 +52,15 @@ public class AccountController {
     @PutMapping("/{id}")
     public Mono<AccountResponse> update(@PathVariable UUID id, @RequestBody AccountUpdateRequest request) {
         return service.update(id, request);
+    }
+
+    @PostMapping("/{id}/archive")
+    public Mono<AccountResponse> archive(@PathVariable UUID id) {
+        return lifecycle.archive(id);
+    }
+
+    @PostMapping("/{id}/restore")
+    public Mono<AccountResponse> restore(@PathVariable UUID id) {
+        return lifecycle.restore(id);
     }
 }

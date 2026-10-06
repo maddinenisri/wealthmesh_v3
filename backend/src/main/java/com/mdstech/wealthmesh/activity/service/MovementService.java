@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
 
@@ -15,6 +16,7 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.domain.Activity;
@@ -134,6 +136,7 @@ public class MovementService {
             Mono<Void> work = movements.lockAccounts(accountsOf(old, null))
                     .then(Mono.defer(() -> legs(movementId)))
                     .flatMap(fresh -> requireLive(fresh)
+                            .then(Mono.defer(() -> requireNotClosed(fresh)))
                             .then(Mono.defer(() -> actor(fresh, memberId)))
                             .then(Mono.defer(() -> movements.removePair(movementId, memberId, now)))
                             .flatMap(n -> n == 2 ? events(fresh, "removed", memberId, now)
@@ -153,6 +156,7 @@ public class MovementService {
                     .then(Mono.defer(() -> legs(movementId)))
                     .flatMap(fresh -> alreadyRestored(fresh).flatMap(already -> already ? Mono.<Void>empty()
                             : requireRemoved(fresh)
+                            .then(Mono.defer(() -> requireNotClosed(fresh)))
                             .then(Mono.defer(() -> actor(fresh, memberId)))
                             .then(Mono.defer(() -> startsStillCover(fresh)))
                             .then(Mono.defer(() -> movements.restorePair(movementId)))
@@ -194,7 +198,7 @@ public class MovementService {
     // ---- the locked parts: everything below runs with every account of the movement locked ----
 
     private Mono<Saved> writeNew(Pair pair, Parsed parsed, String key, Instant now, UUID replacesOut, UUID replacesIn) {
-        return checkDate(pair, parsed.on())
+        return requireStates(pair, Set.of()).then(Mono.defer(() -> checkDate(pair, parsed.on())))
                 .then(Mono.defer(() -> validator.memberLocked(pair.from(), parsed.memberId())))
                 .then(Mono.defer(() -> insertPair(pair, parsed, key, now, replacesOut, replacesIn)))
                 .flatMap(movement -> get(movement)).map(t -> new Saved(t, true));
@@ -203,7 +207,9 @@ public class MovementService {
     private Mono<Saved> replaceLocked(UUID movementId, Parsed parsed, String key, Instant now) {
         return legs(movementId).flatMap(fresh -> requireLive(fresh)
                 .then(Mono.defer(() -> loadPair(parsed.fromId(), parsed.toId())))
-                .flatMap(pair -> checkDate(pair, parsed.on())
+                .flatMap(pair -> requireStates(pair, fresh.stream().map(Leg::accountId).collect(
+                                java.util.stream.Collectors.toSet()))
+                        .then(Mono.defer(() -> checkDate(pair, parsed.on())))
                         .then(Mono.defer(() -> validator.memberLocked(pair.from(), parsed.memberId())))
                         .then(Mono.defer(() -> movements.removePair(movementId, parsed.memberId(), now)))
                         .flatMap(n -> n == 2 ? events(fresh, "replaced", parsed.memberId(), now)
@@ -219,7 +225,8 @@ public class MovementService {
                 .flatMap(original -> loadPair(original.accountId(), request.toAccountId()).flatMap(pair -> {
                     Parsed parsed = new Parsed(original.accountId(), request.toAccountId(), original.amount(),
                             original.occurredOn(), null, request.enteredByMemberId(), request.reason().strip());
-                    return checkDate(pair, original.occurredOn())
+                    return requireStates(pair, Set.of(original.accountId()))
+                            .then(Mono.defer(() -> checkDate(pair, original.occurredOn())))
                             .then(Mono.defer(() -> validator.memberLocked(pair.from(), parsed.memberId())))
                             .then(Mono.defer(() -> store.markRemoved(original.id(), parsed.memberId(), now)))
                             .filter(n -> n > 0)
@@ -311,6 +318,28 @@ public class MovementService {
                     }
                     return Mono.just(new Pair(both.getT1(), both.getT2()));
                 });
+    }
+
+    /**
+     * Read under the locks: an account already holding this movement (an edit, a conversion) may be archived, never
+     * closed; any other account must be active, so new money never reaches an archived or closed one.
+     */
+    private Mono<Void> requireStates(Pair pair, Set<UUID> holding) {
+        return Mono.fromRunnable(() -> {
+            for (Account account : List.of(pair.from(), pair.to())) {
+                if (holding.contains(account.id())) {
+                    AccountState.requireNotClosed(account);
+                } else {
+                    AccountState.requireOpen(account);
+                }
+            }
+        });
+    }
+
+    /** Removing or restoring a movement changes the Balance of both accounts, so neither may be closed. */
+    private Mono<Void> requireNotClosed(List<Leg> legs) {
+        return Mono.when(legs.stream().map(leg -> accounts.findById(leg.accountId())
+                .map(AccountState::requireNotClosed)).toList());
     }
 
     private Mono<Void> checkDate(Pair pair, LocalDate on) {

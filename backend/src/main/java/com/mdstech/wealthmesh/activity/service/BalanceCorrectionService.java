@@ -13,6 +13,7 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.account.service.AccountService;
@@ -99,7 +100,10 @@ public class BalanceCorrectionService {
 
     private Mono<EntryService.Saved> writeLocked(Account account, String key, CorrectionRequest request,
             UUID memberId, Instant now, String reason) {
+        // A new correction needs an active account; correcting a correction is a change of history (archived is fine).
         return load(account.id())
+                .map(fresh -> request.replacesId() == null ? AccountState.requireOpen(fresh)
+                        : AccountState.requireNotClosed(fresh))
                 .flatMap(fresh -> figures(fresh, request.requestedBalance(), request.balanceSide(), request.asOn(),
                         request.replacesId()))
                 .flatMap(f -> {

@@ -12,6 +12,7 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.domain.Activity;
@@ -63,9 +64,9 @@ public class EntryService {
         // The account row is locked and read again, so a tracking-start move cannot slip in between the date check
         // and the insert (an entry would be left dated before the start).
         return Mono.fromCallable(() -> requireKey(key))
-                .then(Mono.defer(() -> load(accountId)))
+                .then(Mono.defer(() -> loadOpen(accountId)))
                 .flatMap(account -> transactions.transactional(store.lockAccount(account.id())
-                        .then(Mono.defer(() -> load(accountId)))
+                        .then(Mono.defer(() -> loadOpen(accountId)))
                         .flatMap(fresh -> validator.parseSplittable(fresh, kind, request, java.util.Set.of())
                                 // The member is read again under a share lock, so a deactivate cannot slip in (D-034).
                                 .flatMap(entry -> validator.memberLocked(fresh, entry.memberId()).thenReturn(entry)))
@@ -106,6 +107,11 @@ public class EntryService {
             throw bad("Missing save key");
         }
         return key;
+    }
+
+    /** The account for a new entry: archived and closed accounts take no new money (checked again under the lock). */
+    private Mono<Account> loadOpen(UUID id) {
+        return load(id).map(AccountState::requireOpen);
     }
 
     private Mono<Account> load(UUID id) {

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 
@@ -32,6 +33,10 @@ class MoveTarget {
                 .flatMap(target -> accounts.findById(sourceId).flatMap(source -> {
                     if (!source.householdId().equals(target.householdId())) {
                         return Mono.error(notFound(targetId));
+                    }
+                    // Moving to another account is new money there: it must be active (the save checks again).
+                    if (!target.id().equals(source.id())) {
+                        AccountState.requireOpen(target);
                     }
                     return AccountType.holdsActivity(target.type()) ? Mono.just(target)
                             : Mono.error(EntryValidator.bad("Money cannot be moved to this type of account yet"));

@@ -827,6 +827,15 @@ export function mockApi(
       existing.active = true
       return HttpResponse.json(memberBody(existing))
     }),
+    ...(['archive', 'restore'] as const).map((action) =>
+      http.post(`*/api/v1/accounts/:id/${action}`, ({ request, params }) => {
+        log(request)
+        const existing = state.accounts.find((a) => a.id === params.id)
+        if (!existing) return problem(404, `Account not found: ${String(params.id)}`)
+        existing.status = action === 'archive' ? 'archived' : 'active'
+        return HttpResponse.json(existing)
+      }),
+    ),
     http.get('*/api/v1/today', ({ request }) => {
       log(request)
       return HttpResponse.json({ today })

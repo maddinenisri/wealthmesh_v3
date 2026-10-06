@@ -22,6 +22,8 @@ import { ChangeToTransfer } from '../transfers/ChangeToTransfer'
 import { TransferChange, type TransferTarget } from '../transfers/TransferChange'
 import { TransferForm } from '../transfers/TransferForm'
 import { accountTypeLabel } from './accountTypes'
+import { AccountStatusCard } from './AccountStatusCard'
+import { STATUS_LABEL } from './statusLabel'
 import { BalanceFigure } from './BalanceFigure'
 import { balanceText, isCard } from './cardBalance'
 import { OVERDRAFT_NOTICE } from './Overdrawn'
@@ -51,7 +53,11 @@ export function AccountDetailPage() {
         <>
           <PageHeader
             title={account.data.name}
-            description={`${accountTypeLabel(account.data.type)} account`}
+            description={`${accountTypeLabel(account.data.type)} account${
+              account.data.status === 'active'
+                ? ''
+                : ` · ${STATUS_LABEL[account.data.status] ?? account.data.status}`
+            }`}
             actions={
               <div className="flex gap-2">
                 <Link
@@ -67,6 +73,7 @@ export function AccountDetailPage() {
             account={account.data}
             owners={ownerNames(account.data.ownerMemberIds, members)}
           />
+          <AccountStatusCard account={account.data} />
           <Activity account={account.data} members={members} />
         </>
       )}
@@ -204,6 +211,9 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
     !splitting &&
     !!today.data &&
     !!members
+  // Archived: no new money, history still editable. Closed: nothing changes until it is reopened (slice 12).
+  const canAdd = ready && account.status === 'active'
+  const canChange = ready && account.status !== 'closed'
   // After a save the new row is what the person came for, so the table's top is brought into view.
   const closeTransfer = (saved?: boolean) => {
     setTransfer(null)
@@ -373,7 +383,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
           opening={{ amount: account.openingAmount, on: account.openedOn, type: account.type }}
           members={members}
           onEdit={
-            ready
+            canChange
               ? (entry) => {
                   remember()
                   if (isMovement(entry)) setTransfer({ kind: 'edit', entry })
@@ -383,7 +393,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               : undefined
           }
           onEditCorrection={
-            ready
+            canChange
               ? (entry) => {
                   remember()
                   setCorrecting({ editing: entry })
@@ -391,7 +401,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               : undefined
           }
           onRemove={
-            ready
+            canChange
               ? (entry) => {
                   remember()
                   if (isMovement(entry)) setTransfer({ kind: 'remove', entry })
@@ -400,7 +410,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               : undefined
           }
           onUndo={
-            ready
+            canChange
               ? (entry) => {
                   remember()
                   if (entry.movementId) setTransfer({ kind: 'undo', entry })
@@ -418,7 +428,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setAdding('expense')
               }}
-              disabled={!ready}
+              disabled={!canAdd}
             >
               Record purchase
             </Button>
@@ -429,7 +439,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setBatching(true)
               }}
-              disabled={!ready}
+              disabled={!canAdd}
             >
               Add several purchases
             </Button>
@@ -440,7 +450,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setSplitting({})
               }}
-              disabled={!ready}
+              disabled={!canAdd}
             >
               Split a purchase
             </Button>
@@ -451,7 +461,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setAdding('refund')
               }}
-              disabled={!ready}
+              disabled={!canAdd}
             >
               Record refund
             </Button>
@@ -462,7 +472,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setTransfer({ kind: 'new', payment: true })
               }}
-              disabled={!ready}
+              disabled={!canAdd}
             >
               Record payment
             </Button>
@@ -473,7 +483,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setCorrecting({})
               }}
-              disabled={!ready}
+              disabled={!canAdd}
             >
               Update balance
             </Button>
@@ -487,7 +497,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setAdding('income')
               }}
-              disabled={!ready}
+              disabled={!canAdd}
             >
               Add money in
             </Button>
@@ -498,7 +508,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setAdding('expense')
               }}
-              disabled={!ready}
+              disabled={!canAdd}
             >
               Add money out
             </Button>
@@ -509,7 +519,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setBatching(true)
               }}
-              disabled={!ready}
+              disabled={!canAdd}
             >
               Add several expenses
             </Button>
@@ -520,7 +530,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setSplitting({})
               }}
-              disabled={!ready}
+              disabled={!canAdd}
             >
               Split an expense
             </Button>
@@ -531,7 +541,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setCorrecting({})
               }}
-              disabled={!ready}
+              disabled={!canAdd}
             >
               Update balance
             </Button>
@@ -542,7 +552,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setTransfer({ kind: 'new' })
               }}
-              disabled={!ready}
+              disabled={!canAdd}
             >
               Add transfer
             </Button>
@@ -553,7 +563,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 remember()
                 setTransfer({ kind: 'new', payment: true, fromBank: true })
               }}
-              disabled={!ready || !hasCard}
+              disabled={!canAdd || !hasCard}
               title={hasCard ? undefined : 'Add a credit card to pay it from here'}
             >
               Pay a card
