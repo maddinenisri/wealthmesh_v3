@@ -67,14 +67,33 @@ public class BatchEntryService {
                 .flatMap(account -> transactions.transactional(store.lockAccount(account.id())
                         .then(Mono.defer(() -> load(accountId)))
                         .flatMap(fresh -> stored(key, request.entries().size())
-                                .flatMap(stored -> (stored.isEmpty()
+                                // A retry is judged on what was saved, not on today's rules (Q-044); only a new key
+                                // meets the state gate and the category and member rules.
+                                .flatMap(stored -> stored.isEmpty()
                                         ? Mono.fromCallable(() -> AccountState.requireOpen(fresh))
                                                 .then(Mono.defer(() -> parse(fresh, request)))
-                                        : parse(fresh, request))
-                                        .flatMap(entries -> validator.memberLocked(fresh, request.enteredByMemberId())
-                                                .then(Mono.defer(() -> stored.isEmpty()
-                                                        ? create(key, entries, clock.instant())
-                                                        : replay(stored, entries))))))));
+                                                .flatMap(entries -> validator.memberLocked(fresh,
+                                                        request.enteredByMemberId())
+                                                        .then(Mono.defer(() -> create(key, entries, clock.instant()))))
+                                        : parseForReplay(fresh, request, stored)
+                                                .flatMap(entries -> replay(stored, entries))))));
+    }
+
+    private Mono<List<EntryValidator.Entry>> parseForReplay(Account account, BatchRequest request,
+            List<Stored> stored) {
+        return Flux.range(0, request.entries().size()).concatMap(i -> {
+            ExpenseRequest row = request.entries().get(i);
+            ExpenseRequest withMember = new ExpenseRequest(row.description(), row.amount(), row.occurredOn(),
+                    row.category(), row.categoryId(), request.enteredByMemberId(), row.classification(),
+                    row.portions());
+            Activity saved = stored.stream().filter(s -> s.index() == i).map(Stored::activity).findFirst()
+                    .orElse(null);
+            return validator.parseForReplay(account, "expense", withMember, new EntryValidator.Stored(
+                            saved == null ? null : saved.categoryId(), saved == null ? null : saved.classification(),
+                            List.of()))
+                    .onErrorMap(ResponseStatusException.class, e -> new ResponseStatusException(e.getStatusCode(),
+                            "Row " + (i + 1) + ": " + e.getReason()));
+        }).collectList();
     }
 
     private Mono<List<EntryValidator.Entry>> parse(Account account, BatchRequest request) {

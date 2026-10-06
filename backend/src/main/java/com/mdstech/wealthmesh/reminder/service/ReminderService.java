@@ -83,7 +83,10 @@ public class ReminderService {
             Instant cutoff) {
         return store.expireKey(key, cutoff)
                 .then(Mono.defer(() -> reminders.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)))
-                .flatMap(existing -> parsed(account, request).flatMap(entry -> replay(existing, entry)))
+                // A retry is judged on what was saved, not on today's rules (Q-044).
+                .flatMap(existing -> validator.parseReminderForReplay(account, request.kind(), request.asEntry(),
+                                new EntryValidator.Stored(existing.categoryId(), null, java.util.List.of()))
+                        .flatMap(entry -> replay(existing, entry)))
                 .switchIfEmpty(Mono.defer(() -> Mono.fromCallable(() -> AccountState.requireOpen(account))
                         .flatMap(open -> parsed(open, request))
                         .flatMap(entry -> reminders.save(new Reminder(null, entry.accountId(), entry.kind(),

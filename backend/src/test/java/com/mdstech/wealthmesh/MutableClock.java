@@ -23,6 +23,11 @@ public class MutableClock extends Clock {
         this.instant = today.atTime(LocalTime.NOON).atZone(zone).toInstant();
     }
 
+    /** A time of day on a date, for a test that must stay inside a 24 hour window (a save key's lifetime). */
+    public void setAt(LocalDate today, LocalTime time) {
+        this.instant = today.atTime(time).atZone(zone).toInstant();
+    }
+
     @Override
     public ZoneId getZone() {
         return zone;

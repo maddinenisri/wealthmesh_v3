@@ -99,6 +99,128 @@ public class EntryValidator {
         return parse(account, kind, request, false, keptCategoryId == null ? Set.of() : Set.of(keptCategoryId), false);
     }
 
+    /** What a retry is compared with: the category, class and portions of the row saved under its key. */
+    public record Stored(UUID categoryId, String classification, List<Portion> portions) {
+
+        private static final UUID NONE = new UUID(0, 0);
+
+        UUID categoryOrNone() {
+            return categoryId == null ? NONE : categoryId;
+        }
+    }
+
+    /**
+     * The one replay mechanism (D-024, Q-044): the same request again, judged on what was saved. It checks only what
+     * the request itself must be (an amount, a date, a member, a split's shape) and resolves the category and member to
+     * ids without today's rules: an archived or merged category and a deactivated member still resolve, a date that is
+     * past or before the account's start is not refused, and an omitted class is the stored one. The caller compares
+     * the result with the stored row. Never use it to save: a new key goes through {@link #parse}.
+     */
+    public Mono<Entry> parseForReplay(Account account, String kind, ExpenseRequest request, Stored stored) {
+        return parseForReplay(account, kind, request, stored, false);
+    }
+
+    /** The same for a reminder: its kind must be expense or income, it names a category and cannot be split. */
+    public Mono<Entry> parseReminderForReplay(Account account, String kind, ExpenseRequest request, Stored stored) {
+        if (!"expense".equals(kind) && !"income".equals(kind)) {
+            return Mono.error(bad("Choose expense or income"));
+        }
+        return parseForReplay(account, kind, request, stored, true);
+    }
+
+    private Mono<Entry> parseForReplay(Account account, String kind, ExpenseRequest request, Stored stored,
+            boolean reminder) {
+        boolean split = request.portions() != null && !request.portions().isEmpty();
+        if (split && reminder) {
+            return Mono.error(bad("This entry cannot be split across categories"));
+        }
+        return Mono.fromCallable(() -> replayParts(account, kind, request, split)).flatMap(parts -> split
+                ? replayPortions(request.portions(), stored)
+                        .map(list -> new Entry(account.id(), kind, (BigDecimal) parts[0], request.occurredOn(),
+                                (String) parts[1], null, request.enteredByMemberId(), null, list))
+                : replayCategory(kind, request, reminder, stored)
+                        .map(category -> new Entry(account.id(), kind, (BigDecimal) parts[0], request.occurredOn(),
+                                (String) parts[1], category.orElse(null), request.enteredByMemberId(),
+                                replayClass(kind, request.classification(), stored.classification()), List.of())));
+    }
+
+    /** What a request must be whatever the ledger says now: an amount, a date, a member, a split's shape. */
+    private static Object[] replayParts(Account account, String kind, ExpenseRequest request, boolean split) {
+        if ("income".equals(kind) && AccountType.isCard(account.type())) {
+            throw bad("A card records purchases, refunds and payments, not income");
+        }
+        if (request.occurredOn() == null) {
+            throw bad("Enter a date");
+        }
+        if (request.enteredByMemberId() == null) {
+            throw bad("Choose who entered this");
+        }
+        if (split) {
+            checkSplitShape(kind, request);
+        }
+        return new Object[] { amount(request.amount()), description(request.description()) };
+    }
+
+    private Mono<java.util.Optional<UUID>> replayCategory(String kind, ExpenseRequest request, boolean reminder,
+            Stored stored) {
+        boolean named = request.categoryId() != null || request.category() != null && !request.category().isBlank();
+        if (!named && "expense".equals(kind) && !reminder) {
+            return Mono.just(java.util.Optional.empty());
+        }
+        if (request.categoryId() != null) {
+            return Mono.just(java.util.Optional.of(request.categoryId()));
+        }
+        String categoryKind = "income".equals(kind) ? "income" : "spending";
+        return (named ? categories.findAnyByKindAndName(categoryKind, request.category().strip(),
+                stored.categoryOrNone()) : Mono.<Category>empty())
+                .switchIfEmpty(Mono.error(bad("Choose " + ("income".equals(categoryKind) ? "an income" : "a spending")
+                        + " category")))
+                .map(c -> java.util.Optional.of(c.id()));
+    }
+
+    private Mono<List<Portion>> replayPortions(List<PortionRequest> requested, Stored stored) {
+        boolean sameShape = stored.portions() != null && stored.portions().size() == requested.size();
+        return Flux.range(0, requested.size())
+                .concatMap(i -> replayPortion(requested.get(i), sameShape ? stored.portions().get(i) : null))
+                .collectList();
+    }
+
+    private Mono<Portion> replayPortion(PortionRequest p, Portion saved) {
+        BigDecimal amount = amount(p.amount());
+        String chosen = chosenClass(p.classification());
+        String portionClass = chosen != null ? chosen : saved == null ? null : saved.classification();
+        if (p.categoryId() != null) {
+            return Mono.just(new Portion(p.categoryId(), portionClass, amount));
+        }
+        if (p.category() == null || p.category().isBlank()) {
+            return Mono.error(bad("Choose a spending category for each portion"));
+        }
+        return categories.findAnyByKindAndName("spending", p.category().strip(),
+                        saved == null ? Stored.NONE : saved.categoryId())
+                .switchIfEmpty(Mono.error(bad("Choose a spending category for each portion")))
+                .map(c -> new Portion(c.id(), portionClass, amount));
+    }
+
+    private static String replayClass(String kind, String requested, String storedClass) {
+        String chosen = chosenClass(requested);
+        if ("income".equals(kind)) {
+            if (chosen != null) {
+                throw bad("An income entry has no Essential or Discretionary choice");
+            }
+            return null;
+        }
+        return chosen != null ? chosen : storedClass;
+    }
+
+    /** The class a request names, checked; null when it names none. */
+    private static String chosenClass(String requested) {
+        String chosen = requested == null || requested.isBlank() ? null : requested;
+        if (chosen != null && !CategoryService.CLASSES.contains(chosen)) {
+            throw bad("Choose Essential or Discretionary");
+        }
+        return chosen;
+    }
+
     /** A reminder is dated after today and is saved as a plan; its kind must be expense or income. */
     public Mono<Entry> parseReminder(Account account, String kind, ExpenseRequest request) {
         if (!"expense".equals(kind) && !"income".equals(kind)) {

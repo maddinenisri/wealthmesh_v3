@@ -72,8 +72,12 @@ public class EntryService {
                         .then(Mono.defer(() -> load(accountId)))
                         .flatMap(fresh -> store.expireKey(key, cutoff)
                                 .then(Mono.defer(() -> activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)))
-                                .flatMap(existing -> validator.parseSplittable(fresh, kind, request, java.util.Set.of())
-                                        .flatMap(entry -> replay(existing, entry)))
+                                // A retry is judged on what was saved, not on today's rules (Q-044).
+                                .flatMap(existing -> portions.of(existing.id())
+                                        .flatMap(stored -> validator.parseForReplay(fresh, kind, request,
+                                                new EntryValidator.Stored(existing.categoryId(),
+                                                        existing.classification(), stored))
+                                                .flatMap(entry -> replay(existing, stored, entry))))
                                 .switchIfEmpty(Mono.defer(() -> Mono.fromCallable(() -> AccountState.requireOpen(fresh))
                                         .flatMap(open -> validator.parseSplittable(open, kind, request,
                                                 java.util.Set.of()))
@@ -95,18 +99,18 @@ public class EntryService {
                 // Unreachable while record() holds the account lock; in its transaction this recovery could not run.
                 .onErrorResume(DuplicateKeyException.class, e -> activities
                         .findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
-                        .flatMap(existing -> replay(existing, entry)));
+                        .flatMap(existing -> portions.of(existing.id())
+                                .flatMap(stored -> replay(existing, stored, entry))));
     }
 
-    private Mono<Saved> replay(Activity existing, EntryValidator.Entry entry) {
-        return portions.of(existing.id()).flatMap(stored -> {
-            boolean same = entry.matches(existing, stored) && existing.replacesId() == null;
-            if (!same) {
-                return Mono.<Saved>error(new ResponseStatusException(HttpStatus.CONFLICT,
-                        "This save was already used with different details. Start a new entry."));
-            }
-            return store.byId(existing.id()).map(a -> new Saved(a, false));
-        });
+    private Mono<Saved> replay(Activity existing, java.util.List<com.mdstech.wealthmesh.activity.domain.Portion> stored,
+            EntryValidator.Entry entry) {
+        boolean same = entry.matches(existing, stored) && existing.replacesId() == null;
+        if (!same) {
+            return Mono.<Saved>error(new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This save was already used with different details. Start a new entry."));
+        }
+        return store.byId(existing.id()).map(a -> new Saved(a, false));
     }
 
     private static String requireKey(String key) {

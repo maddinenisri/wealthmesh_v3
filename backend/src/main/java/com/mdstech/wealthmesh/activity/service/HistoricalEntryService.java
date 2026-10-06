@@ -85,22 +85,14 @@ public class HistoricalEntryService {
     /** A retry is judged on what was saved, never on the ledger as it is now. */
     private Mono<EntryService.Saved> replay(Account account, Activity existing, HistoricalEntryRequest request,
             Instant cutoff) {
-        return validator.parse(withNoDateCheck(account, request), request.kind(), request.entry())
+        return validator.parseForReplay(account, request.kind(), request.entry(),
+                        new EntryValidator.Stored(existing.categoryId(), existing.classification(), List.of()))
                 .flatMap(entry -> openings.storedMatches(existing.idempotencyKey(), cutoff, request.startRevision())
                         .flatMap(sameStart -> sameStart && entry.matches(existing, List.of())
                                 && existing.replacesId() == null
                                 ? store.byId(existing.id()).map(a -> new EntryService.Saved(a, false))
                                 : Mono.error(conflict(
                                         "This save was already used with different details. Start a new entry."))));
-    }
-
-    /** The stored entry predates the account's current start no more: compare it on its details only. */
-    private static Account withNoDateCheck(Account account, HistoricalEntryRequest request) {
-        return new Account(account.id(), account.householdId(), account.type(), account.name(),
-                account.institution(), request.entry().occurredOn() == null ? account.openedOn()
-                        : request.entry().occurredOn().isBefore(account.openedOn()) ? request.entry().occurredOn()
-                        : account.openedOn(), account.openingAmount(), account.status(), account.createdAt(),
-                account.updatedAt());
     }
 
     private static String require(String key, HistoricalEntryRequest request) {
