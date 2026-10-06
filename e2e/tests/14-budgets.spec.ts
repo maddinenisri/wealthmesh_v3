@@ -229,5 +229,47 @@ for (const [width, month, name, copyMonth, copyName, latest, from] of [
       await page.getByRole('button', { name: 'Cancel' }).click()
       await expect(page.getByRole('table', { name: 'Budget by category' })).toContainText('$600.00')
     })
+
+    test(`V2_BUDGET_006 remove: Cancel keeps the Budget, Confirm says No Budget with spending kept, Undo brings it back (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto('/spending')
+      await page.getByRole('textbox', { name: 'Month' }).fill(month)
+      const remove = page.getByRole('button', { name: 'Remove Budget' })
+      await remove.click()
+      const review = page.getByRole('region', { name: `Review removing the ${name} Budget` })
+      await expectFocusInside(review)
+      await expectNoSidewaysScroll(page)
+      await review.getByRole('button', { name: 'Cancel' }).click()
+      await expect(review).toBeHidden()
+      await expect(remove).toBeFocused()
+      await expect(page.getByRole('region', { name: 'Budget', exact: true })).toContainText(
+        '$60.00 over Budget',
+      )
+
+      await remove.click()
+      await page.getByRole('button', { name: 'Confirm removing the Budget' }).click()
+      const status = page.getByRole('status')
+      await expect(status).toContainText(`No Budget for ${name}. Spending stays $3,660.00.`)
+      await expect(status).toBeFocused()
+      await expect(page.getByText(`No Budget for ${name}`).first()).toBeVisible()
+      const undo = page.getByRole('button', { name: 'Undo removing the Budget' })
+      await undo.click()
+      const undoReview = page.getByRole('region', {
+        name: `Review bringing back the ${name} Budget`,
+      })
+      await expectFocusInside(undoReview)
+      await undoReview.getByRole('button', { name: 'Cancel' }).click()
+      await expect(undo).toBeFocused()
+
+      await undo.click()
+      await page.getByRole('button', { name: 'Confirm Undo' }).click()
+      await expect(page.getByRole('status')).toContainText(
+        `The ${name} Budget is back with its category targets: $60.00 over Budget.`,
+      )
+      await expect(page.getByRole('status')).toBeFocused()
+      await expect(page.getByRole('table', { name: 'Budget by category' })).toContainText('$350.00')
+      await expectNoSidewaysScroll(page)
+    })
   })
 }

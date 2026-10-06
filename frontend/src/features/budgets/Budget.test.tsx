@@ -340,3 +340,49 @@ describe('Copy a Budget', () => {
     expect(state.activity).toHaveLength(6)
   })
 })
+
+describe('Remove and Undo a Budget', () => {
+  it('V2_BUDGET_006 removes a Budget with spending untouched, and Undo brings its targets back', async () => {
+    const state = mockApi({ household, members: [maya, sam], accounts: [everyday], activity: [] })
+    addCategories()
+    state.activity.push(...september())
+    state.budgets.push({
+      id: 'b1',
+      month: '2026-09',
+      total: '3600.00',
+      targets: [{ categoryId: idOf('Dining'), amount: '350.00' }],
+    })
+    const { user } = renderRoute('/spending')
+    await openSeptember(user)
+
+    await user.click(await screen.findByRole('button', { name: 'Remove Budget' }))
+    const review = await screen.findByRole('region', {
+      name: 'Review removing the September Budget',
+    })
+    expect(review).toHaveTextContent('no expense and no account Balance changes')
+    await user.click(within(review).getByRole('button', { name: 'Cancel' }))
+    expect(state.budgets[0].removed).toBeFalsy()
+    expect(
+      within(screen.getByRole('region', { name: 'Budget' })).getByText(/\$60\.00 over Budget/),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Remove Budget' }))
+    await user.click(await screen.findByRole('button', { name: 'Confirm removing the Budget' }))
+    expect(await screen.findByText('No Budget for September')).toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent('Spending stays $3,660.00')
+    expect(state.budgets[0].removed).toBe(true)
+    expect(state.activity).toHaveLength(6)
+    expect(screen.getByText(/Removed by Maya/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Undo removing the Budget' }))
+    await user.click(await screen.findByRole('button', { name: 'Confirm Undo' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'The September Budget is back with its category targets: $60.00 over Budget.',
+    )
+    expect(state.budgets[0].removed).toBe(false)
+    const dining = within(await screen.findByRole('table', { name: 'Budget by category' }))
+      .getByText('Dining')
+      .closest('tr')!
+    expect(dining).toHaveTextContent('$350.00')
+  })
+})
