@@ -14,6 +14,13 @@ import io.r2dbc.spi.Connection;
 abstract class LifecycleTestBase extends CardPaymentTestBase {
 
     protected WebTestClient.ResponseSpec act(String account, String action) {
+        return webTestClient.post().uri("/api/v1/accounts/{id}/{action}", account, action)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange();
+    }
+
+    /** A lifecycle call with no body: the person is required (400). */
+    protected WebTestClient.ResponseSpec actWithoutPerson(String account, String action) {
         return webTestClient.post().uri("/api/v1/accounts/{id}/{action}", account, action).exchange();
     }
 

@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.dto.AccountEvent;
 import com.mdstech.wealthmesh.account.dto.AccountLifecycle;
@@ -103,7 +104,11 @@ public class AccountController {
         return lifecycle.events(id);
     }
 
+    /** Who is making the change is a required body field, as on every other write (D-025). */
     private static UUID memberOf(LifecycleRequest request) {
-        return request == null ? null : request.enteredByMemberId();
+        if (request == null || request.enteredByMemberId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose who entered this");
+        }
+        return request.enteredByMemberId();
     }
 }

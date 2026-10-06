@@ -32,7 +32,7 @@ import reactor.core.publisher.Mono;
  * Archive, restore, close, reopen and delete an account (A1 to A3). It follows the member lifecycle of slice 05: each
  * write takes the account row `FOR UPDATE`, reads the status again under it, and a repeat of the same action returns
  * the same result. None of it writes money. A change that happens records who made it and when (`account_event`), in
- * the same transaction; the person is optional only for a raw API caller and is checked under a share lock when given.
+ * the same transaction; the person is a required body field, checked under a share lock.
  * The review before each action lives in the UI.
  */
 @Service
@@ -175,9 +175,9 @@ public class AccountLifecycleService {
         return transactions.transactional(work).flatMap(saved -> accountService.findById(saved.id()));
     }
 
-    /** The person is checked under a share lock (D-034), so a deactivate cannot slip in; a raw call may give none. */
+    /** The person is checked under a share lock (D-034), so a deactivate cannot slip in. */
     private Mono<Void> actor(Account account, UUID memberId) {
-        return memberId == null ? Mono.empty() : validator.memberLocked(account, memberId).then();
+        return validator.memberLocked(account, memberId).then();
     }
 
     private Mono<Void> record(UUID id, String action, UUID memberId) {

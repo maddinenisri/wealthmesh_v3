@@ -75,6 +75,17 @@ class AccountEventsApiTests extends LifecycleTestBase {
                 .jsonPath("$.length()").isEqualTo(6);
     }
 
+    @Order(6)
+    @Test
+    @DisplayName("V2_ACCOUNT_LIFECYCLE_001 who is making the change is required on every lifecycle write")
+    void personIsRequired() {
+        for (String action : new String[] {"archive", "restore", "close", "reopen", "delete", "undo-delete"}) {
+            actWithoutPerson(account, action).expectStatus().isBadRequest().expectBody().jsonPath("$.message")
+                    .isEqualTo("Choose who entered this");
+        }
+        assertStatus(account, "active");
+    }
+
     @Order(5)
     @Test
     @DisplayName("V2_ACCOUNT_LIFECYCLE_001 a member deactivated by a change that has not committed yet is refused: "

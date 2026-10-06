@@ -63,7 +63,8 @@ export function AccountsPage() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={undo.isPending}
+              disabled={undo.isPending || !member}
+              title={member ? undefined : 'Choose who is entering (Entering as) to undo'}
               onClick={() =>
                 undo.mutate('undo-delete', {
                   onSuccess: () => {

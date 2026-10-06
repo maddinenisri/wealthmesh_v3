@@ -307,7 +307,9 @@ for (const width of [710, 1280]) {
       await expect(page.getByRole('status')).toBeFocused()
       await expect(page.getByRole('row', { name: new RegExp(name) })).toHaveCount(1)
       // A repeated Undo (a second request) changes nothing and is not an error (D-044).
-      const again = await page.request.post(`/api/v1/accounts/${id}/undo-delete`)
+      const again = await page.request.post(`/api/v1/accounts/${id}/undo-delete`, {
+        data: { enteredByMemberId: await ownerId(page) },
+      })
       expect(again.ok()).toBeTruthy()
       await page.goto('/accounts')
       await expect(page.getByRole('row', { name: new RegExp(name) })).toHaveCount(1)
@@ -389,7 +391,10 @@ for (const width of [710, 1280]) {
         },
       })
       expect(paid.ok()).toBeTruthy()
-      expect((await page.request.post(`/api/v1/accounts/${card}/close`)).ok()).toBeTruthy()
+      const closed = await page.request.post(`/api/v1/accounts/${card}/close`, {
+        data: { enteredByMemberId: owner },
+      })
+      expect(closed.ok()).toBeTruthy()
 
       // Cowork 2: the bank's page offers no Edit or Remove for it, and says why.
       await page.goto(`/accounts/${bank}`)
