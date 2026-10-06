@@ -5,7 +5,10 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-/** One ledger row as history shows it: status is effective, replaced or removed. */
+/**
+ * One ledger row as history shows it: status is effective, replaced or removed. `portions` is empty unless the
+ * expense was split; a replaced row keeps the split it had.
+ */
 public record HistoryEntry(
         UUID id,
         String kind,
@@ -25,7 +28,14 @@ public record HistoryEntry(
         Origin replacedBy,
         UUID movementId,
         UUID counterAccountId,
-        String counterAccountName) {
+        String counterAccountName,
+        List<PortionResponse> portions) {
+
+    public HistoryEntry withPortions(List<PortionResponse> shown) {
+        return new HistoryEntry(id, kind, amount, occurredOn, description, categoryName, enteredByMemberId,
+                enteredByName, createdAt, reason, replacesId, replacedById, status, events, replaces, replacedBy,
+                movementId, counterAccountId, counterAccountName, shown);
+    }
 
     /** The other side of a replacement: the entry this one replaced, or the one that replaced it, and its account. */
     public record Origin(UUID id, UUID accountId, String accountName, String kind, String amount, LocalDate occurredOn,

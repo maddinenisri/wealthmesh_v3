@@ -136,8 +136,8 @@ public class CategoryStore {
     /** What a category holds: its effective entries (merged-in ones included) and their total. */
     public Mono<CategoryUsage> usage(Category category) {
         Counted counted = Counted.of("spending".equals(category.kind()) ? "expense" : "income", "a.");
-        return client.sql("SELECT COUNT(*) AS n, COALESCE(SUM(" + counted.value() + "), 0) AS total "
-                        + "FROM activity a JOIN category oc ON oc.id = a.category_id "
+        return client.sql("SELECT COUNT(DISTINCT a.id) AS n, COALESCE(SUM(" + counted.value() + "), 0) AS total "
+                        + "FROM activity_part a JOIN category oc ON oc.id = a.category_id "
                         + "WHERE a.removed_at IS NULL AND " + counted.filter()
                         + " AND COALESCE(oc.merged_into_id, oc.id) = :id")
                 .bind("id", category.id())
