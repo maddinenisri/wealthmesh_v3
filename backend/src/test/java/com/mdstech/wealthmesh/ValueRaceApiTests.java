@@ -116,6 +116,21 @@ class ValueRaceApiTests extends ValuedTestBase {
         assertThat(historyCount(own)).as("the setup value and one value").isEqualTo(2);
     }
 
+    @Order(7)
+    @Test
+    @DisplayName("V2_DATED_VALUE_004 two corrections with one key at once change the value once: the second replays")
+    void sameKeyCorrectionAtOnce() throws Exception {
+        String own = fresh("Race Correction Key");
+        String estimate = savedValue(own, "q-0", "2000.00", "2026-09-10", null);
+        String body = """
+                {"amount": "2100.00", "reason": "Fix", "enteredByMemberId": "%s"}""".formatted(mayaId);
+        @SuppressWarnings("unchecked")
+        List<Integer> statuses = afterHeld(ACCOUNT_LOCK, own, () -> correctValue(own, estimate, "q-1", body),
+                () -> correctValue(own, estimate, "q-1", body));
+        assertThat(statuses).containsExactlyInAnyOrder(201, 200);
+        assertThat(historyCount(own)).as("setup value, the replaced value and its correction").isEqualTo(3);
+    }
+
     @Order(6)
     @Test
     @DisplayName("V2_DATED_VALUE_004 a retry replays after a later value, an Archive, a deactivation of who entered it "

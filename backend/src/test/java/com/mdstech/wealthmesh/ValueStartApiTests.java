@@ -189,4 +189,25 @@ class ValueStartApiTests extends ValuedTestBase {
         assertThat(twice).containsExactly(200, 200);
         assertThat(historyCount(same)).as("one move, one new value").isEqualTo(3);
     }
+
+    @Order(8)
+    @Test
+    @DisplayName("V2_DATED_VALUE_002 a value saved on the old start date outranks the old opening after the start "
+            + "moves, so the Balance and wealth do not change (a later save on one date wins)")
+    void movingTheStartNeverChangesTheBalance() {
+        String own = otherAsset("Tie Car", "30000.00", "2026-09-01");
+        clock.setAt(java.time.LocalDate.of(2026, 10, 3), java.time.LocalTime.of(12, 0));
+        savedValue(own, "tie-1", "32000.00", "2026-09-01", "Revalued on the first");
+        assertBalance(own, "32000.00");
+        clock.setAt(java.time.LocalDate.of(2026, 10, 3), java.time.LocalTime.of(12, 5));
+        savedValue(own, "tie-2", "33000.00", "2026-09-01", "Revalued again");
+        assertBalance(own, "33000.00");
+        clock.setAt(java.time.LocalDate.of(2026, 10, 3), java.time.LocalTime.of(12, 10));
+        extendStart(own, "tie-3", earlier("31000.00", "2026-08-01", "Earlier start")).expectStatus().isOk();
+        assertBalance(own, "33000.00");
+        webTestClient.get().uri("/api/v1/wealth?asOf=2026-09-01").exchange().expectBody()
+                .jsonPath("$.propertyAndOther.accounts[?(@.accountId=='" + own + "')].balance")
+                .isEqualTo("33000.00");
+        valueHistory(own).expectBody().jsonPath("$.values[?(@.amount=='33000.00')].status").isEqualTo("current");
+    }
 }

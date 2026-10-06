@@ -141,6 +141,11 @@ class DeletedAccountSweepApiTests extends ValuedTestBase {
                 valueBody(mayaId, "5.00", "2026-12-31", null, true))));
         expectNotFound(found, "POST values correction", statusOf(correctValue(plot, any, "s-v3", """
                 {"amount": "5.00", "reason": "Fix", "enteredByMemberId": "%s"}""".formatted(mayaId))));
+        String earlier = """
+                {"amount": "5.00", "valueOn": "2026-08-01", "reason": "Earlier", "enteredByMemberId": "%s"}"""
+                .formatted(mayaId);
+        expectNotFound(found, "POST values start-extension review", statusOf(reviewExtension(plot, earlier)));
+        expectNotFound(found, "POST values start-extension", statusOf(extendStart(plot, "s-v4", earlier)));
         for (String action : List.of("removal", "undo")) {
             expectNotFound(found, "POST values " + action, statusOf(valueAction(plot, any, action, mayaId)));
         }

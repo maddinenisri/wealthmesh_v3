@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Order;
@@ -141,15 +142,48 @@ class ValuedSetupApiTests extends ValuedTestBase {
         assertBalance(home, "300000.00");
     }
 
+    @Order(6)
+    @Test
+    @DisplayName("V2_PROPERTY_002 an entry cannot be moved onto, or changed into a transfer with, a property or other "
+            + "asset, and a card payment cannot name one")
+    void entriesAndPaymentsRefuseValuedAccounts() {
+        String bank = account("Valued Move Bank", "1000.00");
+        AtomicReference<String> bill = new AtomicReference<>();
+        post(bank, "expenses", "mv-1", entry(mayaId, "Bill", "10.00", "2026-09-07", "Dining")).expectStatus()
+                .isCreated().expectBody().jsonPath("$.id").value(String.class, bill::set);
+        webTestClient.post().uri("/api/v1/accounts/{a}/activity/{id}/replacement", bank, bill.get())
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).header("Idempotency-Key", "mv-2")
+                .bodyValue("""
+                        {"accountId": "%s", "description": "Bill", "amount": "10.00", "occurredOn": "2026-09-07",
+                         "category": "Dining", "enteredByMemberId": "%s", "reason": "Wrong account"}"""
+                        .formatted(home, mayaId)).exchange().expectStatus().isBadRequest();
+        webTestClient.post().uri("/api/v1/accounts/{a}/activity/{id}/transfer", bank, bill.get())
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).header("Idempotency-Key", "mv-3")
+                .bodyValue("""
+                        {"toAccountId": "%s", "enteredByMemberId": "%s", "reason": "It was a transfer"}"""
+                        .formatted(home, mayaId)).exchange().expectStatus().isBadRequest();
+        webTestClient.post().uri("/api/v1/card-payments")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", "mv-4").bodyValue("""
+                        {"fromAccountId": "%s", "toAccountId": "%s", "amount": "5.00", "occurredOn": "2026-09-07",
+                         "enteredByMemberId": "%s"}""".formatted(bank, home, mayaId)).exchange().expectStatus()
+                .isBadRequest();
+        assertActivityCount(bank, 1);
+    }
+
     @Order(7)
     @Test
     @DisplayName("V2_PROPERTY_002 a valued account is reached by the lifecycle: archive keeps its value in wealth, "
             + "close needs a zero Balance, delete is refused while it holds a value")
     void valuedLifecycle() {
         String own = property("Lifecycle Home", "50000.00", "2026-09-01");
+        AtomicReference<String> before = new AtomicReference<>();
+        webTestClient.get().uri("/api/v1/wealth").exchange().expectBody().jsonPath("$.financialAssets")
+                .value(String.class, before::set);
         act(own, "archive").expectStatus().isOk();
         webTestClient.get().uri("/api/v1/wealth").exchange().expectBody().jsonPath("$.financialAssets")
-                .isEqualTo("351000.00");
+                .value(String.class,
+                        total -> assertThat(total).as("archiving hides nothing").isEqualTo(before.get()));
         act(own, "restore").expectStatus().isOk();
         assertRefused(act(own, "close"), "needs a zero Balance. It has $50,000.00; record a $0.00 value first");
         assertRefused(act(own, "delete"), "starting Balance of $50,000.00");

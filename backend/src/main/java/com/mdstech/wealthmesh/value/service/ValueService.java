@@ -310,9 +310,11 @@ public class ValueService {
         return validator.memberLocked(account, request.enteredByMemberId()).flatMap(member -> values.moveStart(
                         account.id(), account.openingAmount(), account.openedOn(), parsed.amount(), parsed.valueOn(),
                         parsed.reason(), member, key, now)
+                // Dated as old as the account, so a value saved on the same date always outranks it (the tie is
+                // broken by the time of saving): moving the start never changes the Balance.
                 .then(Mono.defer(() -> values.insert(account.id(), account.openedOn(), account.openingAmount(),
                         "Value when tracking began", false, member, null, null,
-                        "start|" + account.id(), now)))
+                        "start|" + account.id(), account.createdAt())))
                 .flatMap(id -> values.recordEvent(account.id(), id, "start_moved", member, now,
                         "Start moved from " + account.openedOn() + " to " + parsed.valueOn() + ": "
                                 + parsed.reason()))

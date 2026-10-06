@@ -199,6 +199,7 @@ for (const [width, name, first, second] of [
       await page.getByLabel('Value', { exact: true }).fill(second)
       await page.getByRole('button', { name: 'Review', exact: true }).click()
       await expect(page.getByText('Enter a reason')).toBeInViewport({ ratio: 1 })
+      await expect(page.getByLabel('Reason', { exact: true })).toBeFocused()
       await page.getByLabel('Reason', { exact: true }).fill('Copied the wrong estimate')
       await page.getByRole('button', { name: 'Review', exact: true }).click()
       const review = page.getByRole('region', { name: 'Review value correction' })

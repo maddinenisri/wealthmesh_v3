@@ -193,18 +193,20 @@ export function ValueForm({
             <div role="alert" className="rounded-control border border-line p-3 text-sm">
               <p>{FUTURE}</p>
               <div className="mt-2 flex gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    setMode('plan')
-                    setFuture(false)
-                    const values = getValues()
-                    if (parseAmount(values.amount) !== null) ask(values, true)
-                  }}
-                >
-                  Save as a future plan
-                </Button>
+                {!replacesId && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setMode('plan')
+                      setFuture(false)
+                      const values = getValues()
+                      if (parseAmount(values.amount) !== null) ask(values, true)
+                    }}
+                  >
+                    Save as a future plan
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="ghost"
