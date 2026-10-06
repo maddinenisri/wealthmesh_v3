@@ -145,6 +145,7 @@ for (const [width, month, name, copyMonth, copyName, latest, from] of [
       await expect(table.getByRole('row', { name: /Dining/ })).toContainText('$30.00 over target')
       await expect(table.getByRole('row', { name: /Travel/ })).toContainText('$30.00 over target')
       await table.getByRole('button', { name: 'Dining' }).click()
+      await expect(page.getByRole('heading', { name: /Dining expenses/ })).toBeVisible()
       await expect(
         page.getByRole('table', { name: 'Expenses behind this Budget line' }),
       ).toContainText('$380.00')
@@ -251,7 +252,7 @@ for (const [width, month, name, copyMonth, copyName, latest, from] of [
       await remove.click()
       await page.getByRole('button', { name: 'Confirm removing the Budget' }).click()
       const status = page.getByRole('status')
-      await expect(status).toContainText(`No Budget for ${name}. Spending stays $3,660.00.`)
+      await expect(status).toContainText(`The ${name} Budget is removed. Spending stays $3,660.00.`)
       await expect(status).toBeFocused()
       await expect(page.getByText(`No Budget for ${name}`).first()).toBeVisible()
       const undo = page.getByRole('button', { name: 'Undo removing the Budget' })
@@ -271,6 +272,68 @@ for (const [width, month, name, copyMonth, copyName, latest, from] of [
       await expect(page.getByRole('status')).toBeFocused()
       await expect(page.getByRole('table', { name: 'Budget by category' })).toContainText('$350.00')
       await expectNoSidewaysScroll(page)
+    })
+  })
+}
+
+// Cowork findings after slice 13 (7 against 8, 8, 5, 5 and 5): a month with no spending below the card, so the page is
+// short and the form and review used to land badly.
+for (const [width, month, name] of [
+  [710, '2026-11', 'November'],
+  [1280, '2026-12', 'December'],
+] as const) {
+  test.describe.serial(`Budget in a quiet month at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+
+    test(`V2_BUDGET_001 the form is two columns on a wide screen, the review opens with its top in view and no empty table, Confirm focuses the status (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto('/spending')
+      await page.getByRole('textbox', { name: 'Month' }).fill(month)
+      await page.getByRole('button', { name: 'Create Budget' }).click()
+      if (width === 1280) {
+        const first = await page.getByLabel('Rent target', { exact: true }).boundingBox()
+        const second = await page.getByLabel('Utilities target', { exact: true }).boundingBox()
+        expect(Math.abs(first!.y - second!.y)).toBeLessThan(4)
+      }
+      await page.getByLabel('Total Budget').fill('100')
+      await page.getByRole('button', { name: 'Review Budget' }).click()
+      const review = page.getByRole('region', { name: `Review ${name} 2026 Budget` })
+      await expectFocusInside(review)
+      await expect(review.getByRole('table')).toHaveCount(0)
+      await page.getByRole('button', { name: 'Confirm saving the Budget' }).click()
+      const status = page.getByRole('status')
+      await expect(status).toContainText('Budget saved')
+      await expect(status).toBeFocused()
+    })
+
+    test(`V2_BUDGET_001 history says what each save was (${width}px)`, async ({ page }) => {
+      await page.goto('/spending')
+      await page.getByRole('textbox', { name: 'Month' }).fill(month)
+      await expect(page.getByRole('region', { name: 'Budget history' })).toContainText(
+        'Total $100.00',
+      )
+    })
+
+    test(`V2_BUDGET_006 remove and Undo focus the status line, say it once, and Undo shows the amounts (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto('/spending')
+      await page.getByRole('textbox', { name: 'Month' }).fill(month)
+      await page.getByRole('button', { name: 'Remove Budget' }).click()
+      await page.getByRole('button', { name: 'Confirm removing the Budget' }).click()
+      const status = page.getByRole('status')
+      await expect(status).toContainText('is removed')
+      await expect(status).toBeFocused()
+      await expect(page.getByText(`No Budget for ${name}`)).toHaveCount(1)
+      await page.getByRole('button', { name: 'Undo removing the Budget' }).click()
+      const review = page.getByRole('region', {
+        name: `Review bringing back the ${name} Budget`,
+      })
+      await expect(review).toContainText('$100.00')
+      await page.getByRole('button', { name: 'Confirm Undo' }).click()
+      await expect(page.getByRole('status')).toContainText('is back')
+      await expect(page.getByRole('status')).toBeFocused()
     })
   })
 }

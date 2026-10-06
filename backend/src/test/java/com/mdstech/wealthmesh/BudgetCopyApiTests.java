@@ -34,6 +34,8 @@ class BudgetCopyApiTests extends BudgetTestBase {
         copyBudget("2026-03", "c-copy", "2026-02").expectStatus().isCreated().expectBody()
                 .jsonPath("$.total").isEqualTo("3600.00").jsonPath("$.targetTotal").isEqualTo("3600.00")
                 .jsonPath("$.spending").isEqualTo("0.00").jsonPath("$.history[0].action").isEqualTo("copied")
+                .jsonPath("$.history[0].detail").isEqualTo(
+                        "Copied from February 2026. Total $3,600.00; 6 targets totaling $3,600.00")
                 .jsonPath("$.lines.length()").isEqualTo(6)
                 .jsonPath("$.lines[?(@.name=='Dining')].target").isEqualTo("350.00")
                 .jsonPath("$.lines[?(@.name=='Travel')].state").isEqualTo("left");

@@ -7,7 +7,8 @@ import { useEffect, useRef, type ReactNode } from 'react'
 export function Panel({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    ref.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+    // Not smooth: a swap of one panel for another shortens the page, and an animated scroll then stops short.
+    ref.current?.scrollIntoView?.({ block: 'start' })
     ref.current?.focus({ preventScroll: true })
   }, [])
   return (

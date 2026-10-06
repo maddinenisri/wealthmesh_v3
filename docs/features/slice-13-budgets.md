@@ -1,7 +1,7 @@
 # Slice 13: Budgets
 
 - Slice: 13 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/spending/budgets/manage-budgets.feature` (all 7), `spending/monthly-review/review-spending.feature` (003 of 5 here; 004 and 005 are other slices)
-- Status: in-progress (built and proven, waiting for checkpoint 2)
+- Status: done, local (not pushed, D-002)
 - Started: 2026-10-06 10:46 (session clock)  Finished:  Commit:
 
 ## Prompts and directions
@@ -22,7 +22,7 @@ What to watch for in slice 13:
 
 - Preflight (2026-10-06 10:46): JDK 25 default, Node 26.4, Docker up; ports 5434, 5180, 8081 held by this project (`wm-backend`, `wm-frontend`). Majors behind: `@types/node`, `msw` 3, `typescript` 7 (Q-004, still open, not touched).
 - 2026-10-06 Checkpoint 1 answer: approved groups 0 to 6 and the design. Q-041 (b): refuse only a merged category on a save, archived allowed (existing or new target). Q-042 yes. Q-043 yes: soft remove with Undo only, repeat Undo idempotent (D-044), Undo returns the original category targets. Addition: one test that a split payment and a refund give the same figure for a category on the budget line, the Spending page and the Month review (shared read uses `activity_part` and nets refunds). One commit per group, local only, no push, no Claude trailer; run each new e2e assertion alone against the unfixed code; Cowork count against 8, 8, 5, 5 and 5.
-- 2026-10-06 Checkpoint 2 answer: (pending)
+- 2026-10-06 Checkpoint 2 answer: owner pass (Cowork), 710px by real clicks and 1280px by page contents with scripted clicks: all seven steps pass on behaviour; 7 faults (against 8, 8, 5, 5 and 5), table below. Q-044: fix next session, not in this slice. Before landing: run the full suite once more (done).
 
 ## Scope
 
@@ -131,8 +131,42 @@ Observed flake: one run of `--tests '*Review*' --tests '*Spending*'` failed four
 | # | Check | Result | Fault seen | Test added |
 | --- | --- | --- | --- | --- |
 
-Count against 8, 8, 5 and 5: (pending)
+| 1 | focus after Confirm | fixed | Focus fell to the page body after Create, Remove and Undo (Edit and Copy kept it) | Focus is now set in an effect after the new state renders; `14-budgets` quiet-month and remove tests assert the status line is focused. Not reproduced in headless Chromium, so those assertions were not seen red |
+| 2 | position | fixed | In a short month the review opened with its top 144px above the screen | `Panel` no longer scrolls smoothly (an animated scroll stopped short when the form was swapped for the shorter review); `14-budgets` quiet month asserts the review heading is in view. Not seen red in headless |
+| 3 | history | fixed | "Saved by Maya, time" for every save, no hint of what changed | V21 `budget_event.detail`; history shows "Total $A to $B; Groceries target $600.00 to $650.00" and the month a copy came from; asserted in `BudgetSaveApiTests`, `BudgetCopyApiTests`, `BudgetRemoveApiTests` and `14-budgets` |
+| 4 | layout | fixed | 17 fields in one column, 1,400px tall at both widths | Targets in two columns from 768px; `14-budgets` quiet month at 1280px asserts two fields share a row (red before) |
+| 5 | empty state | fixed | A Budget with no targets showed a table with headings and no rows | "No category targets and no spending in this month yet."; `14-budgets` asserts no table in the review (red before) |
+| 6 | context | fixed | The expense list under the table did not name its category | "<Category> expenses" heading; `14-budgets` asserts it (red before) |
+| 7 | wording | fixed | "No Budget for October" twice after a removal; "Copied from an earlier month"; the Undo review gave no amounts; the merge review did not mention Budget targets | Removal says "The October Budget is removed"; the copy event names the month; a `removed` summary in the view feeds the Undo review; merge and Undo-merge reviews mention targets; asserted in `14-budgets` |
+
+Count against 8, 8, 5, 5 and 5: **7**, all fixed. Not verified by the owner: finding 2 at 1280px, Uncategorized (step 4), group 0 retries on a real account (covered by `ArchivedReplayApiTests`).
+
+## Handoff
+
+- Built: V20 and V21 (`budget`, `budget_target`, `budget_event` with a `detail`); `BudgetService` (view, review, save, copy, remove, undo) and `BudgetStore` (plain SQL, `lockHousehold`); `GET /api/v1/budgets`, `GET/PUT /budgets/{month}`, `POST /budgets/{month}/review|copy|remove|undo`; `MonthReview.budget`; the Budget card on `/spending` (`features/budgets`), `EntriesTable` extracted from `SpendingPage`; group 0 changes in the five keyed writers; `Panel` no longer scrolls smoothly; `14-budgets.spec.ts` (months 2026-02 to 2026-05, 2026-11 and 2026-12, own accounts).
+- Watch for: a new keyed writer reads its key first under the lock, then the state and category checks; a new reader of spending must call `ActivityStore.totalsByCategory`, never its own SQL; any new reader of budget targets resolves `COALESCE(merged_into_id, id)` (`BudgetStore.targets`); a new Budget write takes `lockHousehold` first; the e2e database is shared, so a new spec picks months no other spec writes to.
+- Left open: Q-044 (retry judged on today's category and member rules for entry, batch and reminder); copy reads the source's categories through a join without a share lock (benign: a later merge is read through the pointer); group 0 test matrix lacks historical-after-Close and 409 cells for batch and reminder; the one-off partial-run flake (four 404 on setup) did not recur; focus and position faults 1 and 2 were not reproduced in headless Chromium.
+- v1 showed: not running, not consulted.
+- Next: slice 14 (recurring bills).
+
+## Retro (3 lines, also appended to `docs/process/retro.md`)
+
+- What slowed this session: the validator again found gaps after the build (tenth session): a retry still judged on today's category and member rules, a copy race test hidden by a foreign key, an untested key-before-member order; Cowork found 7 faults after 163 e2e tests (against 8, 8, 5, 5 and 5): two focus or position faults the headless e2e never showed, plus history, layout, empty state, context and wording. The e2e did find two real faults while I built (a review swapped in place did not scroll, and Cancel could not return focus because the opener was unmounted).
+- What went well: planting each lock's removal proved the races, and the "insert waits on the foreign key" trap was caught by a planted defect; the shared spending read meant no figure disagreed between the Budget, the Spending page and the review.
+- Process change to try: a race test that needs a lock must use an update, not an insert, when a foreign key to the locked row would make an insert wait anyway; a screen that changes a list of rows needs a quiet-month (short page) e2e as well as a busy one; history rows say what changed, not only who and when.
 
 ## How it works
 
-(written at Land)
+Written by a read-only agent over the diff and checked by me against the code (locks, order of key and member reads, review taking no locks, merged and archived rules all match `BudgetService`, `BudgetStore` and V20, V21).
+
+**A Budget** is one household-wide record per month: a total and optional category targets (`backend/.../budget/`, `V20__budgets.sql`). A partial unique index allows one active Budget per month. Removal is soft (`removed_at`), so Undo brings back the same targets. `budget_event` (with `detail` from V21) records who, when and what.
+
+**Month status** never repeats spending SQL: `BudgetService` calls `ActivityStore.totalsByCategory("expense", ...)`, which reads the `activity_part` view, nets refunds and resolves merges. The month is over, under or on its total; each category line is none, over, left, on, unplanned or noSpending, and a zero target has no percentage. The month review (`SpendingService.review`, `MonthReview.Budget`) carries the month's total, state and difference, and is null when an account filter is on.
+
+**Merged and archived categories.** A target stays on the category it was set on; `BudgetStore.targets` reads through `COALESCE(merged_into_id, id)` and adds targets that land together, so a merge rewrites nothing and Undo of it restores both lines. A save refuses a merged category ("Set the target on X instead") and a non-spending one; an archived category is allowed and shows as archived.
+
+**Writes.** Save (PUT), copy, remove and Undo take the household row `FOR UPDATE` first. Save and copy then read the key, share-lock the member, and (save) share-lock the target categories lowest id first. Review writes nothing and takes no lock; the save recomputes. A replayed key is 200, a new one 201, the same key with other details 409. Copy refuses a month that has a Budget. Remove is soft and a repeat returns the same result. Undo restores the latest removed Budget, is 409 if the month has a newer one, and a repeat Undo returns the same result (D-044).
+
+**Q-040.** Entry, batch, historical entry, reminder and statement saves used to check the account state before the key. They now read the key first under the account lock, so a saved key replays after Archive or Close and only a new key meets `requireOpen` (`requireNotClosed` for statements). A replay still re-parses the request, so a retry after a category archive or member deactivation is still 400 (Q-044).
+
+**Coverage.** See the table above; every scenario also has an e2e in `e2e/tests/14-budgets.spec.ts` at 710px and 1280px.

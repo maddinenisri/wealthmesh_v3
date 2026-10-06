@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -93,24 +94,30 @@ public class BudgetService {
         return Mono.zip(store.active(first).map(java.util.Optional::of).defaultIfEmpty(java.util.Optional.empty()),
                         activity.totalsByCategory("expense", first, month.plusMonths(1).atDay(1), null).collectList(),
                         store.events(first).collectList(),
-                        store.latestRemoved(first).map(r -> true).defaultIfEmpty(false))
+                        store.latestRemoved(first).map(Optional::of).defaultIfEmpty(Optional.empty()))
                 .flatMap(parts -> {
                     var budget = parts.getT1();
                     Mono<List<BudgetStore.Target>> targets = budget.isPresent()
                             ? store.targets(budget.get().id()).collectList() : Mono.just(List.of());
-                    return targets.map(t -> assemble(month, budget.orElse(null), parts.getT2(), t, parts.getT3(),
-                            parts.getT4() && budget.isEmpty()));
+                    // The removed Budget Undo would bring back, so its review can name the amounts.
+                    Mono<Optional<BudgetView.Removed>> removed = budget.isEmpty() && parts.getT4().isPresent()
+                            ? store.targets(parts.getT4().get().id()).collectList().map(t -> Optional.of(
+                                    new BudgetView.Removed(Money.format(parts.getT4().get().total()),
+                                            Money.format(sum(t)), t.size())))
+                            : Mono.just(Optional.empty());
+                    return Mono.zip(targets, removed).map(both -> assemble(month, budget.orElse(null),
+                            parts.getT2(), both.getT1(), parts.getT3(), both.getT2().orElse(null)));
                 });
     }
 
     private static BudgetView assemble(YearMonth month, BudgetStore.Row budget, List<ActivityStore.CategoryTotal> spent,
             List<BudgetStore.Target> targets, List<com.mdstech.wealthmesh.budget.dto.BudgetEventView> history,
-            boolean canUndo) {
+            BudgetView.Removed removed) {
         BigDecimal spending = spent.stream().map(ActivityStore.CategoryTotal::total).reduce(BigDecimal.ZERO,
                 BigDecimal::add);
         if (budget == null) {
             return new BudgetView(month.toString(), false, null, null, null, null, Money.format(spending), null, null,
-                    List.of(), history, canUndo);
+                    List.of(), history, removed != null, removed);
         }
         Map<UUID, BudgetStore.Target> targetOf = new LinkedHashMap<>();
         targets.forEach(t -> targetOf.put(t.categoryId(), t));
@@ -134,7 +141,7 @@ public class BudgetService {
         return new BudgetView(month.toString(), true, budget.id(), Money.format(budget.total()),
                 Money.format(targetTotal), Money.format(budget.total().subtract(targetTotal)), Money.format(spending),
                 compared > 0 ? "over" : compared < 0 ? "under" : "on",
-                Money.format(spending.subtract(budget.total()).abs()), lines, history, false);
+                Money.format(spending.subtract(budget.total()).abs()), lines, history, false, null);
     }
 
     private static BudgetLine line(UUID id, String name, boolean archived, BigDecimal target, BigDecimal spending,
@@ -168,7 +175,7 @@ public class BudgetService {
                     .map(spent -> assemble(parsed.month,
                             new BudgetStore.Row(null, first, parsed.total, null), spent,
                             found.stream().map(c -> new BudgetStore.Target(c.id(), c.name(), c.archived(),
-                                    parsed.targets.get(c.id()))).toList(), List.of(), false)));
+                                    parsed.targets.get(c.id()))).toList(), List.of(), null)));
         });
     }
 
@@ -183,18 +190,73 @@ public class BudgetService {
             String fingerprint = "save|" + parsed.month + "|" + parsed.total + "|" + parsed.targets.entrySet().stream()
                     .map(e -> e.getKey() + "=" + e.getValue()).sorted().collect(Collectors.joining(","));
             return locked(key, cutoff, parsed.month, fingerprint, request.enteredByMemberId(), householdId ->
-                    Flux.fromIterable(parsed.targets.keySet()).collectList().flatMap(ids -> checkCategories(ids))
-                            .then(Mono.defer(() -> store.active(parsed.month.atDay(1))))
-                            .flatMap(existing -> store.setTotal(existing.id(), parsed.total)
-                                    .then(Mono.defer(() -> store.deleteTargets(existing.id())))
-                                    .thenReturn(existing.id()))
-                            .switchIfEmpty(Mono.defer(() -> store.insert(householdId, parsed.month.atDay(1),
-                                    parsed.total, now)))
-                            .flatMap(id -> Flux.fromIterable(parsed.targets.entrySet())
-                                    .concatMap(e -> store.insertTarget(id, e.getKey(), e.getValue())).then(
-                                            Mono.defer(() -> store.recordEvent(id, "saved",
-                                                    request.enteredByMemberId(), now, key, fingerprint)))));
+                    checked(List.copyOf(parsed.targets.keySet()), true).flatMap(found -> store
+                            .active(parsed.month.atDay(1)).map(Optional::of).defaultIfEmpty(Optional.empty())
+                            .flatMap(existing -> applySave(householdId, parsed, found, existing, now, key,
+                                    fingerprint, request.enteredByMemberId()))));
         });
+    }
+
+    /** Writes the save: a new Budget, or the saved one's total and targets replaced, and the event that says what. */
+    private Mono<Void> applySave(UUID householdId, Parsed parsed, List<Category> found,
+            Optional<BudgetStore.Row> existing, Instant now, String key, String fingerprint, UUID memberId) {
+        Map<UUID, String> names = found.stream().collect(Collectors.toMap(Category::id, Category::name));
+        Mono<List<BudgetStore.Target>> before = existing.isPresent()
+                ? store.targets(existing.get().id()).collectList() : Mono.just(List.of());
+        return before.flatMap(previous -> {
+            previous.forEach(t -> names.putIfAbsent(t.categoryId(), t.name()));
+            String detail = existing.isPresent()
+                    ? changes(existing.get().total(), previous, parsed.total, parsed.targets, names)
+                    : describe(parsed.total, parsed.targets.values());
+            Mono<UUID> budgetId = existing.isPresent()
+                    ? store.setTotal(existing.get().id(), parsed.total)
+                            .then(Mono.defer(() -> store.deleteTargets(existing.get().id())))
+                            .thenReturn(existing.get().id())
+                    : store.insert(householdId, parsed.month.atDay(1), parsed.total, now);
+            return budgetId.flatMap(id -> Flux.fromIterable(parsed.targets.entrySet())
+                    .concatMap(e -> store.insertTarget(id, e.getKey(), e.getValue()))
+                    .then(Mono.defer(() -> store.recordEvent(id, "saved", memberId, now, key, fingerprint,
+                            detail))));
+        });
+    }
+
+    private static String dollars(BigDecimal amount) {
+        return String.format(java.util.Locale.US, "$%,.2f", amount);
+    }
+
+    private static BigDecimal sum(Collection<BudgetStore.Target> targets) {
+        return targets.stream().map(BudgetStore.Target::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** "Total $3,600.00; 6 targets totaling $3,600.00". */
+    private static String describe(BigDecimal total, Collection<BigDecimal> targets) {
+        BigDecimal sum = targets.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        return "Total " + dollars(total) + "; " + targets.size() + (targets.size() == 1 ? " target" : " targets")
+                + " totaling " + dollars(sum);
+    }
+
+    /** What a save changed: the total and each target that was added, changed or removed. */
+    private static String changes(BigDecimal oldTotal, List<BudgetStore.Target> previous, BigDecimal newTotal,
+            Map<UUID, BigDecimal> targets, Map<UUID, String> names) {
+        List<String> parts = new ArrayList<>();
+        parts.add(oldTotal.compareTo(newTotal) == 0 ? "Total " + dollars(newTotal) + " unchanged"
+                : "Total " + dollars(oldTotal) + " to " + dollars(newTotal));
+        Map<UUID, BigDecimal> old = previous.stream()
+                .collect(Collectors.toMap(BudgetStore.Target::categoryId, BudgetStore.Target::amount));
+        targets.forEach((id, amount) -> {
+            BigDecimal was = old.get(id);
+            if (was == null) {
+                parts.add(names.get(id) + " target added " + dollars(amount));
+            } else if (was.compareTo(amount) != 0) {
+                parts.add(names.get(id) + " target " + dollars(was) + " to " + dollars(amount));
+            }
+        });
+        old.forEach((id, was) -> {
+            if (!targets.containsKey(id)) {
+                parts.add(names.get(id) + " target " + dollars(was) + " removed");
+            }
+        });
+        return String.join("; ", parts);
     }
 
     /** Copies one month's Budget (total and targets, not spending) into a month that has none. */
@@ -217,15 +279,23 @@ public class BudgetService {
                             ? Mono.<Void>error(conflict("A Budget for " + months[0] + " already exists"))
                             : store.active(months[1].atDay(1))
                                     .switchIfEmpty(Mono.error(notFound("No Budget for " + months[1] + " to copy")))
-                                    .flatMap(source -> store.targets(source.id()).collectList()
-                                            .flatMap(targets -> store.insert(householdId, months[0].atDay(1),
-                                                    source.total(), now)
-                                                    .flatMap(id -> Flux.fromIterable(targets)
-                                                            .concatMap(t -> store.insertTarget(id, t.categoryId(),
-                                                                    t.amount()))
-                                                            .then(Mono.defer(() -> store.recordEvent(id, "copied",
-                                                                    request.enteredByMemberId(), now, key,
-                                                                    fingerprint))))))));
+                                    .flatMap(source -> applyCopy(householdId, months, source, now, key, fingerprint,
+                                            request.enteredByMemberId()))));
+        });
+    }
+
+    private Mono<Void> applyCopy(UUID householdId, YearMonth[] months, BudgetStore.Row source, Instant now,
+            String key, String fingerprint, UUID memberId) {
+        return store.targets(source.id()).collectList().flatMap(targets -> {
+            String from = months[1].getMonth().getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.US)
+                    + " " + months[1].getYear();
+            String detail = "Copied from " + from + ". "
+                    + describe(source.total(), targets.stream().map(BudgetStore.Target::amount).toList());
+            return store.insert(householdId, months[0].atDay(1), source.total(), now)
+                    .flatMap(id -> Flux.fromIterable(targets)
+                            .concatMap(t -> store.insertTarget(id, t.categoryId(), t.amount()))
+                            .then(Mono.defer(() -> store.recordEvent(id, "copied", memberId, now, key, fingerprint,
+                                    detail))));
         });
     }
 
@@ -237,9 +307,11 @@ public class BudgetService {
                 .flatMap(active -> {
                     if (active.isPresent()) {
                         Instant now = clock.instant();
-                        return store.setRemoved(active.get().id(), now)
-                                .then(Mono.defer(() -> store.recordEvent(active.get().id(), "removed", memberId, now,
-                                        null, null)));
+                        return store.targets(active.get().id()).collectList().flatMap(targets -> store
+                                .setRemoved(active.get().id(), now)
+                                .then(Mono.defer(() -> store.recordEvent(active.get().id(), "removed", memberId,
+                                        now, null, null, describe(active.get().total(), targets.stream()
+                                                .map(BudgetStore.Target::amount).toList())))));
                     }
                     // Already removed: the same result again (nothing recorded); never saved: 404.
                     return store.latestRemoved(ym.atDay(1))
@@ -264,9 +336,11 @@ public class BudgetService {
                             .switchIfEmpty(Mono.error(notFound("No removed Budget for " + ym)))
                             .flatMap(removed -> {
                                 Instant now = clock.instant();
-                                return store.setRemoved(removed.id(), null)
+                                return store.targets(removed.id()).collectList().flatMap(targets -> store
+                                        .setRemoved(removed.id(), null)
                                         .then(Mono.defer(() -> store.recordEvent(removed.id(), "restored", memberId,
-                                                now, null, null)));
+                                                now, null, null, describe(removed.total(), targets.stream()
+                                                        .map(BudgetStore.Target::amount).toList())))));
                             });
                 })
                 .then(Mono.defer(() -> view(ym)))));

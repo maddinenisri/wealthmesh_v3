@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Budget } from '../../api/budgets'
 import type { Member } from '../../api/household'
 import { Button, Card, CardTitle, FormAlert, Select } from '../../design-system'
@@ -25,7 +25,7 @@ type Mode = 'form' | 'remove' | 'copy' | 'undo'
 
 const ACTION_LABEL: Record<string, string> = {
   saved: 'Saved',
-  copied: 'Copied from an earlier month',
+  copied: 'Copied',
   removed: 'Removed',
   restored: 'Brought back',
 }
@@ -42,6 +42,14 @@ export function BudgetSection({ month }: { month: string }) {
   const [mode, setMode] = useState<Mode | null>(null)
   const { message, statusRef, begin, changed } = useStateChangeFocus(mode !== null)
   const { members } = useAccountContext()
+  // Each Confirm says what changed and takes focus; an effect (not only a frame callback) so the status line is
+  // focused once the new state has rendered, whatever the refetch did in between.
+  const [confirmed, setConfirmed] = useState(0)
+  useEffect(() => {
+    if (confirmed === 0) return
+    statusRef.current?.scrollIntoView?.({ block: 'nearest' })
+    statusRef.current?.focus({ preventScroll: true })
+  }, [confirmed, statusRef])
   const open = (next: Mode) => {
     begin()
     setMode(next)
@@ -49,6 +57,7 @@ export function BudgetSection({ month }: { month: string }) {
   const done = (text: string) => {
     setMode(null)
     changed(text)
+    setConfirmed((count) => count + 1)
   }
 
   return (
@@ -179,7 +188,7 @@ function Body({
         />
       )}
       {mode === 'undo' && (
-        <UndoPanel month={month} members={members} onDone={done} onCancel={close} />
+        <UndoPanel month={month} budget={budget} members={members} onDone={done} onCancel={close} />
       )}
       {mode === 'copy' && (
         <CopyPanel
@@ -201,6 +210,7 @@ function Body({
                 {ACTION_LABEL[event.action] ?? event.action}
                 {event.memberId ? ` by ${ownerNames([event.memberId], members)}` : ''},{' '}
                 {stamp(event.at)}
+                {event.detail && <span className="block">{event.detail}</span>}
               </li>
             ))}
           </ul>
@@ -291,7 +301,7 @@ function RemovePanel({
         remove.mutate(confirm.member!.id, {
           onSuccess: () =>
             onDone(
-              `No Budget for ${name}. Spending stays ${formatMoney(Number(budget.spending))}. You can undo this.`,
+              `The ${name} Budget is removed. Spending stays ${formatMoney(Number(budget.spending))}. You can undo this.`,
             ),
         })
       }
@@ -308,11 +318,13 @@ function RemovePanel({
 
 function UndoPanel({
   month,
+  budget,
   members,
   onDone,
   onCancel,
 }: {
   month: string
+  budget: Budget
   members: Member[]
   onDone: (message: string) => void
   onCancel: () => void
@@ -339,8 +351,10 @@ function UndoPanel({
       onCancel={onCancel}
     >
       <p className="text-sm">
-        The removed {name} Budget returns with its total and its original category targets. Spending
-        does not change.
+        The removed {name} Budget of {formatMoney(Number(budget.removed?.total ?? 0))} returns with
+        its {budget.removed?.targets ?? 0} original category targets, totaling{' '}
+        {formatMoney(Number(budget.removed?.targetTotal ?? 0))}. {name} spending (
+        {formatMoney(Number(budget.spending))}) does not change.
       </p>
     </Review>
   )

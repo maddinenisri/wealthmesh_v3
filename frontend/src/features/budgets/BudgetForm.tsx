@@ -200,7 +200,11 @@ function FormBody({
           {monthLabel(month, true)} Budget
         </h3>
         <FormAlert message={review.error?.message} />
-        <form noValidate className="flex max-w-md flex-col gap-4" onSubmit={handleSubmit(toReview)}>
+        <form
+          noValidate
+          className="flex max-w-2xl flex-col gap-4"
+          onSubmit={handleSubmit(toReview)}
+        >
           <TextField
             control={control}
             name="total"
@@ -209,17 +213,19 @@ function FormBody({
             placeholder="0.00"
             rules={{ validate: (value) => amountRule(value, true) }}
           />
-          {rows.map((row, index) => (
-            <TextField
-              key={row.categoryId}
-              control={control}
-              name={`targets.${index}.amount`}
-              label={`${row.name} target`}
-              inputMode="decimal"
-              placeholder="No target"
-              rules={{ validate: (value) => amountRule(value, false) }}
-            />
-          ))}
+          <div className="grid gap-4 md:grid-cols-2">
+            {rows.map((row, index) => (
+              <TextField
+                key={row.categoryId}
+                control={control}
+                name={`targets.${index}.amount`}
+                label={`${row.name} target`}
+                inputMode="decimal"
+                placeholder="No target"
+                rules={{ validate: (value) => amountRule(value, false) }}
+              />
+            ))}
+          </div>
           <EnteredBy members={members} member={member} setMemberId={setMemberId} />
           <div className="flex gap-2">
             <Button type="submit" disabled={review.isPending || !member}>

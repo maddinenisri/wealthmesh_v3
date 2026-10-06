@@ -18,7 +18,16 @@ export type BudgetLine = {
   percentUsed: number | null
 }
 
-export type BudgetEvent = { action: string; memberId: string | null; at: string }
+/** `detail` says what the change was (what a save changed, which month a copy came from). */
+export type BudgetEvent = {
+  action: string
+  memberId: string | null
+  at: string
+  detail: string | null
+}
+
+/** The removed Budget an Undo would bring back. */
+export type RemovedBudget = { total: string; targetTotal: string; targets: number }
 
 /** A month's Budget beside its spending. `exists` is false when the month has no saved Budget. */
 export type Budget = {
@@ -36,6 +45,7 @@ export type Budget = {
   history: BudgetEvent[]
   /** A removed Budget of this month could be brought back. */
   canUndo: boolean
+  removed: RemovedBudget | null
 }
 
 export type BudgetMonth = { month: string; total: string }
@@ -93,7 +103,18 @@ function list<T>(value: unknown, parse: (item: unknown) => T): T[] {
 
 function parseEvent(value: unknown): BudgetEvent {
   const data = record(value)
-  return { action: str(data.action), memberId: strOrNull(data.memberId), at: str(data.at) }
+  return {
+    action: str(data.action),
+    memberId: strOrNull(data.memberId),
+    at: str(data.at),
+    detail: strOrNull(data.detail),
+  }
+}
+
+function parseRemoved(value: unknown): RemovedBudget {
+  const data = record(value)
+  if (typeof data.targets !== 'number') throw bad()
+  return { total: str(data.total), targetTotal: str(data.targetTotal), targets: data.targets }
 }
 
 function parseBudget(value: unknown): Budget {
@@ -114,6 +135,7 @@ function parseBudget(value: unknown): Budget {
     lines: list(data.lines, parseLine),
     history: list(data.history, parseEvent),
     canUndo: data.canUndo,
+    removed: data.removed == null ? null : parseRemoved(data.removed),
   }
 }
 

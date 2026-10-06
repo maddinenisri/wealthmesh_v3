@@ -34,7 +34,10 @@ class BudgetRemoveApiTests extends BudgetTestBase {
     void removeKeepsSpending() {
         budgetAction("2026-02", "remove").expectStatus().isOk().expectBody().jsonPath("$.exists").isEqualTo(false)
                 .jsonPath("$.spending").isEqualTo("3660.00").jsonPath("$.canUndo").isEqualTo(true)
-                .jsonPath("$.history[0].action").isEqualTo("removed");
+                .jsonPath("$.history[0].action").isEqualTo("removed")
+                .jsonPath("$.history[0].detail").isEqualTo("Total $3,600.00; 6 targets totaling $3,600.00")
+                .jsonPath("$.removed.total").isEqualTo("3600.00").jsonPath("$.removed.targetTotal")
+                .isEqualTo("3600.00").jsonPath("$.removed.targets").isEqualTo(6);
         budgetAction("2026-02", "remove").expectStatus().isOk().expectBody().jsonPath("$.history.length()")
                 .isEqualTo(2);
         webTestClient.get().uri("/api/v1/budgets").exchange().expectBody().jsonPath("$.length()").isEqualTo(0);

@@ -20,6 +20,9 @@ const WORDS = {
 export function BudgetLines({ lines, month }: { lines: BudgetLine[]; month?: string }) {
   const [openId, setOpenId] = useState<string | null>(null)
 
+  if (lines.length === 0)
+    return <p className="mt-3 text-sm">No category targets and no spending in this month yet.</p>
+
   return (
     <div className="mt-3">
       <Table aria-label="Budget by category">
@@ -73,14 +76,36 @@ export function BudgetLines({ lines, month }: { lines: BudgetLine[]; month?: str
           })}
         </tbody>
       </Table>
-      {month && openId && <CategoryEntries month={month} categoryId={openId} />}
+      {month && openId && (
+        <CategoryEntries
+          month={month}
+          categoryId={openId}
+          name={lines.find((line) => (line.categoryId ?? UNCATEGORIZED) === openId)?.name ?? ''}
+        />
+      )}
     </div>
   )
 }
 
-function CategoryEntries({ month, categoryId }: { month: string; categoryId: string }) {
+function CategoryEntries({
+  month,
+  categoryId,
+  name,
+}: {
+  month: string
+  categoryId: string
+  name: string
+}) {
   const entries = useSpendingEntries(month, categoryId, null)
   if (!entries.data) return null
-  if (entries.data.length === 0) return <p className="mt-3 text-sm">No recorded expenses.</p>
-  return <Entries entries={entries.data} words={WORDS} categoryId={categoryId} />
+  return (
+    <section className="mt-4">
+      <h4 className="text-sm font-medium">{name} expenses</h4>
+      {entries.data.length === 0 ? (
+        <p className="mt-2 text-sm">No recorded expenses.</p>
+      ) : (
+        <Entries entries={entries.data} words={WORDS} categoryId={categoryId} />
+      )}
+    </section>
+  )
 }

@@ -293,7 +293,8 @@ export function MergeCategories({
               ? 'no entries yet'
               : `${entriesText(entries)} totalling ${formatMoney(total)}`}
             . {targetName} will show them and open the same entries; their classes and account
-            balances do not change. You can undo the merge.
+            balances do not change. Any Budget targets on {named(sources).join(' and ')} are added
+            together under {targetName}. You can undo the merge.
           </p>
           <ReviewActions
             members={members}
@@ -414,7 +415,8 @@ export function UndoMerge({
         <p>
           {names.join(' and ')} will come back with their own entries, classes and amounts. Entries
           saved into <strong>{targetName}</strong> since the merge stay there. Spending stays the
-          same and nothing is counted twice.
+          same and nothing is counted twice. Budget targets go back to the categories they were set
+          on.
         </p>
         <ReviewActions
           members={members}

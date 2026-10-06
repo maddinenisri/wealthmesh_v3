@@ -785,6 +785,14 @@ export function mockApi(
     ),
   ]
 
+  const removedSummary = (b: MockBudget | null) =>
+    b
+      ? {
+          total: Number(b.total).toFixed(2),
+          targetTotal: b.targets.reduce((sum, t) => sum + Number(t.amount), 0).toFixed(2),
+          targets: b.targets.length,
+        }
+      : null
   /** A month's Budget view from a total and targets, as the server computes it (spending is the shared one). */
   const budgetView = (
     month: string,
@@ -794,7 +802,7 @@ export function mockApi(
       targets: { categoryId: string; amount: string }[]
     } | null,
     events: { action: string; memberId: string | null; at: string }[] = [],
-    canUndo = false,
+    removedBudget: MockBudget | null = null,
   ) => {
     const spent = monthTotals(month, 'expense', null)
     if (!budget) {
@@ -810,7 +818,8 @@ export function mockApi(
         difference: null,
         lines: [],
         history: events,
-        canUndo,
+        canUndo: removedBudget !== null,
+        removed: removedSummary(removedBudget),
       }
     }
     const target = new Map<string, number>()
@@ -872,17 +881,18 @@ export function mockApi(
       difference: money(Math.abs(spending - total)),
       lines,
       history: events,
-      canUndo,
+      canUndo: false,
+      removed: null,
     }
   }
   const monthBudget = (month: string) => {
     const active = state.budgets.find((b) => b.month === month && !b.removed)
-    const removed = state.budgets.some((b) => b.month === month && b.removed)
+    const removed = [...state.budgets].reverse().find((b) => b.month === month && b.removed) ?? null
     const events = state.budgets
       .filter((b) => b.month === month)
       .flatMap((b) => b.events ?? [])
       .reverse()
-    return budgetView(month, active ?? null, events, removed && !active)
+    return budgetView(month, active ?? null, events, active ? null : removed)
   }
   const budgetHandlers = () => [
     http.get('*/api/v1/budgets', ({ request }) => {

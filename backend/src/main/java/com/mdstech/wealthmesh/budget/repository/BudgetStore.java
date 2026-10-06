@@ -99,11 +99,11 @@ public class BudgetStore {
     }
 
     public Mono<Void> recordEvent(UUID budgetId, String action, UUID memberId, Instant at, String key,
-            String fingerprint) {
+            String fingerprint, String detail) {
         DatabaseClient.GenericExecuteSpec spec = client.sql("INSERT INTO budget_event "
-                        + "(budget_id, action, member_id, at, idempotency_key, fingerprint) "
-                        + "VALUES (:budget, :action, :member, :at, :key, :fingerprint)")
-                .bind("budget", budgetId).bind("action", action).bind("at", at);
+                        + "(budget_id, action, member_id, at, idempotency_key, fingerprint, detail) "
+                        + "VALUES (:budget, :action, :member, :at, :key, :fingerprint, :detail)")
+                .bind("budget", budgetId).bind("action", action).bind("at", at).bind("detail", detail);
         spec = memberId == null ? spec.bindNull("member", UUID.class) : spec.bind("member", memberId);
         spec = key == null ? spec.bindNull("key", String.class) : spec.bind("key", key);
         spec = fingerprint == null ? spec.bindNull("fingerprint", String.class)
@@ -133,11 +133,12 @@ public class BudgetStore {
 
     /** Every change to any Budget of the month, newest first. */
     public Flux<BudgetEventView> events(LocalDate month) {
-        return client.sql("SELECT e.action, e.member_id, e.at FROM budget_event e JOIN budget b ON b.id = e.budget_id "
-                        + "WHERE b.month = :month ORDER BY e.at DESC, e.seq DESC")
+        return client.sql("SELECT e.action, e.member_id, e.at, e.detail FROM budget_event e "
+                        + "JOIN budget b ON b.id = e.budget_id WHERE b.month = :month ORDER BY e.at DESC, e.seq DESC")
                 .bind("month", month)
                 .map((row, meta) -> new BudgetEventView(row.get("action", String.class),
-                        row.get("member_id", UUID.class), row.get("at", Instant.class)))
+                        row.get("member_id", UUID.class), row.get("at", Instant.class),
+                        row.get("detail", String.class)))
                 .all();
     }
 

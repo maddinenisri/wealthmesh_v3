@@ -50,6 +50,9 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
       status line says what changed. Run each new e2e assertion red on its own (`--grep`): a serial run stops at the first
       failure and hides the rest.
 - [ ] Edit forms start from the current values and show the original. A long name and label wrap at 710px.
+- [ ] A race test for a lock uses an update when a foreign key to the locked row would make an insert wait anyway (plant the
+      lock's removal and see it red). A screen that lists rows is checked in a short month and at 1280px; a history row
+      says what changed, not only who and when.
 - [ ] Anything new that distinguishes accounts or entries (type, status, owner) shows in the lists, not only on the
       detail page.
 

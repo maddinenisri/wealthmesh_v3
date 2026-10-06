@@ -159,7 +159,9 @@ class BudgetSaveApiTests extends BudgetTestBase {
         saveBudget("2026-06", "s-1", "501.00", t(groceries, "300.00"), t(dining, "200.00")).expectStatus()
                 .isEqualTo(409);
         saveBudget("2026-06", "s-2", "500.00", t(groceries, "300.00")).expectStatus().isCreated().expectBody()
-                .jsonPath("$.lines[?(@.name=='Dining')]").isEmpty().jsonPath("$.history.length()").isEqualTo(2);
+                .jsonPath("$.lines[?(@.name=='Dining')]").isEmpty().jsonPath("$.history.length()").isEqualTo(2)
+                .jsonPath("$.history[0].detail").isEqualTo("Total $500.00 unchanged; Dining target $200.00 removed")
+                .jsonPath("$.history[1].detail").isEqualTo("Total $500.00; 2 targets totaling $500.00");
         webTestClient.put().uri("/api/v1/budgets/2026-06").contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(budgetBody("500.00")).exchange().expectStatus().isBadRequest();
         saveBudget("2026-06", "s-3", "{\"total\": \"500.00\", \"targets\": []}").expectStatus().isBadRequest()

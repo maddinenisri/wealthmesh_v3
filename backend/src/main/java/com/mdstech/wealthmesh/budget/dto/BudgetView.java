@@ -10,5 +10,9 @@ import java.util.UUID;
  */
 public record BudgetView(String month, boolean exists, UUID id, String total, String targetTotal, String unallocated,
         String spending, String state, String difference, List<BudgetLine> lines, List<BudgetEventView> history,
-        boolean canUndo) {
+        boolean canUndo, Removed removed) {
+
+    /** The removed Budget Undo would bring back: its total, its targets total and how many targets. */
+    public record Removed(String total, String targetTotal, int targets) {
+    }
 }
