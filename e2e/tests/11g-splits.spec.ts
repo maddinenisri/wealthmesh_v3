@@ -74,6 +74,24 @@ test.describe.serial('split expenses', () => {
     await page.getByLabel('Portion amount 2', { exact: true }).fill(second)
   }
 
+  /** One $120.00 split of $90.00 Groceries and $30.00 Gifts, saved through the API. */
+  async function saveSplit(request: APIRequestContext, id: string) {
+    const response = await request.post(`/api/v1/accounts/${id}/expenses`, {
+      headers: { 'Idempotency-Key': `${id}-split` },
+      data: {
+        description: 'Mixed shop',
+        amount: '120.00',
+        occurredOn: '2026-10-02',
+        enteredByMemberId: await ownerId(request),
+        portions: [
+          { category: 'Groceries', classification: 'essential', amount: '90.00' },
+          { category: 'Gifts', classification: 'discretionary', amount: '30.00' },
+        ],
+      },
+    })
+    expect(response.status()).toBe(201)
+  }
+
   for (const width of [710, 1280]) {
     test(`V2_SPLITS_003 and V2_SPLITS_001 reject $115.00 of $120.00, then save the split at ${width}px`, async ({
       page,
@@ -136,6 +154,86 @@ test.describe.serial('split expenses', () => {
       await expect(month.getByRole('list', { name: 'Spending by category' })).toContainText(
         'Gifts $30.00',
       )
+    })
+
+    test(`V2_SPLITS_002 corrects the portions to $80.00 and $40.00 and keeps the original in history at ${width}px`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await ensureGifts(request)
+      const id = await account(request, `Correct Split ${width}`)
+      await seedLongList(request, id)
+      await saveSplit(request, id)
+      await page.goto(`/accounts/${id}`)
+      await page.getByLabel('Entering as').selectOption({ label: OWNER })
+      await page.getByRole('button', { name: 'Edit Mixed shop' }).click()
+      const form = page.getByRole('region', { name: 'Edit split expense' })
+      await expect(form).toBeInViewport()
+      await expect(form.locator('xpath=..')).toBeFocused()
+      await expect(page.getByLabel('Portion amount 1', { exact: true })).toHaveValue('90.00')
+      await page.getByLabel('Portion amount 1', { exact: true }).fill('80.00')
+      await page.getByLabel('Portion amount 2', { exact: true }).fill('40.00')
+      await page.getByLabel('Reason', { exact: true }).fill('Gift receipt was ten dollars higher')
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+      await page.getByRole('button', { name: 'Review' }).click()
+
+      const review = page.getByRole('region', { name: 'Review change' })
+      await expect(review).toBeInViewport()
+      await expect(page.getByRole('heading', { name: 'Review change' })).toBeFocused()
+      await expect(review).toContainText('Before: Groceries $90.00, Gifts $30.00')
+      await expect(review).toContainText('The original split stays in history')
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+      await review.getByRole('button', { name: 'Confirm saving' }).click()
+      await expect(page.getByRole('region', { name: 'Review change' })).toHaveCount(0)
+
+      const row = page.getByRole('row').filter({ hasText: 'Mixed shop' })
+      await expect(row).toBeInViewport()
+      await expect(row).toContainText('Groceries $80.00')
+      await expect(row).toContainText('Gifts $40.00')
+      await expect(page.getByRole('main')).toContainText('$4,868.00')
+
+      await page.getByRole('button', { name: 'Show history' }).click()
+      const original = page.getByRole('row').filter({ hasText: 'Replaced' }).filter({
+        hasText: 'Mixed shop',
+      })
+      await expect(original.first()).toContainText('Groceries $90.00')
+      await expect(page.getByRole('main')).toContainText('Gift receipt was ten dollars higher')
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+    })
+
+    test(`V2_SPLITS_005 cancelling the review of a changed split changes nothing and returns focus at ${width}px`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await ensureGifts(request)
+      const id = await account(request, `Cancel Split ${width}`)
+      await saveSplit(request, id)
+      await page.goto(`/accounts/${id}`)
+      await page.getByLabel('Entering as').selectOption({ label: OWNER })
+      const opener = page.getByRole('button', { name: 'Edit Mixed shop' })
+      await opener.click()
+      await page.getByLabel('Amount', { exact: true }).fill('150.00')
+      await page.getByLabel('Date', { exact: true }).fill('2026-10-01')
+      await page.getByLabel('Portion amount 1', { exact: true }).fill('100.00')
+      await page.getByLabel('Portion amount 2', { exact: true }).fill('50.00')
+      await page.getByRole('button', { name: 'Review' }).click()
+      const review = page.getByRole('region', { name: 'Review change' })
+      await expect(review).toContainText('$120.00 changed to $150.00')
+      await review.getByRole('button', { name: 'Cancel' }).click()
+      await expect(review).toHaveCount(0)
+      await expect(opener).toBeFocused()
+      const row = page.getByRole('row').filter({ hasText: 'Mixed shop' })
+      await expect(row).toContainText('2026-10-02')
+      await expect(row).toContainText('Groceries $90.00')
+      await expect(row).toContainText('Gifts $30.00')
+      await expect(page.getByRole('main')).toContainText('$4,880.00')
+      const activity = (await (await request.get(`/api/v1/accounts/${id}/activity`)).json()) as {
+        amount: string
+      }[]
+      expect(activity).toHaveLength(1)
+      expect(activity[0].amount).toBe('120.00')
     })
   }
 })
