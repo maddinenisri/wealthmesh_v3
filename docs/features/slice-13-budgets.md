@@ -139,7 +139,7 @@ Observed flake: one run of `--tests '*Review*' --tests '*Spending*'` failed four
 | 6 | context | fixed | The expense list under the table did not name its category | "<Category> expenses" heading; `14-budgets` asserts it (red before) |
 | 7 | wording | fixed | "No Budget for October" twice after a removal; "Copied from an earlier month"; the Undo review gave no amounts; the merge review did not mention Budget targets | Removal says "The October Budget is removed"; the copy event names the month; a `removed` summary in the view feeds the Undo review; merge and Undo-merge reviews mention targets; asserted in `14-budgets` |
 
-Count against 8, 8, 5, 5 and 5: **7**, all fixed. Not verified by the owner: finding 2 at 1280px, Uncategorized (step 4), group 0 retries on a real account (covered by `ArchivedReplayApiTests`).
+Count against 8, 8, 5, 5 and 5: **7**. Findings 3 to 7 are fixed and tested (red before). Findings 1 and 2 were changed but could not be reproduced in headless Chromium, so no assertion was seen red: owner to confirm in a real browser (standing request from slice 12). Not verified by the owner: finding 2 at 1280px, Uncategorized (step 4), group 0 retries on a real account (covered by `ArchivedReplayApiTests`).
 
 ## Handoff
 
