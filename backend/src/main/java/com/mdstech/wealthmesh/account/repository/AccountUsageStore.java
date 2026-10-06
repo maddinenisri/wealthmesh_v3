@@ -8,7 +8,10 @@ import org.springframework.stereotype.Repository;
 
 import reactor.core.publisher.Mono;
 
-/** What an account holds that a delete would lose, and the delete mark itself (slice 12, A3). Plain SQL under the account lock. */
+/**
+ * What an account holds that a delete would lose, and the delete mark itself (slice 12, A3). Plain SQL, run under
+ * the account lock.
+ */
 @Repository
 public class AccountUsageStore {
 

@@ -17,7 +17,7 @@ public final class AccountState {
     private AccountState() {
     }
 
-    /** New money (an entry, a leg of a transfer or payment, a move target, a correction, a reminder) needs an active account. */
+    /** New money (an entry, a transfer or payment leg, a move target, a correction, a reminder) needs active. */
     public static Account requireOpen(Account account) {
         if (!ACTIVE.equals(account.status())) {
             throw refused(account);

@@ -10,7 +10,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 
 import io.r2dbc.spi.Connection;
 
-/** Helpers for the account lifecycle tests (slice 12): archive, restore, close, reopen, delete and the held-state race. */
+/** Helpers for the account lifecycle tests (slice 12): the lifecycle calls and the held-state race. */
 abstract class LifecycleTestBase extends CardPaymentTestBase {
 
     protected WebTestClient.ResponseSpec act(String account, String action) {

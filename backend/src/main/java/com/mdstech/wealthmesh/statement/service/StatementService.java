@@ -86,7 +86,7 @@ public class StatementService {
                 .flatMap(account -> parse(account, request, replacesId != null)
                         // The account row is locked, so the same key sent twice at once replays instead of failing.
                         .flatMap(parsed -> transactions.transactional(lock.lockAccount(accountId)
-                                // A statement is a record, not money: an archived account may take one, a closed may not.
+                                // A statement is a record, not money: archived may take one, closed may not.
                                 .then(Mono.defer(() -> account(accountId)))
                                 .map(AccountState::requireNotClosed)
                                 .then(Mono.defer(() -> store.expireKey(key, cutoff)))

@@ -40,9 +40,11 @@ class AccountStateRaceApiTests extends LifecycleTestBase {
     @DisplayName("V2_ACCOUNT_LIFECYCLE_001 an archive racing an expense, income, batch or reminder save wins")
     void archiveBeatsEntries() throws Exception {
         String a = fresh();
-        refusedAfter(ARCHIVED, a, () -> post(a, "expenses", "r-1", entry(mayaId, "Dining", "5.00", "2026-09-07", "Dining")));
+        refusedAfter(ARCHIVED, a, () -> post(a, "expenses", "r-1",
+                entry(mayaId, "Dining", "5.00", "2026-09-07", "Dining")));
         String b = fresh();
-        refusedAfter(ARCHIVED, b, () -> post(b, "income", "r-2", entry(mayaId, "Gift", "5.00", "2026-09-07", "Salary")));
+        refusedAfter(ARCHIVED, b, () -> post(b, "income", "r-2",
+                entry(mayaId, "Gift", "5.00", "2026-09-07", "Salary")));
         String c = fresh();
         refusedAfter(ARCHIVED, c, () -> webTestClient.post().uri("/api/v1/accounts/{id}/expense-batches", c)
                 .contentType(MediaType.APPLICATION_JSON).header("Idempotency-Key", "r-3")

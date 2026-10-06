@@ -49,7 +49,7 @@ public class AccountLifecycleService {
         this.clock = clock;
     }
 
-    /** Why an account could not be deleted right now, for the review (the delete itself checks again under the lock). */
+    /** Why an account could not be deleted right now, for the review (the delete checks again under the lock). */
     public Mono<AccountLifecycle> lifecycle(UUID id) {
         return load(id).flatMap(account -> usage.usageOf(id).map(found -> {
             List<String> reasons = blockers(account, found);
@@ -82,7 +82,8 @@ public class AccountLifecycleService {
      */
     public Mono<AccountResponse> undoDelete(UUID id) {
         Mono<Void> work = store.lockAccount(id)
-                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
+                .switchIfEmpty(Mono.error(
+                        new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
                 .then(Mono.defer(() -> usage.setDeleted(id, null))).then();
         return transactions.transactional(work).then(Mono.defer(() -> accountService.findById(id)));
     }

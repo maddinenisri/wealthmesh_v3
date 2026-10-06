@@ -37,29 +37,38 @@ class DeletedAccountSweepApiTests extends LifecycleTestBase {
     void deletedAccountIsAbsentEverywhere() {
         act(gone, "delete").expectStatus().isOk();
         List<String> found = new ArrayList<>();
+        listsAndFilters(found);
+        readsOfTheAccount(found);
+        entryWriters(found);
+        lifecycleWriters(found);
+        movementWriters(found);
+        assertThat(found).as("every path answered 404").isEmpty();
+        assertBalance(live, "4990.00");
+    }
 
-        // Lists, wealth and the Spending filter.
+    private void listsAndFilters(List<String> found) {
         webTestClient.get().uri("/api/v1/accounts").exchange().expectBody(String.class)
                 .value(body -> assertThat(body).doesNotContain("Gone Savings").contains("Live Checking"));
         webTestClient.get().uri("/api/v1/wealth").exchange().expectBody(String.class)
                 .value(body -> assertThat(body).doesNotContain("Gone Savings").doesNotContain(gone));
         webTestClient.get().uri("/api/v1/reminders").exchange().expectBody(String.class)
                 .value(body -> assertThat(body).doesNotContain(gone));
-        for (String path : List.of("/api/v1/spending?month=2026-09&accountId=", "/api/v1/income?month=2026-09&accountId=",
-                "/api/v1/review?month=2026-09&accountId=")) {
-            expectNotFound(found, "GET " + path, webTestClient.get().uri(path + gone).exchange().returnResult(String.class)
-                    .getStatus().value());
+        for (String path : List.of("/api/v1/spending?month=2026-09&accountId=",
+                "/api/v1/income?month=2026-09&accountId=", "/api/v1/review?month=2026-09&accountId=")) {
+            expectNotFound(found, "GET " + path, statusOf(webTestClient.get().uri(path + gone).exchange()));
         }
+    }
 
-        // Reads of the account itself.
+    private void readsOfTheAccount(List<String> found) {
         for (String path : List.of("", "/activity", "/activity/history", "/balance?asOf=2026-09-10", "/statements",
                 "/starting-balance-corrections", "/lifecycle",
                 "/balance-corrections/preview?requested=5.00&asOn=2026-09-10")) {
-            expectNotFound(found, "GET " + path, webTestClient.get().uri("/api/v1/accounts/{id}" + path, gone)
-                    .exchange().returnResult(String.class).getStatus().value());
+            expectNotFound(found, "GET " + path,
+                    statusOf(webTestClient.get().uri("/api/v1/accounts/{id}" + path, gone).exchange()));
         }
+    }
 
-        // Writers that name the account.
+    private void entryWriters(List<String> found) {
         expectNotFound(found, "POST expenses", statusOf(post(gone, "expenses", "s-1",
                 entry(mayaId, "Dining", "5.00", "2026-09-07", "Dining"))));
         expectNotFound(found, "POST income", statusOf(post(gone, "income", "s-2",
@@ -80,6 +89,9 @@ class DeletedAccountSweepApiTests extends LifecycleTestBase {
         expectNotFound(found, "POST statements", statusOf(post(gone, "statements", "s-7", """
                 {"statementOn": "2026-09-30", "balance": "0.00", "note": "Sep", "enteredByMemberId": "%s"}"""
                 .formatted(mayaId))));
+    }
+
+    private void lifecycleWriters(List<String> found) {
         expectNotFound(found, "PUT account", statusOf(webTestClient.put().uri("/api/v1/accounts/{id}", gone)
                 .contentType(MediaType.APPLICATION_JSON).bodyValue("""
                         {"name": "Renamed", "institution": "X", "ownerMemberIds": ["%s"]}""".formatted(mayaId))
@@ -87,25 +99,27 @@ class DeletedAccountSweepApiTests extends LifecycleTestBase {
         for (String action : List.of("archive", "restore", "close", "reopen", "delete")) {
             expectNotFound(found, "POST " + action, statusOf(act(gone, action)));
         }
+    }
 
-        // Transfers and card payments, with the deleted account on either side, and a move or conversion onto it.
-        expectNotFound(found, "POST transfers to", statusOf(postTransfer("s-t1", live, gone, "5.00", "2026-09-07", mayaId)));
-        expectNotFound(found, "POST transfers from", statusOf(postTransfer("s-t2", gone, live, "5.00", "2026-09-07", mayaId)));
-        expectNotFound(found, "POST card-payments from", statusOf(postPayment("s-p1", gone, card, "5.00", "2026-09-07", mayaId)));
-        expectNotFound(found, "GET transfers preview", statusOf(previewTransfer("fromAccountId=" + gone + "&toAccountId="
-                + live + "&amount=5.00&occurredOn=2026-09-07")));
+    private void movementWriters(List<String> found) {
+        expectNotFound(found, "POST transfers to",
+                statusOf(postTransfer("s-t1", live, gone, "5.00", "2026-09-07", mayaId)));
+        expectNotFound(found, "POST transfers from",
+                statusOf(postTransfer("s-t2", gone, live, "5.00", "2026-09-07", mayaId)));
+        expectNotFound(found, "POST card-payments from",
+                statusOf(postPayment("s-p1", gone, card, "5.00", "2026-09-07", mayaId)));
+        expectNotFound(found, "GET transfers preview", statusOf(previewTransfer("fromAccountId=" + gone
+                + "&toAccountId=" + live + "&amount=5.00&occurredOn=2026-09-07")));
         String bill = expense(live, "s-bill", "Groceries", "10.00", "2026-09-05");
         expectNotFound(found, "POST replacement (move target)", statusOf(webTestClient.post()
                 .uri("/api/v1/accounts/{a}/activity/{id}/replacement", live, bill)
                 .contentType(MediaType.APPLICATION_JSON).header("Idempotency-Key", "s-m1")
                 .bodyValue("""
-                        {"accountId": "%s", "description": "Groceries", "amount": "10.00", "occurredOn": "2026-09-05",
-                         "category": "Groceries", "enteredByMemberId": "%s", "reason": "Wrong account"}"""
-                        .formatted(gone, mayaId)).exchange()));
-        expectNotFound(found, "POST convert to transfer", statusOf(convert(live, bill, "s-c1", gone, mayaId, "Moved")));
-
-        assertThat(found).as("every path answered 404").isEmpty();
-        assertBalance(live, "4990.00");
+                        {"accountId": "%s", "description": "Groceries", "amount": "10.00",
+                         "occurredOn": "2026-09-05", "category": "Groceries", "enteredByMemberId": "%s",
+                         "reason": "Wrong account"}""".formatted(gone, mayaId)).exchange()));
+        expectNotFound(found, "POST convert to transfer",
+                statusOf(convert(live, bill, "s-c1", gone, mayaId, "Moved")));
     }
 
     private static void expectNotFound(List<String> notFound, String what, int status) {
