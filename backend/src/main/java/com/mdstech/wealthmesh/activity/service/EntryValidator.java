@@ -324,10 +324,15 @@ public class EntryValidator {
 
     /** The same rule as {@link #member}, read under a share lock so a deactivate cannot slip in before the save. */
     public Mono<UUID> memberLocked(Account account, UUID memberId) {
+        return memberLocked(account.householdId(), memberId);
+    }
+
+    /** The same rule for a write that belongs to the household, not to one account (a Budget). */
+    public Mono<UUID> memberLocked(UUID householdId, UUID memberId) {
         if (memberId == null) {
             return Mono.error(bad("Choose who entered this"));
         }
-        return members.findByIdForShare(memberId).filter(m -> m.householdId().equals(account.householdId()))
+        return members.findByIdForShare(memberId).filter(m -> m.householdId().equals(householdId))
                 .switchIfEmpty(Mono.error(bad("Choose who entered this from this household")))
                 .flatMap(m -> m.active() ? Mono.just(m.id()) : Mono.error(bad("Choose an active member")));
     }
