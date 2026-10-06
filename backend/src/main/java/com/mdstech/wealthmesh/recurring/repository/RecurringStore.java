@@ -137,11 +137,16 @@ public class RecurringStore {
 
     /** The occurrences that were paid or dismissed, newest due date first. */
     public Flux<OccurrenceView> occurrences(UUID scheduleId) {
-        return client.sql("SELECT due_on, outcome, paid_on, activity_id FROM recurring_occurrence "
-                        + "WHERE schedule_id = :id ORDER BY due_on DESC, at DESC").bind("id", scheduleId)
+        // A removed entry with no replacement is a removed payment; a replaced one was corrected, not removed.
+        return client.sql("SELECT o.due_on, o.outcome, o.paid_on, o.activity_id, "
+                        + "(a.removed_at IS NOT NULL AND NOT EXISTS "
+                        + "(SELECT 1 FROM activity r WHERE r.replaces_id = a.id)) AS payment_removed "
+                        + "FROM recurring_occurrence o LEFT JOIN activity a ON a.id = o.activity_id "
+                        + "WHERE o.schedule_id = :id ORDER BY o.due_on DESC, o.at DESC").bind("id", scheduleId)
                 .map((row, meta) -> new OccurrenceView(row.get("due_on", LocalDate.class),
                         row.get("outcome", String.class), row.get("paid_on", LocalDate.class),
-                        row.get("activity_id", UUID.class))).all();
+                        row.get("activity_id", UUID.class),
+                        Boolean.TRUE.equals(row.get("payment_removed", Boolean.class)))).all();
     }
 
     public Flux<EventView> events(UUID scheduleId) {

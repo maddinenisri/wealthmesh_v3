@@ -21,7 +21,6 @@ The files that carry the design, and what breaks or gets harder without each. Pa
 | `statement/service/StatementService`           | `attach`, `revise` (repeat-safe), `ofAccount`; table `statement` (V7), `UNIQUE (replaces_id)` | Statements never feed Balance; only one revision per version, so concurrent revisions cannot both win (slice 04) |
 | `opening/service/OpeningRevisionService`       | `preview` (optionally with a pending entry), `save`, `applyLocked`; table `opening_revision` (V8) | Starting-balance and tracking-start correction under the account lock; keeps the replaced amount and date; never income or spending |
 | `activity/service/HistoricalEntryService`      | `save`: move the start, then check and save an entry dated before it, one transaction | An entry before tracking is saved only with its reviewed setup (V2_CHECKING_016) |
-| `activity/service/EntryValidator.parseForReplay` | A retry (same key) compared with the stored row without today's category, member and date rules | The one replay path for entry, batch, reminder and historical entry (Q-044); never used to save |
 | `reminder/service/ReminderService`             | `save` (repeat-safe, D-024) and `all`; table `reminder` (V4)                  | Reminders never reach `activity`, so Balance and totals cannot count them |
 | `activity/service/BalanceCorrectionService`    | `balanceAsOf`, `preview`, `save` (new correction or edit as replacement)       | Amount is computed at save under an account lock; a retry replays from `requested_balance` (V6, D-028) |
 | `activity/BalanceController`                   | `GET /accounts/{id}/balance?asOf=`, `GET .../balance-corrections/preview`, `POST .../balance-corrections` | Preview is informational only |
@@ -42,6 +41,11 @@ The files that carry the design, and what breaks or gets harder without each. Pa
 | `resources/db/migration/V1__init_schema.sql`   | Schema, tables, constraints                                                   | Source of truth, applied by Flyway in dev, jar and tests    |
 | `backend/build.gradle`                         | Plugins, MapStruct, Checkstyle, `frontendInstall`/`frontendBuild`, `bootJar`  | Builds the fat jar with the UI; `-PskipFrontend` for speed  |
 | `backend/config/checkstyle/checkstyle.xml`     | Style and complexity limits                                                   | Enforced on push                                            |
+| `recurring/service/RecurringService` | `overview`, `create`, `change`, `pause`, `resume`, `delete`, `reschedule`, `dismissOccurrence`, `reviewRecord`, `record`, `dismissSuggestion`; tables `recurring_*` (V22) | A schedule is an estimate: it writes no `activity` or `reminder` row; only `record` saves an expense, through `EntryService.record`, in the same transaction (D-048). Lock order household, account, category and member share |
+| `recurring/service/Recurrence`, `Suggestions` | `following` (weekly, monthly and yearly with month ends and the anchor day); `find` (three or more bills about a month apart, same account, category and description) | The one place the next occurrence is computed, and the one place a suggestion is found |
+| `recurring/repository/RecurringStore` | Plain SQL for schedules, occurrences, events, dismissals; reads the category through the merge pointer and hides a deleted account's schedules | Same shape as `BudgetStore`; no spending SQL |
+| `household/repository/HouseholdLock` | `lock`: the household row `FOR UPDATE` | The first lock of every Budget and recurring write, before the account row and the share locks |
+| `activity/service/EntryValidator.parseForReplay` | A retry (same key) compared with the stored row without today's category, member and date rules | The one replay path for entry, batch, reminder and historical entry (Q-044); never used to save |
 
 Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 
@@ -89,6 +93,7 @@ Backend tests (`backend/src/test/java/com/mdstech/wealthmesh/`):
 | `test/mockApi.ts`                             | In-memory backend for MSW: rules, 404/400/409, request log                      | Fast, realistic UI tests without a server                    |
 | `test/render.tsx`                             | `renderWithProviders`, `renderRoute(path)`                                      | Fresh query cache, no retries, real routes                   |
 | `test/setup.ts`                               | Starts MSW with `onUnhandledRequest: 'error'`                                   | Stray requests fail tests                                    |
+| `features/recurring/*`, `api/recurring.ts`, `hooks/useRecurring.ts` | The Recurring bills page: suggestions, schedules, `ScheduleForm` (create, confirm, change), `RecordPanel`, `SchedulePanels`, `ActionPanel` | Every change is reviewed first, Cancel and Back save nothing, each exit says what changed and takes focus |
 
 ## Root, scripts and e2e
 

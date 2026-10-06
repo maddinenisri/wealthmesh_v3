@@ -1,7 +1,7 @@
 # Slice 14: Recurring bills
 
 - Slice: 14 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/spending/recurring/manage-recurring.feature` (all 10)
-- Status: in-progress (checkpoint 1 approved)
+- Status: in-progress (built and proved; waiting for the owner's Cowork pass, checkpoint 2)
 - Started: 2026-10-06 14:08 (session clock)  Finished:  Commit:
 
 ## Prompts and directions
@@ -92,15 +92,60 @@ Gap analysis: all 10 IDs are citeable now (checking and expenses exist; the Give
 
 Writer by state (checklist), for the schedule row: create, change, pause, resume, delete, record, reschedule, dismiss occurrence × (account active, archived, closed) × (schedule active, paused, deleted): one raw-API test per cell.
 
+## Built differently from the plan
+
+- **Change** edits the amount, frequency and next due date only; the name, category and account stay (the form shows them as text). Decision 5 said so loosely.
+- **Delete** also dismisses the schedule's suggestion (otherwise its three bills were offered again at once). D-048.
+- **Record has a review endpoint** (`POST /recurring/{id}/record/review`, the same checks, nothing written); a review of a new schedule on an archived or closed account is refused like its save.
+- **Reschedule** and **Dismiss this occurrence** are offered only while the occurrence is overdue (the scenario's wording); the server accepts them for any next occurrence of an active schedule.
+- **Occurrences are not unique per due date in the database** (decision 1 said so): the household lock plus the "must be the next occurrence" check keep a date from being paid twice; Reschedule back to a paid date and then Record would pay it again (validator finding 8, left).
+- **A removed payment** shows "Payment removed: the occurrence stays paid" (decision 14); the schedule does not move back.
+- **E2E** runs at the stack's fixed today 2026-10-03: overdue uses an occurrence due 2026-10-01 (2 days), early payment dates 2026-09-30 and 2026-10-03.
+- **Today in API tests**: the base class resets today to 2026-10-03 before every test, so each test that needs another date sets it itself.
+
 ## Coverage
 
-To fill from `npm run coverage -- --require --slice 14` and `--require spending/recurring/manage-recurring.feature` (10 of 10 expected).
+`npm run coverage -- --require --slice 14`: 10/10 covered, none deferred; `--require spending/recurring/manage-recurring.feature`: 10/10.
+
+| ID | API | UI (Vitest + MSW) | e2e (710px and 1280px) |
+| --- | --- | --- | --- |
+| RECURRING_001 | `RecurringSuggestionsApiTests`, `SuggestionsTest` | `Recurring.test.tsx` suggestions | `15-recurring` suggestions |
+| RECURRING_002 | `RecurringSuggestionsApiTests` | `Recurring.test.tsx` | `15-recurring` confirm |
+| RECURRING_003 | `RecurringRecordApiTests`, `RecurringRaceApiTests` | `Recurring.test.tsx` record | `15-recurring` actual expense |
+| RECURRING_004 | `RecurringRecordApiTests` (review writes nothing) | `Recurring.test.tsx` Cancel and Back | `15-recurring` actual expense |
+| RECURRING_005 | `RecurringBaseApiTests`, `RecurringChangeApiTests` | `Recurring.test.tsx` | `15-recurring` negative estimate |
+| RECURRING_006 | `RecurringBaseApiTests`, `RecurrenceTest`, `RecurringGuardsApiTests`, `RecurringRaceApiTests` | `Recurring.test.tsx` | `15-recurring` create, long list |
+| RECURRING_007 | `RecurringChangeApiTests` | `Recurring.test.tsx` (incl. switching rows) | `15-recurring` changes |
+| RECURRING_008 | `RecurringChangeApiTests`, `RecurringGuardsApiTests` | `Recurring.test.tsx` | `15-recurring` pause and resume, archived |
+| RECURRING_009 | `RecurringSuggestionsApiTests`, `RecurringChangeApiTests`, `DeletedAccountSweepApiTests` | `Recurring.test.tsx` | `15-recurring` dismiss, delete |
+| RECURRING_010 | `RecurringOverdueApiTests` | `Recurring.test.tsx` overdue | `15-recurring` overdue |
+| Group 0 (Q-044) | `ReplayRulesApiTests` | | |
+
+Planted defects, each seen red and removed: the household lock in `acting`, in `create`, the account lock in `openAccount`, the member share lock in `insert`, the deleted-account filter of the schedule query (sweep test), the panel `key` (UI switching test), group 0 against the unfixed `src/main` (5 of 7). Not planted: the category share lock, the state gate of each writer, the `Payment removed` read. Each new e2e test was run on its own the first time it was written (all passed at once: the UI was built before its e2e), so none was seen red; the faults the owner finds at checkpoint 2 get a red-first assertion.
+
+## Validator report (independent agent, commit 83bb861) and what was done
+
+62 backend tests of the slice's classes green; coverage, lint, format, typecheck green (full suite and 189 e2e were run before).
+
+| # | Finding | Answer |
+| --- | --- | --- |
+| 1 | A panel opened on another row kept the first row's form and could write it to the wrong schedule | Fixed: panels are keyed by action and row, `create.reset()` and `dismiss.reset()` on open; Vitest "switching rows" (red without the key) |
+| 2 | Decision 14 (removed payment) not built | Fixed: `OccurrenceView.paymentRemoved`, "Payment removed" text, API test |
+| 3 | Replay fingerprints left out the member | Fixed: create, change and record include `enteredByMemberId`; test in `RecurringBaseApiTests.retryReplays` |
+| 4 | Lock order inverted in `change` and `acting` (member before account) | Fixed: household, account, then member |
+| 5 | An omitted class replays the stored class; a by-name retry after a category rename is 400 | Left: the owner asked for stored-class replays; the UI sends ids. Noted in the handoff |
+| 6 | A shorter retry of a batch replays (before this slice) | Left, noted |
+| 7 | Stale mutation errors | Fixed with the resets in 1 |
+| 8 | No unique (schedule, due date); orphan javadoc; the sweep tries only some writers on a deleted account | Javadoc fixed; unique left (see above); the sweep covers the list, create, change, pause, resume and delete |
+| Checklist gaps | Inventory races not built: record vs remove of the same entry (the display is tested instead), record held vs archive, category merge race; state matrix lacks archived or closed × deleted and × paused except Resume; same-key concurrency only for Record; create by id and record by name not raced; Back in Resume and Reschedule and the opener in view on a long list not in e2e | Left and reported here; the lock tests prove the locks, the matrix covers every writer on archived and closed accounts and on paused and deleted schedules on an open one |
 
 ## Group 0 result (Q-044)
 
 One shared mechanism: `EntryValidator.parseForReplay` (and `parseReminderForReplay`) with `EntryValidator.Stored` (the stored category, class and portions). It is used when a row exists for the key, under the account lock, by `EntryService.record`, `BatchEntryService.record`, `ReminderService.save` and `HistoricalEntryService.replay` (its `withNoDateCheck` is gone). It checks only what a request must be anyway (amount, date, member given, split shape) and resolves the category (by id as given; by name through `CategoryRepository.findAnyByKindAndName`, archived and merged included, the stored one preferred when a name was reused) and the member (as given, no active rule) without today's rules; an omitted class is the stored class. A new key still goes through `parse`. Transfers, payments, edits, corrections, starting balance and statements already look the key up first and compare on stored figures, so they were left (nothing to move). `ReplayRulesApiTests` (7 tests): entry, batch, split, reminder and historical entry × by name and by id × (category archived, category merged, member deactivated, default class changed, reminder past its due date); a different body is still 409. Red against the unfixed code (5 of 7), green with it; the full backend suite and `npm run lint` pass.
 
 ## Open questions
+
+All resolved by the owner at checkpoint 1 (see `docs/decisions/questions.md`; D-048, D-049).
 
 | # | Question | Recommended |
 | --- | --- | --- |

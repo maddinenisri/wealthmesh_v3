@@ -64,6 +64,7 @@ export function ScheduleItem({
                 : occurrence.paidOn !== null && occurrence.paidOn < occurrence.dueOn
                   ? `paid early on ${occurrence.paidOn}`
                   : `paid on ${occurrence.paidOn}`}
+              {occurrence.paymentRemoved && '. Payment removed: the occurrence stays paid.'}
             </li>
           ))}
         </ul>

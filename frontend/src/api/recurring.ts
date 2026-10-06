@@ -9,6 +9,8 @@ export type Occurrence = {
   outcome: 'paid' | 'dismissed'
   paidOn: string | null
   activityId: string | null
+  /** The entry that paid it was removed: the occurrence stays paid. */
+  paymentRemoved: boolean
 }
 
 export type RecurringEvent = {
@@ -101,6 +103,7 @@ function parseOccurrence(value: unknown): Occurrence {
     outcome: data.outcome,
     paidOn: strOrNull(data.paidOn),
     activityId: strOrNull(data.activityId),
+    paymentRemoved: data.paymentRemoved === true,
   }
 }
 

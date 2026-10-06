@@ -125,4 +125,20 @@ class RecurringRecordApiTests extends RecurringTestBase {
                 .isEqualTo(409);
         assertActivityCount(checking, 3);
     }
+
+    @Order(6)
+    @Test
+    @DisplayName("V2_RECURRING_003 removing the entry that paid an occurrence shows the payment removed; the "
+            + "occurrence stays paid and the next due date does not move back")
+    void removedPaymentIsShown() {
+        act(electricity, "resume", "2026-12-05").expectStatus().isOk();
+        java.util.concurrent.atomic.AtomicReference<String> entry = new java.util.concurrent.atomic.AtomicReference<>();
+        scheduleOf(electricity).expectBody().jsonPath("$.occurrences[0].activityId")
+                .value(String.class, entry::set);
+        scheduleOf(electricity).expectBody().jsonPath("$.occurrences[0].paymentRemoved").isEqualTo(false);
+        removeEntry(checking, entry.get());
+        scheduleOf(electricity).expectBody().jsonPath("$.occurrences[0].paymentRemoved").isEqualTo(true)
+                .jsonPath("$.occurrences[0].outcome").isEqualTo("paid").jsonPath("$.nextDueOn")
+                .isEqualTo("2026-12-05").jsonPath("$.bills.length()").isEqualTo(2);
+    }
 }

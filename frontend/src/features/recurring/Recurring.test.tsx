@@ -552,3 +552,43 @@ describe('recurring bills: overdue', () => {
     expect(api.activity).toHaveLength(0)
   })
 })
+
+describe('recurring bills: switching rows', () => {
+  const utilities = () => CATEGORIES.find((c) => c.name === 'Utilities')!.id
+  const make = (id: string, description: string, amount: string) => ({
+    id,
+    accountId: checking.id,
+    description,
+    categoryId: utilities(),
+    amount,
+    frequency: 'monthly' as const,
+    status: 'active' as const,
+    nextDueOn: '2026-10-05',
+    anchorDay: 5,
+    occurrences: [],
+    events: [],
+  })
+
+  it("V2_RECURRING_007 opening Change on another bill starts that bill's form, never the first bill's values", async () => {
+    const api = mockApi({
+      ...seed(),
+      schedules: [
+        make('66666666-6666-4666-8666-000000000001', 'Electricity', '180.00'),
+        make('66666666-6666-4666-8666-000000000002', 'Water', '40.00'),
+      ],
+    })
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    const changes = await screen.findAllByRole('button', { name: 'Change' })
+    await user.click(changes[0])
+    await user.clear(await screen.findByLabelText('Expected amount'))
+    await user.type(screen.getByLabelText('Expected amount'), '250.00')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    await screen.findByRole('region', { name: /Review: Electricity/ })
+
+    await user.click(screen.getAllByRole('button', { name: 'Change' })[1])
+    expect(await screen.findByLabelText('Expected amount')).toHaveValue('40.00')
+    expect(screen.getByRole('region', { name: /Change the Water estimate/ })).toBeInTheDocument()
+    expect(api.schedules.map((s) => s.amount)).toEqual(['180.00', '40.00'])
+  })
+})

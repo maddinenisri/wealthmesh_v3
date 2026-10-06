@@ -51,6 +51,9 @@ export function RecurringPage() {
 
   const open = (next: Mode) => {
     begin()
+    // A new panel starts clean: no error from the last one, and no form state carried to another row.
+    create.reset()
+    dismiss.reset()
     setMode(next)
   }
   const done = (text: string) => {
@@ -96,6 +99,7 @@ export function RecurringPage() {
           </ul>
           {mode?.kind === 'confirm' && (
             <ScheduleForm
+              key={`confirm-${mode.suggestion.accountId}-${mode.suggestion.description}`}
               heading={`Confirm the ${mode.suggestion.description} estimate`}
               start={{
                 description: mode.suggestion.description,
@@ -115,6 +119,7 @@ export function RecurringPage() {
           )}
           {mode?.kind === 'dismiss' && (
             <ActionPanel
+              key={`dismiss-${mode.suggestion.accountId}-${mode.suggestion.description}`}
               heading={`Review dismissing the ${mode.suggestion.description} suggestion`}
               members={members ?? []}
               member={dismissing.member}
@@ -172,6 +177,7 @@ export function RecurringPage() {
         </div>
         {mode && 'schedule' in mode && (
           <SchedulePanel
+            key={`${mode.kind}-${mode.schedule.id}`}
             mode={mode}
             members={members ?? []}
             onDone={done}
@@ -180,6 +186,7 @@ export function RecurringPage() {
         )}
         {mode?.kind === 'create' && (
           <ScheduleForm
+            key="create"
             heading="New recurring bill"
             members={members ?? []}
             save={create}

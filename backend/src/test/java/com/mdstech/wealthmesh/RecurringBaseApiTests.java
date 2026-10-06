@@ -118,6 +118,9 @@ class RecurringBaseApiTests extends RecurringTestBase {
         createSchedule("retry-1", schedule("Retry bill", "13.00", "weekly", "2026-10-02", checking, "Health"))
                 .expectStatus().isEqualTo(409).expectBody().jsonPath("$.message").value(
                         m -> assertThat(String.valueOf(m)).contains("already used"));
+        // Another member's request under the same key is a different save, not a replay.
+        createSchedule("retry-1", schedule(samId, "Retry bill", "12.00", "weekly", "2026-10-02", checking,
+                "Health")).expectStatus().isEqualTo(409);
         overview().expectBody().jsonPath("$.schedules.length()").isEqualTo(4);
     }
 }

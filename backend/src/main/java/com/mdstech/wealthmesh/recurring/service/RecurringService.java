@@ -186,8 +186,9 @@ public class RecurringService {
         }).flatMap(parsed -> {
             Instant now = clock.instant();
             Instant cutoff = now.minus(KEY_LIFETIME);
-            String fingerprint = "create|" + parsed.accountId + "|" + parsed.description + "|" + parsed.amount + "|"
-                    + parsed.frequency + "|" + parsed.nextDueOn + "|" + parsed.categoryId + "|" + parsed.category;
+            String fingerprint = "create|" + parsed.memberId + "|" + parsed.accountId + "|" + parsed.description + "|"
+                    + parsed.amount + "|" + parsed.frequency + "|" + parsed.nextDueOn + "|" + parsed.categoryId + "|"
+                    + parsed.category;
             return transactions.transactional(householdLock.lock()
                     .flatMap(householdId -> replayed(key, cutoff, fingerprint)
                             .switchIfEmpty(Mono.defer(() -> insert(householdId, key, parsed, fingerprint, now)))));
@@ -232,13 +233,13 @@ public class RecurringService {
         }).flatMap(parsed -> {
             Instant now = clock.instant();
             Instant cutoff = now.minus(KEY_LIFETIME);
-            String fingerprint = "change|" + id + "|" + parsed.amount + "|" + parsed.frequency + "|"
-                    + parsed.nextDueOn;
+            String fingerprint = "change|" + parsed.memberId + "|" + id + "|" + parsed.amount + "|"
+                    + parsed.frequency + "|" + parsed.nextDueOn;
             return transactions.transactional(householdLock.lock()
                     .flatMap(householdId -> replayed(key, cutoff, fingerprint)
-                            .switchIfEmpty(Mono.defer(() -> validator.memberLocked(householdId, parsed.memberId)
-                                    .then(Mono.defer(() -> current(id)))
+                            .switchIfEmpty(Mono.defer(() -> current(id)
                                     .flatMap(this::openAccount)
+                                    .flatMap(s -> validator.memberLocked(householdId, parsed.memberId).thenReturn(s))
                                     .flatMap(s -> store.update(id, parsed.amount, parsed.frequency, parsed.nextDueOn)
                                             .then(Mono.defer(() -> store.recordEvent(id, "changed", parsed.memberId,
                                                     now, key, fingerprint, changes(s, parsed))))
@@ -356,19 +357,19 @@ public class RecurringService {
     }
 
     /**
-     * One action on a saved schedule, under the lock order of {@link HouseholdLock}: household, the member under a
-     * share lock, the schedule, the account when money would follow, then the change and its event. A deleted
+     * One action on a saved schedule, under the lock order of {@link HouseholdLock}: household, the account when money
+     * would follow, the member under a share lock, then the change and its event. A deleted
      * schedule is gone to every action but a repeat of Delete.
      */
     private Mono<ScheduleView> acting(UUID id, UUID memberId, boolean needsOpenAccount,
             java.util.function.Function<RecurringStore.Schedule, Mono<Void>> apply, boolean allowDeleted) {
         return transactions.transactional(householdLock.lock()
-                .flatMap(householdId -> validator.memberLocked(householdId, memberId))
-                .then(Mono.defer(() -> store.scheduleAnyState(id)))
-                .switchIfEmpty(Mono.error(notFound("Recurring bill not found: " + id)))
-                .filter(s -> allowDeleted || s.removedAt() == null)
-                .switchIfEmpty(Mono.error(notFound("Recurring bill not found: " + id)))
-                .flatMap(s -> needsOpenAccount ? openAccount(s) : Mono.just(s))
+                .flatMap(householdId -> store.scheduleAnyState(id)
+                        .switchIfEmpty(Mono.error(notFound("Recurring bill not found: " + id)))
+                        .filter(s -> allowDeleted || s.removedAt() == null)
+                        .switchIfEmpty(Mono.error(notFound("Recurring bill not found: " + id)))
+                        .flatMap(s -> needsOpenAccount ? openAccount(s) : Mono.just(s))
+                        .flatMap(s -> validator.memberLocked(householdId, memberId).thenReturn(s)))
                 .flatMap(apply)
                 .then(Mono.defer(() -> store.scheduleAnyState(id)))
                 .flatMap(this::view));
@@ -407,8 +408,8 @@ public class RecurringService {
         }).flatMap(r -> {
             Instant now = clock.instant();
             Instant cutoff = now.minus(KEY_LIFETIME);
-            String fingerprint = "record|" + id + "|" + r.dueOn() + "|" + EntryValidator.amount(r.amount()) + "|"
-                    + r.paidOn() + "|" + r.categoryId() + "|" + r.category();
+            String fingerprint = "record|" + r.enteredByMemberId() + "|" + id + "|" + r.dueOn() + "|"
+                    + EntryValidator.amount(r.amount()) + "|" + r.paidOn() + "|" + r.categoryId() + "|" + r.category();
             return transactions.transactional(householdLock.lock()
                     .flatMap(householdId -> replayed(key, cutoff, fingerprint)
                             .switchIfEmpty(Mono.defer(() -> recordNew(id, key, r, fingerprint, now)))));
