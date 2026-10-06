@@ -3,8 +3,8 @@
 One file per slice, edited only by the session working it.
 
 - Slice: 11 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/spending/categories/split-expenses.feature`
-- Status: done locally (not pushed)
-- Started: 2026-10-05 20:34 (session clock)  Finished: 2026-10-06  Commit: `1ac5740`
+- Status: done and pushed (2026-10-06, on the owner's word, D-002)
+- Started: 2026-10-05 20:34 (session clock)  Finished: 2026-10-06  Commit: `57f43bf` (commits from `0ad0adf`)
 
 ## Prompts and directions
 
