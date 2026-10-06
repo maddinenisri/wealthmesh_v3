@@ -300,3 +300,71 @@ for (const [width, name] of [
     })
   })
 }
+
+for (const [width, name] of [
+  [710, 'Wealth Home 710'],
+  [1280, 'Wealth Home 1280'],
+] as const) {
+  test.describe.serial(`Wealth on a date at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+    let id = ''
+    let estimate = ''
+
+    test(`V2_PROPERTY_003 wealth on an earlier date uses the value in force then, and the change is a value change (${width}px)`, async ({
+      page,
+    }) => {
+      id = await makeAsset(page, 'property', name, '300000.00')
+      const owner = await ownerId(page)
+      const saved = await page.request.post(`/api/v1/accounts/${id}/values`, {
+        headers: { 'Idempotency-Key': `wealth-${width}` },
+        data: {
+          amount: '320000.00',
+          valueOn: '2026-09-30',
+          reason: 'September estimate',
+          enteredByMemberId: owner,
+        },
+      })
+      expect(saved.ok()).toBeTruthy()
+      estimate = ((await saved.json()) as { value: { id: string } }).value.id
+
+      await page.goto('/')
+      const card = page.getByRole('region', { name: 'Wealth on a date' })
+      await card.scrollIntoViewIfNeeded()
+      await card.getByLabel('Show wealth on').fill('2026-09-15')
+      const group = card.getByRole('region', { name: 'Property and other assets on this date' })
+      const line = group.getByRole('listitem').filter({ hasText: name })
+      await expect(line).toContainText('$300,000.00')
+      await expect(line).toContainText('Value dated 2026-09-01')
+      await expect(card).toContainText('Household wealth on 2026-09-15')
+      await expectNoSidewaysScroll(page)
+
+      await card.getByLabel('From').fill('2026-09-01')
+      await card.getByLabel('To').fill('2026-09-30')
+      const change = card.getByRole('region', { name: 'Wealth change' })
+      await expect(change).toBeVisible()
+      await expect(change.getByRole('list', { name: 'Value changes' })).toContainText(
+        `${name} value increase of $20,000.00`,
+      )
+      await expect(change).toContainText('Transfers and card payments cancel out')
+      await expectNoSidewaysScroll(page)
+    })
+
+    test(`V2_PROPERTY_005 removing the estimate flags the older value date on the household card (${width}px)`, async ({
+      page,
+    }) => {
+      const owner = await ownerId(page)
+      const removed = await page.request.post(`/api/v1/accounts/${id}/values/${estimate}/removal`, {
+        data: { enteredByMemberId: owner },
+      })
+      expect(removed.ok()).toBeTruthy()
+      await page.goto('/')
+      const accounts = page.getByRole('region', { name: 'Accounts and wealth' })
+      const group = accounts.getByRole('region', { name: 'Property and other assets' })
+      const line = group.getByRole('listitem').filter({ hasText: name })
+      await expect(line).toContainText('$300,000.00')
+      await expect(line).toContainText('Value dated 2026-09-01')
+      await expect(line).toContainText('Older value')
+      await expectNoSidewaysScroll(page)
+    })
+  })
+}

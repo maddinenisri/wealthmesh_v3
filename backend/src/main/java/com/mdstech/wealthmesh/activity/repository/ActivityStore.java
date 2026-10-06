@@ -23,7 +23,7 @@ import reactor.core.publisher.Mono;
 public class ActivityStore {
 
     /** Signed effect of one row on a bank Balance (foundations 6). */
-    private static final String SIGNED = """
+    public static final String SIGNED = """
             CASE WHEN kind IN ('income', 'refund', 'transfer_in', 'card_payment_in', 'interest', 'correction')
                  THEN amount
                  ELSE -amount END""";

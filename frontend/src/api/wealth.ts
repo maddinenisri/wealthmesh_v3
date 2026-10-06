@@ -7,7 +7,14 @@ export type WealthLine = {
   type: string
   status: string
   balance: string
+  /** A manually valued account: the date of the value it counts (null for every other account). */
+  valueDate: string | null
+  /** True when that value is dated more than 30 days before the wealth date. */
+  stale: boolean
 }
+
+/** An account that had not begun tracking on the wealth date: named, never counted as zero. */
+export type NotTracked = { accountId: string; name: string; type: string; openedOn: string }
 
 export type WealthGroup = { total: string; accounts: WealthLine[] }
 
@@ -16,12 +23,39 @@ export type WealthGroup = { total: string; accounts: WealthLine[] }
  * (archived and closed too, by status); `debtLines` is what makes up debts: owed cards and overdrawn bank accounts.
  */
 export type Wealth = {
+  asOf: string
   financialAssets: string
   debts: string
   netWorth: string
   bankMoney: WealthGroup
   cards: WealthGroup
+  propertyAndOther: WealthGroup
   debtLines: WealthLine[]
+  notTracked: NotTracked[]
+}
+
+/** What explains the change in wealth between two dates; every figure is a money string. */
+export type WealthChange = {
+  from: string
+  to: string
+  startWealth: string
+  endWealth: string
+  change: string
+  income: string
+  spending: string
+  valueChange: string
+  corrections: string
+  accountsAdded: string
+  transfers: string
+  other: string
+  valueMoves: {
+    accountId: string
+    name: string
+    type: string
+    start: string
+    end: string
+    change: string
+  }[]
 }
 
 const bad = () => new Error('Unexpected response from the server.')
@@ -44,6 +78,8 @@ function parseLine(value: unknown): WealthLine {
     type: text(data.type),
     status: text(data.status),
     balance: text(data.balance),
+    valueDate: data.valueDate == null ? null : text(data.valueDate),
+    stale: data.stale === true,
   }
 }
 
@@ -59,14 +95,61 @@ function parseGroup(value: unknown): WealthGroup {
 
 function parseWealth(value: unknown): Wealth {
   const data = record(value)
+  if (!Array.isArray(data.notTracked)) throw bad()
   return {
+    asOf: text(data.asOf),
     financialAssets: text(data.financialAssets),
     debts: text(data.debts),
     netWorth: text(data.netWorth),
     bankMoney: parseGroup(data.bankMoney),
     cards: parseGroup(data.cards),
+    propertyAndOther: parseGroup(data.propertyAndOther),
     debtLines: parseLines(data.debtLines),
+    notTracked: data.notTracked.map((item) => {
+      const missing = record(item)
+      return {
+        accountId: text(missing.accountId),
+        name: text(missing.name),
+        type: text(missing.type),
+        openedOn: text(missing.openedOn),
+      }
+    }),
   }
 }
 
-export const getWealth = () => request('/wealth', { parse: parseWealth })
+function parseChange(value: unknown): WealthChange {
+  const data = record(value)
+  if (!Array.isArray(data.valueMoves)) throw bad()
+  return {
+    from: text(data.from),
+    to: text(data.to),
+    startWealth: text(data.startWealth),
+    endWealth: text(data.endWealth),
+    change: text(data.change),
+    income: text(data.income),
+    spending: text(data.spending),
+    valueChange: text(data.valueChange),
+    corrections: text(data.corrections),
+    accountsAdded: text(data.accountsAdded),
+    transfers: text(data.transfers),
+    other: text(data.other),
+    valueMoves: data.valueMoves.map((item) => {
+      const move = record(item)
+      return {
+        accountId: text(move.accountId),
+        name: text(move.name),
+        type: text(move.type),
+        start: text(move.start),
+        end: text(move.end),
+        change: text(move.change),
+      }
+    }),
+  }
+}
+
+/** Wealth today, or as of a date (YYYY-MM-DD) up to today. */
+export const getWealth = (asOf?: string) =>
+  request(asOf ? `/wealth?asOf=${asOf}` : '/wealth', { parse: parseWealth })
+
+export const getWealthChange = (from: string, to: string) =>
+  request(`/wealth/change?from=${from}&to=${to}`, { parse: parseChange })

@@ -31,6 +31,19 @@ type Context = {
 
 const money = (value: number) => value.toFixed(2)
 
+/** The value a property or other asset counts on a date: its latest effective value by then, else its setup value. */
+export function valuedPoint(values: MockValue[], account: MockAccount, on: string) {
+  const latest = values
+    .filter(
+      (v) =>
+        v.accountId === account.id && !v.removedAt && !v.replaced && !v.planned && v.valueOn <= on,
+    )
+    .sort((a, b) => b.valueOn.localeCompare(a.valueOn) || b.createdAt.localeCompare(a.createdAt))[0]
+  return latest
+    ? { amount: latest.amount, on: latest.valueOn }
+    : { amount: account.openingAmount, on: account.openedOn }
+}
+
 /** Handlers for the dated values of a property or other asset (slice 15), mirroring `ValueService`. */
 export function valueHandlers(ctx: Context) {
   const { accounts, values, today, problem } = ctx

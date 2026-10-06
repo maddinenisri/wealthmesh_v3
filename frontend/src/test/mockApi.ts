@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import { valueHandlers, type MockValue } from './mockValues'
+import { valueHandlers, valuedPoint, type MockValue } from './mockValues'
 import { server } from './server'
 
 type MockHousehold = { id: string; name: string }
@@ -2373,30 +2373,89 @@ export function mockApi(
         incomeMinusSpending: (income - spending).toFixed(2),
       })
     }),
+    http.get('*/api/v1/wealth/change', ({ request }) => {
+      log(request)
+      const query = new URL(request.url).searchParams
+      const from = query.get('from') ?? today
+      const to = query.get('to') ?? today
+      if (from > to) return problem(400, 'The start date must be on or before the end date')
+      if (to > today) return problem(400, 'The end date cannot be in the future')
+      const moves = state.accounts
+        .filter((a) => a.type === 'property' || a.type === 'other_asset')
+        .map((a) => {
+          const start =
+            a.openedOn > from ? { amount: a.openingAmount } : valuedPoint(state.values, a, from)
+          const end = valuedPoint(state.values, a, to)
+          return {
+            accountId: a.id,
+            name: a.name,
+            type: a.type,
+            start: Number(start.amount).toFixed(2),
+            end: Number(end.amount).toFixed(2),
+            change: (Number(end.amount) - Number(start.amount)).toFixed(2),
+          }
+        })
+        .filter((m) => Number(m.change) !== 0)
+      const moved = moves.reduce((x, m) => x + Number(m.change), 0)
+      return HttpResponse.json({
+        from,
+        to,
+        startWealth: '0.00',
+        endWealth: moved.toFixed(2),
+        change: moved.toFixed(2),
+        income: '0.00',
+        spending: '0.00',
+        valueChange: moved.toFixed(2),
+        corrections: '0.00',
+        accountsAdded: '0.00',
+        transfers: '0.00',
+        other: '0.00',
+        valueMoves: moves,
+      })
+    }),
     http.get('*/api/v1/wealth', ({ request }) => {
       log(request)
-      const lines = state.accounts.map((a) => ({
-        accountId: a.id,
-        name: a.name,
-        type: a.type,
-        status: a.status,
-        balance: Number(a.balance.amount).toFixed(2),
-      }))
+      const asOf = new URL(request.url).searchParams.get('asOf') ?? today
+      if (asOf > today) return problem(400, 'The date cannot be in the future')
+      const tracked = state.accounts.filter((a) => a.openedOn <= asOf)
+      const lines = tracked.map((a) => {
+        const valued = a.type === 'property' || a.type === 'other_asset'
+        const point = valued ? valuedPoint(state.values, a, asOf) : null
+        const dated = point?.on ?? null
+        const days = dated ? (Date.parse(asOf) - Date.parse(dated)) / 86_400_000 : 0
+        return {
+          accountId: a.id,
+          name: a.name,
+          type: a.type,
+          status: a.status,
+          balance: Number(point ? point.amount : a.balance.amount).toFixed(2),
+          valueDate: dated,
+          stale: valued && days > 30,
+        }
+      })
       const sum = (rows: { balance: string }[]) =>
         rows.reduce((x, row) => x + Number(row.balance), 0)
-      const bank = lines.filter((l) => l.type !== 'credit_card')
+      const bank = lines.filter(
+        (l) => l.type !== 'credit_card' && l.type !== 'property' && l.type !== 'other_asset',
+      )
       const cards = lines.filter((l) => l.type === 'credit_card')
       const debtLines = lines.filter((l) => Number(l.balance) < 0)
       const assets = lines.map((l) => Number(l.balance)).filter((b) => b > 0)
       const financialAssets = assets.reduce((x, y) => x + y, 0)
       const debts = -sum(debtLines)
+      const valuedLines = lines.filter((l) => l.type === 'property' || l.type === 'other_asset')
       return HttpResponse.json({
+        asOf,
         financialAssets: financialAssets.toFixed(2),
         debts: debts.toFixed(2),
         netWorth: (financialAssets - debts).toFixed(2),
         bankMoney: { total: sum(bank).toFixed(2), accounts: bank },
         cards: { total: sum(cards).toFixed(2), accounts: cards },
+        propertyAndOther: { total: sum(valuedLines).toFixed(2), accounts: valuedLines },
         debtLines,
+        notTracked: state.accounts
+          .filter((a) => a.openedOn > asOf)
+          .map((a) => ({ accountId: a.id, name: a.name, type: a.type, openedOn: a.openedOn })),
       })
     }),
     http.get('*/api/v1/spending/history', ({ request }) => {

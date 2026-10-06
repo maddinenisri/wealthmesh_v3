@@ -24,6 +24,7 @@ import com.mdstech.wealthmesh.activity.dto.CorrectionRequest;
 import com.mdstech.wealthmesh.activity.repository.ActivityRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.money.Money;
+import com.mdstech.wealthmesh.value.repository.ValueStore;
 
 import reactor.core.publisher.Mono;
 
@@ -40,9 +41,12 @@ public class BalanceCorrectionService {
     private final ActivityStore store;
     private final Clock clock;
     private final TransactionalOperator transactions;
+    private final ValueStore values;
 
     public BalanceCorrectionService(AccountRepository accounts, EntryValidator validator,
-            ActivityRepository activities, ActivityStore store, Clock clock, TransactionalOperator transactions) {
+            ActivityRepository activities, ActivityStore store, Clock clock, TransactionalOperator transactions,
+            ValueStore values) {
+        this.values = values;
         this.accounts = accounts;
         this.validator = validator;
         this.activities = activities;
@@ -53,9 +57,21 @@ public class BalanceCorrectionService {
 
     /** Opening amount plus activity up to the date; null (not available) before tracking began. */
     public Mono<BalanceView> balanceAsOf(UUID accountId, LocalDate asOn) {
-        return Mono.fromCallable(() -> requireDate(asOn)).then(Mono.defer(() -> load(accountId)))
+        return Mono.fromCallable(() -> requireDate(asOn)).then(Mono.defer(() -> loadAny(accountId)))
                 .flatMap(account -> asOn.isBefore(account.openedOn()) ? Mono.just(new BalanceView(null, asOn))
+                        : AccountType.isValued(account.type()) ? valuedOn(account, asOn)
                         : balanceOn(account, asOn, null).map(b -> new BalanceView(Money.format(b), asOn)));
+    }
+
+    /** A property or other asset: the effective value in force on the date, or its setup value (W4). */
+    private Mono<BalanceView> valuedOn(Account account, LocalDate asOn) {
+        return values.effectiveOn(account.id(), asOn, null).map(point -> point.amount())
+                .defaultIfEmpty(account.openingAmount()).map(amount -> new BalanceView(Money.format(amount), asOn));
+    }
+
+    private Mono<Account> loadAny(UUID id) {
+        return accounts.findById(id).switchIfEmpty(Mono.error(
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)));
     }
 
     public Mono<CorrectionPreview> preview(UUID accountId, Object requested, String side, LocalDate asOn,

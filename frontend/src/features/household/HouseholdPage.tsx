@@ -12,9 +12,10 @@ import {
   buttonStyles,
 } from '../../design-system'
 import type { Account } from '../../api/accounts'
+import type { WealthLine } from '../../api/wealth'
 import { useAccounts } from '../../hooks/useAccounts'
 import { useWealth } from '../../hooks/useWealth'
-import { accountTypeLabel } from '../accounts/accountTypes'
+import { accountTypeLabel, isValued } from '../accounts/accountTypes'
 import { BalanceFigure } from '../accounts/BalanceFigure'
 import { cardSide, isCard } from '../accounts/cardBalance'
 import { STATUS_LABEL } from '../accounts/statusLabel'
@@ -22,6 +23,7 @@ import { ownerNames } from '../accounts/ownerNames'
 import { useAccountContext } from '../accounts/useAccountContext'
 import { CreateHouseholdForm, RenameHouseholdForm } from './HouseholdForms'
 import { MembersCard } from './MembersCard'
+import { WealthOverTime } from './WealthOverTime'
 import { useHousehold } from '../../hooks/useHousehold'
 import { useMembers } from '../../hooks/useMembers'
 
@@ -56,6 +58,7 @@ export function HouseholdPage() {
         <>
           <HouseholdDetails household={household.data} />
           <AccountsAndWealth />
+          <WealthOverTime />
           {members.isError ? (
             <EmptyState
               title="Could not load members"
@@ -131,7 +134,9 @@ function AccountsAndWealth() {
             id="bank-money-heading"
             title="Bank money"
             total={wealth.data?.bankMoney.total}
-            accounts={accounts.data.filter((account) => !isCard(account.type))}
+            accounts={accounts.data.filter(
+              (account) => !isCard(account.type) && !isValued(account.type),
+            )}
             members={members}
             note={
               wealth.data?.debtLines.some((line) => !isCard(line.type))
@@ -146,6 +151,14 @@ function AccountsAndWealth() {
             total={wealth.data?.cards.total}
             accounts={accounts.data.filter((account) => isCard(account.type))}
             members={members}
+          />
+          <AccountGroup
+            id="property-heading"
+            title="Property and other assets"
+            total={wealth.data?.propertyAndOther.total}
+            accounts={accounts.data.filter((account) => isValued(account.type))}
+            members={members}
+            lines={wealth.data?.propertyAndOther.accounts}
           />
           {wealth.data && wealth.data.debtLines.length > 0 && (
             <section aria-labelledby="debt-heading" className="mt-4">
@@ -189,6 +202,7 @@ function AccountGroup({
   accounts,
   members,
   note,
+  lines,
   card = false,
 }: {
   id: string
@@ -197,6 +211,8 @@ function AccountGroup({
   accounts: Account[]
   members: Parameters<typeof ownerNames>[1]
   note?: string
+  /** What the wealth read says about each account: the date of a valued account's value and whether it is old. */
+  lines?: WealthLine[]
   /** A card group reads "owed" or "Card credit", never a minus sign. */
   card?: boolean
 }) {
@@ -241,6 +257,14 @@ function AccountGroup({
             </span>
             <span className="text-right">
               <BalanceFigure type={account.type} amount={account.balance.amount} />
+              {lines?.find((line) => line.accountId === account.id)?.valueDate && (
+                <span className="block text-sm text-ink-muted">
+                  Value dated {lines.find((line) => line.accountId === account.id)?.valueDate}{' '}
+                  {lines.find((line) => line.accountId === account.id)?.stale && (
+                    <Badge>Older value</Badge>
+                  )}
+                </span>
+              )}
             </span>
           </li>
         ))}
