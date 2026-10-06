@@ -14,11 +14,12 @@ import org.springframework.http.MediaType;
  * One sweep (slice 12, owner addition 2): delete an account, then hit every read path and every writer that names an
  * account and assert it is absent. Anything added later that reads an account must be added here.
  */
-class DeletedAccountSweepApiTests extends RecurringTestBase {
+class DeletedAccountSweepApiTests extends ValuedTestBase {
 
     private static String gone;
     private static String live;
     private static String card;
+    private static String plot;
 
     @Order(0)
     @Test
@@ -28,6 +29,7 @@ class DeletedAccountSweepApiTests extends RecurringTestBase {
         live = account("Live Checking", "5000.00");
         card = card("Live Card", "100.00", "owed", "2026-09-01");
         gone = account("Gone Savings", null);
+        plot = property("Gone Plot", null, "2026-09-01");
     }
 
     @Order(1)
@@ -42,6 +44,7 @@ class DeletedAccountSweepApiTests extends RecurringTestBase {
         String liveSchedule = created("s-live", schedule("Live bill", "10.00", "monthly", "2026-10-20", live,
                 "Utilities"));
         act(gone, "delete").expectStatus().isOk();
+        act(plot, "delete").expectStatus().isOk();
         List<String> found = new ArrayList<>();
         recurringIsAbsent(found, schedule, liveSchedule);
         listsAndFilters(found);
@@ -49,6 +52,7 @@ class DeletedAccountSweepApiTests extends RecurringTestBase {
         entryWriters(found);
         lifecycleWriters(found);
         movementWriters(found);
+        valueReadersAndWriters(found);
         assertThat(found).as("every path answered 404").isEmpty();
         assertBalance(live, "4990.00");
     }
@@ -121,6 +125,29 @@ class DeletedAccountSweepApiTests extends RecurringTestBase {
         for (String action : List.of("archive", "restore", "close", "reopen", "delete")) {
             expectNotFound(found, "POST " + action, statusOf(act(gone, action)));
         }
+    }
+
+    /** The dated values of a deleted property: every read and writer answers 404 (slice 15). */
+    private void valueReadersAndWriters(List<String> found) {
+        String any = "00000000-0000-0000-0000-000000000001";
+        expectNotFound(found, "GET values", statusOf(valueHistory(plot)));
+        expectNotFound(found, "GET values removal review", statusOf(webTestClient.get()
+                .uri("/api/v1/accounts/{id}/values/{v}/removal/review", plot, any).exchange()));
+        expectNotFound(found, "POST values review", statusOf(reviewValue(plot,
+                valueBody(mayaId, "5.00", "2026-10-01", null, false))));
+        expectNotFound(found, "POST values", statusOf(saveValue(plot, "s-v1",
+                valueBody(mayaId, "5.00", "2026-10-01", null, false))));
+        expectNotFound(found, "POST values plan", statusOf(saveValue(plot, "s-v2",
+                valueBody(mayaId, "5.00", "2026-12-31", null, true))));
+        expectNotFound(found, "POST values correction", statusOf(correctValue(plot, any, "s-v3", """
+                {"amount": "5.00", "reason": "Fix", "enteredByMemberId": "%s"}""".formatted(mayaId))));
+        for (String action : List.of("removal", "undo")) {
+            expectNotFound(found, "POST values " + action, statusOf(valueAction(plot, any, action, mayaId)));
+        }
+        webTestClient.get().uri("/api/v1/accounts").exchange().expectBody(String.class)
+                .value(body -> assertThat(body).doesNotContain("Gone Plot"));
+        webTestClient.get().uri("/api/v1/wealth").exchange().expectBody(String.class)
+                .value(body -> assertThat(body).doesNotContain("Gone Plot").doesNotContain(plot));
     }
 
     private void movementWriters(List<String> found) {

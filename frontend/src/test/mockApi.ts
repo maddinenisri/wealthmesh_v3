@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw'
+import { valueHandlers, type MockValue } from './mockValues'
 import { server } from './server'
 
 type MockHousehold = { id: string; name: string }
@@ -338,6 +339,8 @@ export function mockApi(
     budgets?: MockBudget[]
     /** Recurring schedules already saved. */
     schedules?: MockSchedule[]
+    /** Dated values of properties and other assets already saved (the account's balance is the seed's). */
+    values?: MockValue[]
     /** Suggestions the server would find: the bills are the account's matching expenses. */
     suggestions?: { accountId: string; categoryId: string; description: string }[]
   } = {},
@@ -354,6 +357,7 @@ export function mockApi(
     budgets: (seed.budgets ?? []).map((b) => ({ ...b, events: b.events ?? [] })) as MockBudget[],
     schedules: (seed.schedules ?? []).map((s) => ({ ...s })) as MockSchedule[],
     suggestions: (seed.suggestions ?? []).map((s) => ({ ...s })),
+    values: (seed.values ?? []).map((v) => ({ ...v })) as MockValue[],
     openingRevisions: [] as MockOpeningRevision[],
     /** Save keys seen on POST expenses, in order. */
     keys: [] as string[],
@@ -2417,6 +2421,16 @@ export function mockApi(
         averageRecordedMonth: recorded.length ? (sum / recorded.length).toFixed(2) : null,
         annualEstimate: recorded.length ? ((sum * 12) / recorded.length).toFixed(2) : null,
       })
+    }),
+    ...valueHandlers({
+      accounts: state.accounts,
+      members: state.members,
+      values: state.values,
+      today,
+      newId,
+      log,
+      problem,
+      keys: new Map<string, string>(),
     }),
     ...transferHandlers(),
     http.get('*/api/v1/accounts/:id', ({ request, params }) => {

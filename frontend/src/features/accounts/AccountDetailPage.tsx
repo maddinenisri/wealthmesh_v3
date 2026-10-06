@@ -77,7 +77,7 @@ export function AccountDetailPage() {
           />
           <AccountStatusCard account={account.data} />
           {isValued(account.data.type) ? (
-            <ValuedAccount account={account.data} />
+            <ValuedAccount account={account.data} members={members} />
           ) : (
             <Activity account={account.data} members={members} />
           )}

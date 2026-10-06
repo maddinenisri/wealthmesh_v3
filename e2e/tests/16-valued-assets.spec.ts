@@ -109,3 +109,135 @@ for (const [width, type, label, name, balance, shown] of [
     })
   })
 }
+
+async function makeAsset(
+  page: Page,
+  type: 'property' | 'other_asset',
+  name: string,
+  amount: string,
+): Promise<string> {
+  const owner = await ownerId(page)
+  const account = await page.request.post('/api/v1/accounts', {
+    data: {
+      type,
+      name,
+      ownerMemberIds: [owner],
+      openedOn: '2026-09-01',
+      openingBalance: amount,
+    },
+  })
+  expect(account.ok()).toBeTruthy()
+  return ((await account.json()) as { id: string }).id
+}
+
+async function balanceOf(page: Page, id: string): Promise<string> {
+  const detail = (await (await page.request.get(`/api/v1/accounts/${id}`)).json()) as {
+    balance: { amount: string }
+  }
+  return detail.balance.amount
+}
+
+async function enter(page: Page, value: string, date: string, reason?: string) {
+  await page.getByRole('button', { name: 'Record new value' }).click()
+  await page.getByLabel('Value', { exact: true }).fill(value)
+  await page.getByLabel('Date', { exact: true }).fill(date)
+  if (reason) await page.getByLabel('Reason (optional)').fill(reason)
+  await page.getByRole('button', { name: 'Review', exact: true }).click()
+}
+
+for (const [width, name, first, second] of [
+  [710, 'Value Home 710', '320,000.00', '315,000.00'],
+  [1280, 'Value Home 1280', '330,000.00', '325,000.00'],
+] as const) {
+  test.describe.serial(`Dated values at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+    let id = ''
+
+    test(`V2_PROPERTY_003 record a value: Cancel keeps nothing, Confirm shows the status and takes focus (${width}px)`, async ({
+      page,
+    }) => {
+      id = await makeAsset(page, 'property', name, '300000.00')
+      await page.goto(`/accounts/${id}`)
+      await enter(page, first, '2026-09-30', 'September estimate')
+      const review = page.getByRole('region', { name: 'Review value' })
+      await expectFocusInside(review)
+      await expect(review).toContainText('asset value increase')
+      await expectNoSidewaysScroll(page)
+
+      await review.getByRole('button', { name: 'Cancel' }).click()
+      await expect(review).toBeHidden()
+      await expect(page.getByRole('button', { name: 'Record new value' })).toBeFocused()
+      expect(await balanceOf(page, id)).toBe('300000.00')
+
+      await enter(page, first, '2026-09-30', 'September estimate')
+      await page.getByRole('button', { name: 'Confirm value' }).click()
+      const status = page.getByRole('status')
+      await expect(status).toContainText('Balance is $')
+      await expect(page.getByRole('heading', { name: 'Value history' })).toBeFocused()
+      await expect(page.getByRole('heading', { name: 'Value history' })).toBeInViewport({
+        ratio: 1,
+      })
+      await expectNoSidewaysScroll(page)
+      expect(await balanceOf(page, id)).toBe(first.replace(',', ''))
+    })
+
+    test(`V2_PROPERTY_003 correct the estimate with a reason; the original stays in history (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto(`/accounts/${id}`)
+      await page
+        .getByRole('button', { name: /^Correct \$/ })
+        .first()
+        .click()
+      await page.getByLabel('Value', { exact: true }).fill(second)
+      await page.getByRole('button', { name: 'Review', exact: true }).click()
+      await expect(page.getByText('Enter a reason')).toBeInViewport({ ratio: 1 })
+      await page.getByLabel('Reason', { exact: true }).fill('Copied the wrong estimate')
+      await page.getByRole('button', { name: 'Review', exact: true }).click()
+      const review = page.getByRole('region', { name: 'Review value correction' })
+      await expectFocusInside(review)
+      await review.getByRole('button', { name: 'Confirm correction' }).click()
+      await expect(page.getByRole('status')).toContainText('Corrected to')
+      await expect(page.getByRole('table')).toContainText('Replaced by a correction')
+      await expect(page.getByRole('table')).toContainText('$300,000.00')
+      await expectNoSidewaysScroll(page)
+      expect(await balanceOf(page, id)).toBe(second.replace(',', ''))
+    })
+
+    test(`V2_PROPERTY_006 a future date is guided to a plan that never counts (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto(`/accounts/${id}`)
+      const before = await balanceOf(page, id)
+      await enter(page, '340,000.00', '2026-12-31')
+      const alert = page.getByRole('alert').filter({ hasText: 'Future values are not completed' })
+      await expect(alert).toBeInViewport({ ratio: 1 })
+      await alert.getByRole('button', { name: 'Save as a future plan' }).click()
+      const review = page.getByRole('region', { name: 'Review plan' })
+      await expectFocusInside(review)
+      await review.getByRole('button', { name: 'Confirm plan' }).click()
+      await expect(page.getByRole('status')).toContainText('not counted in the Balance or wealth')
+      await expect(page.getByRole('table')).toContainText('Plan')
+      expect(await balanceOf(page, id)).toBe(before)
+    })
+
+    test(`V2_PROPERTY_005 remove the estimate, see the older date, Undo brings it back (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto(`/accounts/${id}`)
+      await page.getByRole('button', { name: new RegExp(`^Remove \\$${second}`) }).click()
+      const review = page.getByRole('region', { name: 'Review removal' })
+      await expectFocusInside(review)
+      await expect(review).toContainText('will return to $')
+      await review.getByRole('button', { name: 'Confirm removal' }).click()
+      await expect(page.getByRole('status')).toContainText('Removed')
+      await expect(page.getByRole('heading', { name: 'Value history' })).toBeFocused()
+      await expectNoSidewaysScroll(page)
+
+      await page.getByRole('button', { name: /^Undo removal of/ }).click()
+      await page.getByRole('button', { name: 'Confirm Undo' }).click()
+      await expect(page.getByRole('status')).toContainText('Restored')
+      expect(await balanceOf(page, id)).toBe(second.replace(',', ''))
+    })
+  })
+}
