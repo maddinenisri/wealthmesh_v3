@@ -1,9 +1,12 @@
 import type { Account } from '../../api/accounts'
 import { ACCOUNT_TYPES, accountTypeLabel } from '../accounts/accountTypes'
+import { STATUS_LABEL } from '../accounts/statusLabel'
 
-/** "Emergency Savings (Savings)": the type tells apart accounts that share a name. */
+/** "Emergency Savings (Savings)": the type tells apart accounts that share a name; a status other than active is said. */
 export const accountChoice = (account: Account): string =>
-  `${account.name} (${accountTypeLabel(account.type)})`
+  `${account.name} (${accountTypeLabel(account.type)})${
+    account.status === 'active' ? '' : ` · ${STATUS_LABEL[account.status] ?? account.status}`
+  }`
 
 /**
  * The accounts a chooser may offer for new money: a type the app can set up and an active status. An archived or

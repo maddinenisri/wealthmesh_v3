@@ -329,6 +329,13 @@ for (const width of [710, 1280]) {
       await expectFocusInside(archiving)
       await page.getByRole('button', { name: 'Cancel' }).click()
       await expect(opener).toBeFocused()
+      // The other way out of a refused delete: Review closing instead.
+      await opener.click()
+      await page.getByRole('button', { name: 'Review closing instead' }).click()
+      const closing = page.getByRole('region', { name: `Review closing Used Savings ${width}` })
+      await expectFocusInside(closing)
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await expect(opener).toBeFocused()
       await expect(page.getByRole('main')).toContainText('Active')
     })
   })
