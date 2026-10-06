@@ -171,11 +171,20 @@ public class EntryValidator {
             return Mono.just(java.util.Optional.of(request.categoryId()));
         }
         String categoryKind = "income".equals(kind) ? "income" : "spending";
-        return (named ? categories.findAnyByKindAndName(categoryKind, request.category().strip(),
+        return (named ? replayNamed(categoryKind, request.category().strip(),
                 stored.categoryOrNone()) : Mono.<Category>empty())
                 .switchIfEmpty(Mono.error(bad("Choose " + ("income".equals(categoryKind) ? "an income" : "a spending")
                         + " category")))
                 .map(c -> java.util.Optional.of(c.id()));
+    }
+
+    /**
+     * A name in a retry: the stored row's own category under any name it had (a rename since the save does not break
+     * the retry), else the category that carries the name now, archived and merged ones included.
+     */
+    private Mono<Category> replayNamed(String kind, String name, UUID stored) {
+        return categories.findStoredByAnyName(kind, name, stored)
+                .switchIfEmpty(Mono.defer(() -> categories.findAnyByKindAndName(kind, name, stored)));
     }
 
     private Mono<List<Portion>> replayPortions(List<PortionRequest> requested, Stored stored) {
@@ -195,7 +204,7 @@ public class EntryValidator {
         if (p.category() == null || p.category().isBlank()) {
             return Mono.error(bad("Choose a spending category for each portion"));
         }
-        return categories.findAnyByKindAndName("spending", p.category().strip(),
+        return replayNamed("spending", p.category().strip(),
                         saved == null ? Stored.NONE : saved.categoryId())
                 .switchIfEmpty(Mono.error(bad("Choose a spending category for each portion")))
                 .map(c -> new Portion(c.id(), portionClass, amount));

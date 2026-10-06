@@ -36,6 +36,16 @@ public interface CategoryRepository extends ReactiveCrudRepository<Category, UUI
             ORDER BY (id = :preferred) DESC, archived_at IS NOT NULL, sort_order LIMIT 1""")
     Mono<Category> findAnyByKindAndName(String kind, String name, UUID preferred);
 
+    /**
+     * The category a stored row holds, when a retry names it as it was called when saved (D-049): its current name or
+     * a name it had before a rename (`category_event`). Empty when `name` is no name that category ever had.
+     */
+    @Query("""
+            SELECT c.* FROM category c WHERE c.id = :stored AND c.kind = :kind AND (c.name = :name OR EXISTS (
+                SELECT 1 FROM category_event e WHERE e.category_id = c.id AND e.action = 'renamed'
+                AND e.old_name = :name))""")
+    Mono<Category> findStoredByAnyName(String kind, String name, UUID stored);
+
     /** Reads one category and blocks a concurrent archive, rename or merge until the transaction ends. */
     @Query("SELECT * FROM category WHERE id = :id FOR SHARE")
     Mono<Category> findByIdForShare(UUID id);

@@ -111,6 +111,13 @@ public class RecurringStore {
                 .map((row, meta) -> Boolean.TRUE.equals(row.get("found", Boolean.class))).one();
     }
 
+    /** The outcome (paid or dismissed) a due date already has, empty when it has none. */
+    public Mono<String> outcomeOf(UUID scheduleId, LocalDate dueOn) {
+        return client.sql("SELECT outcome FROM recurring_occurrence WHERE schedule_id = :id AND due_on = :due")
+                .bind("id", scheduleId).bind("due", dueOn)
+                .map((row, meta) -> row.get("outcome", String.class)).one();
+    }
+
     /** Records that an occurrence was paid (with the entry that paid it) or dismissed. */
     public Mono<Void> addOccurrence(UUID scheduleId, LocalDate dueOn, String outcome, LocalDate paidOn,
             UUID activityId, UUID memberId, Instant at) {

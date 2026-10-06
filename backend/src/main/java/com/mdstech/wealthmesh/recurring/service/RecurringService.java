@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
@@ -282,7 +283,8 @@ public class RecurringService {
                 return store.latestAction(id).filter("resumed"::equals).filter(a -> s.nextDueOn().equals(date))
                         .switchIfEmpty(Mono.error(conflict("This bill is not paused"))).then();
             }
-            return store.setNextDue(id, date, "active").then(Mono.defer(() -> store.recordEvent(id, "resumed",
+            return unsettled(s, date).then(Mono.defer(() -> store.setNextDue(id, date, "active")))
+                    .then(Mono.defer(() -> store.recordEvent(id, "resumed",
                     memberId, clock.instant(), null, null, "Next due " + date + ", expected "
                             + dollars(s.amount()))));
         }));
@@ -306,7 +308,8 @@ public class RecurringService {
             if (s.nextDueOn().equals(date)) {
                 return Mono.empty();
             }
-            return store.setNextDue(id, date, "active").then(Mono.defer(() -> store.recordEvent(id, "rescheduled",
+            return unsettled(s, date).then(Mono.defer(() -> store.setNextDue(id, date, "active")))
+                    .then(Mono.defer(() -> store.recordEvent(id, "rescheduled",
                     memberId, clock.instant(), null, null, "Next due " + s.nextDueOn() + " to " + date)));
         }));
     }
@@ -352,6 +355,21 @@ public class RecurringService {
                                 null, "Deleted " + s.description() + ", expected " + dollars(s.amount())))), true);
     }
 
+    /**
+     * A due date that was already paid or dismissed cannot become the next occurrence again (a schedule has one
+     * occurrence per due date, V23): Resume and Reschedule refuse it, and name what happened to it.
+     */
+    private Mono<Void> unsettled(RecurringStore.Schedule s, LocalDate dueOn) {
+        return store.outcomeOf(s.id(), dueOn).flatMap(outcome -> Mono.<Void>error(conflict("The " + dueOn
+                + " occurrence of " + s.description() + " was already " + outcome
+                + ". Choose a later date, or a date that has not been paid or dismissed.")));
+    }
+
+    /** The database's own guard: two outcomes for one due date is a refusal, never a server error. */
+    private static ResponseStatusException alreadySettled(DuplicateKeyException e) {
+        return conflict("That occurrence was already paid or dismissed.");
+    }
+
     private Mono<ScheduleView> acting(UUID id, UUID memberId, boolean needsOpenAccount,
             java.util.function.Function<RecurringStore.Schedule, Mono<Void>> apply) {
         return acting(id, memberId, needsOpenAccount, apply, false);
@@ -373,7 +391,7 @@ public class RecurringService {
                         .flatMap(s -> validator.memberLocked(householdId, memberId).thenReturn(s)))
                 .flatMap(apply)
                 .then(Mono.defer(() -> store.scheduleAnyState(id)))
-                .flatMap(this::view));
+                .flatMap(this::view)).onErrorMap(DuplicateKeyException.class, RecurringService::alreadySettled);
     }
 
     /**
@@ -423,7 +441,8 @@ public class RecurringService {
                     + EntryValidator.amount(r.amount()) + "|" + r.paidOn() + "|" + r.categoryId() + "|" + r.category();
             return transactions.transactional(householdLock.lock()
                     .flatMap(householdId -> replayed(key, cutoff, fingerprint)
-                            .switchIfEmpty(Mono.defer(() -> recordNew(id, key, r, fingerprint, now)))));
+                            .switchIfEmpty(Mono.defer(() -> recordNew(id, key, r, fingerprint, now)))))
+                    .onErrorMap(DuplicateKeyException.class, RecurringService::alreadySettled);
         });
     }
 

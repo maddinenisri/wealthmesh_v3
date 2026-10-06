@@ -269,6 +269,61 @@ class ReplayRulesApiTests extends SplitTestBase {
         assertConflict(expense("diff-e", Naming.BY_NAME, "DiffOther", "5.00"));
     }
 
+    private void rename(String name, String newName) {
+        categoryChange(IDS.get(name), "rename", "{\"name\": \"%s\", \"enteredByMemberId\": \"%s\"}"
+                .formatted(newName, mayaId));
+    }
+
+    @Order(7)
+    @Test
+    @DisplayName("V2_CATEGORIES_003 a retry that names the category as it was called when saved replays after a "
+            + "rename (entry, batch, split, reminder, historical entry), also after two renames; a new key and "
+            + "another existing category are still refused")
+    void retryByNameAfterRename() {
+        historyAccounts = new String[] {account("Replay Rename Name", "5000.00"),
+                account("Replay Rename Id", "5000.00")};
+        String cat = "RenameRetry";
+        create(cat);
+        create("RenameOther");
+        String k = "rename-";
+        expense(k + "e", Naming.BY_NAME, cat, "5.00").expectStatus().isCreated();
+        batch(k + "b", Naming.BY_NAME, cat, "6.00").expectStatus().isCreated();
+        reminder(k + "r", Naming.BY_NAME, cat, "8.00").expectStatus().isCreated();
+        splitExpense(k + "s", Naming.BY_NAME, cat, "RenameOther").expectStatus().isCreated();
+        historical(k + "h", Naming.BY_NAME, cat, "7.00").expectStatus().isCreated();
+        rename(cat, "RenameRetry Two");
+        rename(cat, "RenameRetry Three");
+        int before = count();
+
+        expense(k + "e", Naming.BY_NAME, cat, "5.00").expectStatus().isOk();
+        batch(k + "b", Naming.BY_NAME, cat, "6.00").expectStatus().isOk();
+        reminder(k + "r", Naming.BY_NAME, cat, "8.00").expectStatus().isOk();
+        splitExpense(k + "s", Naming.BY_NAME, cat, "RenameOther").expectStatus().isOk();
+        historical(k + "h", Naming.BY_NAME, cat, "7.00").expectStatus().isOk();
+        expense(k + "e", Naming.BY_NAME, "RenameRetry Two", "5.00").expectStatus().isOk();
+        assertThat(count()).as("a replay saves nothing").isEqualTo(before);
+
+        assertConflict(expense(k + "e", Naming.BY_NAME, "RenameOther", "5.00"));
+        expense(k + "e2", Naming.BY_NAME, cat, "5.00").expectStatus().isBadRequest();
+    }
+
+    @Order(8)
+    @Test
+    @DisplayName("V2_CATEGORIES_003 a name that another category took after the rename is that other category, so the "
+            + "retry is a different request (409); the stored category's former name is still found by id")
+    void formerNameTakenByAnother() {
+        String cat = "TakenRetry";
+        create(cat);
+        expense("taken-e", Naming.BY_NAME, cat, "5.00").expectStatus().isCreated();
+        rename(cat, "TakenRetry Moved");
+        createCategory(cat, "spending");
+        // The stored row's own category answers to its former name first: the retry replays.
+        expense("taken-e", Naming.BY_NAME, cat, "5.00").expectStatus().isOk();
+        // The same name with a new key now means the category that carries it, never the renamed one.
+        expense("taken-e2", Naming.BY_NAME, cat, "5.00").expectStatus().isCreated();
+        expense("taken-e", Naming.BY_ID, "TakenRetry Moved", "5.00").expectStatus().isOk();
+    }
+
     private String dueReminder(String dueOn) {
         return """
                 {"kind": "expense", "description": "Replay due", "amount": "9.00", "dueOn": "%s",
