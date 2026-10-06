@@ -159,6 +159,7 @@ All resolved by the owner at checkpoint 1 (see `docs/decisions/questions.md`; D-
 
 | # | Check | Result | Fault seen | Test added |
 | --- | --- | --- | --- | --- |
+| 1 | colour (710px) | fixed | The label of "Record actual expense" (a small primary button) was dark on dark green | Cause: `cn` (tailwind-merge) read `text-caption` as a text colour and dropped `text-on-primary`; every small primary Button and Badge was affected. `cn` now knows the size; `cn.test.ts` and a `toHaveCSS('color')` assertion in `15-recurring` (both red before) |
 
 ## How it works
 

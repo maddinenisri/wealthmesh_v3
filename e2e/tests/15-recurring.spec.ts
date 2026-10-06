@@ -550,6 +550,11 @@ for (const [width, account, description] of [
       const item = page.getByRole('listitem').filter({ hasText: description })
       await expect(item).toContainText('Overdue by 2 days')
       await expect(item.getByRole('button', { name: 'Record actual expense' })).toBeVisible()
+      // Cowork fault: the label of a small primary button was dark on dark (tailwind-merge dropped text-on-primary).
+      await expect(item.getByRole('button', { name: 'Record actual expense' })).toHaveCSS(
+        'color',
+        'rgb(255, 255, 255)',
+      )
       await expect(item.getByRole('button', { name: 'Reschedule' })).toBeVisible()
       await expect(item.getByRole('button', { name: 'Dismiss this occurrence' })).toBeVisible()
       expect(await balanceOf(page, id)).toBe('5000.00')
