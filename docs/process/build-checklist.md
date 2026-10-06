@@ -11,6 +11,8 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
 
 ## Rules and races
 
+- [ ] A rule that restricts stored data (one per category, at most N) is tried against every operation that rewrites that
+      data: merge, move, replacement, Undo (slice 11: one portion per category broke correcting a merged split).
 - [ ] Every rule a feature adds has a raw-API test of the forbidden case. A UI that hides the option is not the guard.
 - [ ] A state rule (inactive, closed, replaced) is enforced where the server writes, at every use of that state
       (owner, entered-by, target account), and re-read under the lock.
@@ -39,6 +41,10 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
       shows a signed amount, and every category or account chooser, and decide each (slice 08 Cowork findings 4 to 8).
 - [ ] After Confirm, focus and scroll go somewhere stated: the row that changed, or the opener when the row is gone;
       a review sentence reads right for 0 and 1 entries.
+- [ ] Every way out of a panel has stated focus and an e2e line: Confirm, Cancel, Back from a review, a row removed
+      inside the form, and a removal or Undo (slice 11: Back, Remove portion and Confirm of a removal lost focus). A
+      status line says what changed. Run each new e2e assertion red on its own (`--grep`): a serial run stops at the first
+      failure and hides the rest.
 - [ ] Edit forms start from the current values and show the original. A long name and label wrap at 710px.
 - [ ] Anything new that distinguishes accounts or entries (type, status, owner) shows in the lists, not only on the
       detail page.

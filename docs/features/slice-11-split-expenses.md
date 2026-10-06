@@ -3,8 +3,8 @@
 One file per slice, edited only by the session working it.
 
 - Slice: 11 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/spending/categories/split-expenses.feature`
-- Status: in-progress (built; validator findings fixed; waiting at checkpoint 2)
-- Started: 2026-10-05 20:34 (session clock)  Finished:   Commit: 
+- Status: done locally (not pushed)
+- Started: 2026-10-05 20:34 (session clock)  Finished: 2026-10-06  Commit: `1ac5740`
 
 ## Prompts and directions
 
@@ -23,7 +23,7 @@ At the checkpoint-2 pass, remember that Cowork has found 8 faults for two slices
 A second paste of the prompt, without the Q-035 and Cowork paragraphs, said everything else in the owner's plan stands.
 - Repository fact: Q-035 was already built and committed in `8ce398d` (end of the slice 09 and 10 session, race test `CategoryGuardsApiTests.plainSaveWaitsForMemberRow`), so there is no group 0 to build. I will check the test fails with the lock removed in Prove.
 - 2026-10-05 Checkpoint 1 answer: approved the task list (groups 1 to 6) and the design. Q-036: a second Undo of the same removal is idempotent (the same restored result, no second restore, no 409); one Undo restores the payment and both portions; record it in `decisions.md` as cross-cutting (D-044) and keep slice 02's Undo consistent on a repeat. Add to the inventory and tests: moving a split to another account carries its portions; reminders and a card purchase with portions read correctly; keep the portions table extensible for slice 16 debt payments. One commit per group, local only, no push, no Claude trailer. Report the Cowork finding count against 8 and 8, and whether the 710px table and focus faults appear.
-- Checkpoint 2 answer: pending
+- 2026-10-06 Checkpoint 2 answer: owner pass (Cowork) at 710px, window went to the background partway: all eight steps pass, 5 faults (focus after Back, after Confirm, after Remove portion; history without the word Split; "Split expense (split)"), positions by eye unverified. See Cowork findings.
 
 ## Scope
 
@@ -111,7 +111,7 @@ The dev stack was restarted on the new build (Flyway to V17, the old backend had
 
 - Owner choices made without a question (override at checkpoint 2): (a) a reminder with portions is refused with a 400; (b) a category may repeat in a split, so a merge shows two lines under one name; (c) a split has no "Change to transfer" button in the UI (the API converts it, EXPENSE_008 does not reach splits from the form).
 
-- Q-036 (open, also in `questions.md`): one Undo or two for `V2_SPLITS_004`. v1 was not running, so it was not consulted.
+- Q-036 resolved (owner, 2026-10-05): D-044. v1 was not running, so it was not consulted.
 - The owner's "plan for slice 11, including the inventory items" is not in the repo; I used the skill's inventory. Paste the plan if it differs.
 
 ## Cowork findings
@@ -128,14 +128,28 @@ Count: **5 faults** after 133 e2e tests, against 8 and 8 for slices 08 and 09/10
 
 ## How it works
 
-(after Land)
+Written by a read-only agent over the diff and checked against the code (two points corrected: the Undo button sits in the history table; the save and its portions run in one transaction, `EntryService.record`).
+
+**What a person can do.** On a checking or savings account, "Split an expense" (on a card, "Split a purchase") opens a form with the payment (description, amount, date) and two or more portions, each a category, a class and an amount. A line says how much is assigned and how much is still to assign. Review lists the portions; Confirm stays disabled until nothing is left to assign. "Edit" on a split row opens the same form with a reason field; saving replaces the payment and the old split stays in history. "Remove" takes the whole payment out (the review shows both portions and the Balance coming back); Undo in the history table brings it back, and a second Undo changes nothing. The Spending page shows each portion under its category, and opening a category lists the payment with the part that is in it.
+
+**What changed underneath.** A split is one payment row plus 2 to 20 portion rows (V16 `activity_portion`). The payment keeps the amount, date, Balance, removal and history. The view `activity_part` gives one row per portion (or one for a payment with none); category totals, class totals, a category's entries, usage and merge read it, while Balance, month totals and spending by month still read `activity`, so a split counts once. V17 lets a category repeat (a merge can leave two portions in one). A second Undo of the same removal answers 200 with no second event, for entries and for transfers and card payments (D-044).
+
+**The main path of a save.** (1) `SplitEntry.tsx` sends the payment with `portions`. (2) `EntryService.record` locks the account row and reads the account again. (3) `EntryValidator.portions` checks the sum, the count, each amount and category (share-locked lowest id first). (4) The member is read under a share lock. (5) The payment row is saved, then `PortionStore.insert` writes the portions, in the same transaction. (6) `ActivityStore` and `PortionStore.shownFor` attach the portions to lists and history. A correction is `EntryChangeService.replace`: it carries the old portions when none are sent, rechecks each portion category under the locks and writes the new portions on the replacement row.
+
+**Decisions and open items.** D-043 (model), D-044 (Undo). Choices to override: a reminder with portions is a 400; a category may repeat; a split has no "Change to transfer" button. Open: positions by eye at 710px and 1280px; Spending entries below the category list at 710px.
+
+**How to verify.** `npm run coverage -- --require --slice 11`; `scripts/gradle.sh test --tests '*Split*'`; `npm run e2e`.
 
 ## Handoff
 
-(after Land)
+- Built: split an expense (and a card purchase) across 2 to 20 spending portions that add up; correct it as a replacement (portions carried when omitted); remove and Undo it whole; the Spending page, category usage, merge and class totals follow portions; history keeps the original split. V16 (`activity_portion`, view `activity_part`) and V17 (a category may repeat). D-043 and D-044; Q-035 was already done in `8ce398d`; Q-036 resolved.
+- Watch for: any new reader of category or class must read `activity_part` (not `activity`) and any Balance or month total keeps `activity`; `activity_portion.kind` is 'category' only, ready for slice 16 principal and interest portions (extend the CHECK and keep the view on `kind = 'category'`); every later Undo follows D-044; a portion category is share-locked lowest id first (`CategoryStore.lockShared`); reminders refuse portions (400); a split has no Change to transfer button (the API converts it).
+- Left open: Spending category entries sit below the whole category list at 710px (about 140px under the fold by the DOM reading); panel and scroll positions after Cancel or Confirm from a scrolled page, and 1280px by eye, were not verified; a flaky "Connection reset" in `StartMoveGuardApiTests` once in a full run; the "$X still to assign" message when only the amount changes with carried portions; `PortionStore.isSplit` is unused; the Balance-correction-replaced-by-split-fee path is allowed and untested.
+- v1 showed: not running, not consulted.
+- Next: slice 12 (bank and debt groups, account lifecycle).
 
 ## Retro (3 lines, also appended to `docs/process/retro.md`)
 
-- What slowed this session:
-- What went well:
-- Process change to try:
+- What slowed this session: the validator again found a gap after the build (a split could not be corrected after its categories were merged: my one-portion-per-category rule collided with the merge pointer); three focus faults at Cowork (Back, Remove portion, Confirm of a removal or Undo) after 127 e2e tests; my own click-through failed because the browser tab was hidden; the serial e2e run stops at the first failure so new assertions were not all seen red.
+- What went well: planting each lock defect proved every race test; mutating Q-035 proved its test; the portions view kept Balance and month totals untouched; 5 Cowork faults against 8 and 8.
+- Process change to try: try a stored-data restriction against merge, move and Undo; list every exit of a panel with its focus; run new e2e assertions red alone (checklist and improvements log updated).
