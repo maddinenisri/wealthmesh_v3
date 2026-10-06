@@ -3,7 +3,7 @@ export const navigation = [
   { to: '/', label: 'Household', end: true },
   { to: '/accounts', label: 'Accounts', end: false },
   { to: '/spending', label: 'Spending', end: false },
-  { to: '/recurring', label: 'Recurring bills', end: false },
+  { to: '/recurring', label: 'Recurring', end: false },
   { to: '/categories', label: 'Categories', end: false },
   { to: '/design', label: 'Design system', end: false },
 ] as const

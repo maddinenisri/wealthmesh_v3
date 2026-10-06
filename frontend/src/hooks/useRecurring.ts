@@ -7,6 +7,7 @@ import {
   dismissOccurrence,
   dismissSuggestion,
   getRecurring,
+  listRecurringPayments,
   pauseSchedule,
   recordActual,
   rescheduleSchedule,
@@ -101,3 +102,11 @@ export const useDismissOccurrence = (id: string) =>
   useScheduleAction(({ dueOn, memberId }: { dueOn: string; memberId: string }) =>
     dismissOccurrence(id, dueOn, memberId),
   )
+
+/** Which entries of an account paid an occurrence of a recurring bill, by entry id. */
+export function useRecurringPayments(accountId: string) {
+  return useQuery({
+    queryKey: [...recurringKey, 'payments', accountId],
+    queryFn: () => listRecurringPayments(accountId),
+  })
+}

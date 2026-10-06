@@ -7,6 +7,7 @@ import { useAccountActivity } from '../../hooks/useActivity'
 import { ownerNames } from '../accounts/ownerNames'
 import { EntryHistory } from './EntryHistory'
 import { PortionList } from './PortionList'
+import { useRecurringPayments } from '../../hooks/useRecurring'
 import { classText } from './classes'
 import { shownAmount } from './signedAmount'
 import { givesMoney, isMovement, movementWord, rowName } from './transferRows'
@@ -38,6 +39,7 @@ export function ActivityList({
   lockedBy?: (counterAccountId: string | null) => string | undefined
 }) {
   const activity = useAccountActivity(accountId)
+  const payments = useRecurringPayments(accountId)
   const [showHistory, setShowHistory] = useState(false)
 
   if (activity.isPending) return <p className="text-sm text-ink-muted">Loading activity</p>
@@ -106,6 +108,16 @@ export function ActivityList({
                             {classText(entry.classification)}
                           </span>
                         )}
+                        {payments.data
+                          ?.filter((payment) => payment.activityId === entry.id)
+                          .map((payment) => (
+                            <span
+                              key={payment.scheduleId}
+                              className="block text-caption text-ink-muted"
+                            >
+                              Recurring bill: {payment.description}, occurrence {payment.dueOn}
+                            </span>
+                          ))}
                       </>
                     )}
                   </Td>

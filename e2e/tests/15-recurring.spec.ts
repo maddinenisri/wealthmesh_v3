@@ -249,7 +249,7 @@ for (const [width, account, description] of [
       }) => {
         await page.goto('/recurring')
         const item = page.getByRole('listitem').filter({ hasText: description })
-        const opener = item.getByRole('button', { name: 'Dismiss suggestion' })
+        const opener = item.getByRole('button', { name: /Dismiss the .* suggestion/ })
         await opener.click()
         const review = page.getByRole('region', { name: /Review dismissing/ })
         await expectFocusInside(review)
@@ -692,6 +692,28 @@ for (const [width, account] of [
       const row = page.getByRole('listitem').filter({ hasText: longName.slice(0, 40) })
       const box = await row.boundingBox()
       expect(box!.x + box!.width).toBeLessThanOrEqual(width)
+    })
+  })
+}
+
+for (const width of [710, 1280] as const) {
+  test.describe(`Recurring page details at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+
+    test(`V2_RECURRING_006 the main menu stays on one line and Record opens with today as the payment date (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto('/recurring')
+      const links = page.getByRole('navigation', { name: 'Main' }).getByRole('link')
+      const tops = await links.evaluateAll((els) =>
+        els.map((el) => Math.round(el.getBoundingClientRect().top)),
+      )
+      expect(new Set(tops).size).toBe(1)
+      const record = page.getByRole('button', { name: /^Record actual expense for / }).first()
+      if ((await record.count()) > 0) {
+        await record.click()
+        await expect(page.getByLabel('Payment date')).toHaveValue('2026-10-03')
+      }
     })
   })
 }

@@ -33,6 +33,7 @@ class RecurringRecordApiTests extends RecurringTestBase {
         reviewRecord(electricity, recordBody("2026-10-05", "180.00", "2026-09-30")).expectStatus().isOk()
                 .expectBody().jsonPath("$.accountName").isEqualTo("Record Checking")
                 .jsonPath("$.categoryName").isEqualTo("Utilities").jsonPath("$.amount").isEqualTo("180.00")
+                .jsonPath("$.balanceBefore").isEqualTo("4820.00").jsonPath("$.balanceAfter").isEqualTo("4640.00")
                 .jsonPath("$.paidOn").isEqualTo("2026-09-30").jsonPath("$.early").isEqualTo(true)
                 .jsonPath("$.nextDueOn").isEqualTo("2026-11-05").jsonPath("$.followingDueOn")
                 .isEqualTo("2026-12-05");
@@ -63,6 +64,10 @@ class RecurringRecordApiTests extends RecurringTestBase {
         assertActivityCount(checking, 2);
         assertSpending("2026-09", "360.00");
         assertSpending("2026-10", "0.00");
+        // The account page can say which bill an entry paid.
+        webTestClient.get().uri(RECURRING + "/payments?accountId=" + checking).exchange().expectStatus().isOk()
+                .expectBody().jsonPath("$.length()").isEqualTo(1).jsonPath("$[0].description")
+                .isEqualTo("Electricity").jsonPath("$[0].dueOn").isEqualTo("2026-10-05");
         webTestClient.get().uri("/api/v1/spending?month=2026-09").exchange().expectBody()
                 .jsonPath("$.categories[?(@.name=='Utilities')].total").isEqualTo("360.00");
     }

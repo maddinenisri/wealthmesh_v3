@@ -1158,6 +1158,24 @@ export function mockApi(
       log(request)
       return HttpResponse.json(overview())
     }),
+    http.get('*/api/v1/recurring/payments', ({ request }) => {
+      log(request)
+      const accountId = new URL(request.url).searchParams.get('accountId')
+      return HttpResponse.json(
+        state.schedules
+          .filter((s) => s.accountId === accountId)
+          .flatMap((s) =>
+            s.occurrences
+              .filter((o) => o.activityId)
+              .map((o) => ({
+                activityId: o.activityId,
+                scheduleId: s.id,
+                description: s.description,
+                dueOn: o.dueOn,
+              })),
+          ),
+      )
+    }),
     http.post('*/api/v1/recurring/suggestions/dismiss', async ({ request }) => {
       log(request)
       const body = (await request.json()) as { accountId: string; description: string }
@@ -1225,6 +1243,13 @@ export function mockApi(
         accountName: state.accounts.find((a) => a.id === found.accountId)?.name ?? '',
         categoryName: CATEGORIES.find((c) => c.id === body.categoryId)?.name ?? '',
         amount: Number(body.amount).toFixed(2),
+        balanceBefore: Number(
+          state.accounts.find((a) => a.id === found.accountId)?.balance.amount ?? 0,
+        ).toFixed(2),
+        balanceAfter: (
+          Number(state.accounts.find((a) => a.id === found.accountId)?.balance.amount ?? 0) -
+          Number(body.amount)
+        ).toFixed(2),
         paidOn: body.paidOn,
         dueOn: body.dueOn,
         early: body.paidOn < body.dueOn,

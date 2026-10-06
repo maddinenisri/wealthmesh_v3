@@ -32,6 +32,7 @@ import com.mdstech.wealthmesh.category.domain.Category;
 import com.mdstech.wealthmesh.household.repository.HouseholdLock;
 import com.mdstech.wealthmesh.money.Money;
 import com.mdstech.wealthmesh.recurring.dto.DismissSuggestionRequest;
+import com.mdstech.wealthmesh.recurring.dto.PaymentView;
 import com.mdstech.wealthmesh.recurring.dto.RecordRequest;
 import com.mdstech.wealthmesh.recurring.dto.RecordReview;
 import com.mdstech.wealthmesh.recurring.dto.RecurringOverview;
@@ -387,12 +388,22 @@ public class RecurringService {
                         .flatMap(account -> Mono.fromCallable(() -> AccountState.requireOpen(account)))
                         .flatMap(account -> validator.parse(account, "expense", entryOf(s, r), null)
                                 .flatMap(entry -> validator.scheduleCategory(null, entry.categoryId()))
-                                .map(category -> new RecordReview(s.description(), s.accountName(), category.name(),
-                                        Money.format(EntryValidator.amount(r.amount())), r.paidOn(), r.dueOn(),
+                                .flatMap(category -> activity.deltaOf(account.id()).map(delta -> {
+                                    BigDecimal before = account.openingAmount().add(delta.amount());
+                                    return new RecordReview(s.description(), s.accountName(), category.name(),
+                                        Money.format(EntryValidator.amount(r.amount())), Money.format(before),
+                                        Money.format(before.subtract(EntryValidator.amount(r.amount()))),
+                                        r.paidOn(), r.dueOn(),
                                         r.paidOn().isBefore(r.dueOn()),
                                         Recurrence.following(r.dueOn(), s.frequency(), s.anchorDay()),
                                         Recurrence.following(Recurrence.following(r.dueOn(), s.frequency(),
-                                                s.anchorDay()), s.frequency(), s.anchorDay()))))));
+                                                s.anchorDay()), s.frequency(), s.anchorDay()));
+                                })))));
+    }
+
+    /** The entries of an account that paid an occurrence of a recurring bill, for the account page. */
+    public Flux<PaymentView> payments(UUID accountId) {
+        return store.paymentsOf(accountId);
     }
 
     /**

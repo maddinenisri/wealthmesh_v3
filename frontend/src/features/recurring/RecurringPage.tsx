@@ -167,6 +167,7 @@ export function RecurringPage() {
                 <ScheduleItem
                   key={schedule.id}
                   schedule={schedule}
+                  members={members ?? []}
                   onAction={(action) => open({ kind: action, schedule })}
                 />
               ))}

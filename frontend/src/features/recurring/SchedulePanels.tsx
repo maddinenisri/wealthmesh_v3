@@ -92,8 +92,9 @@ export function ResumePanel({ schedule, members, onDone, onCancel }: Props) {
     <ActionPanel
       heading={`Review resuming ${schedule.description}`}
       members={members}
-      member={reviewed ? who.member : undefined}
+      member={who.member}
       setMemberId={who.setMemberId}
+      confirmDisabled={!reviewed}
       error={resume.error?.message}
       pending={resume.isPending}
       confirmLabel="Confirm resuming"
@@ -123,7 +124,7 @@ export function ResumePanel({ schedule, members, onDone, onCancel }: Props) {
       {reviewed && (
         <p className="text-sm">
           {schedule.description} becomes Active, expected {formatMoney(Number(schedule.amount))},
-          next due {dueOn}. Nothing is recorded for the months it was paused.
+          next due {dueOn}. Nothing is recorded for the time it was paused.
         </p>
       )}
     </ActionPanel>
@@ -172,8 +173,9 @@ export function ReschedulePanel({ schedule, members, onDone, onCancel }: Props) 
     <ActionPanel
       heading={`Review rescheduling ${schedule.description}`}
       members={members}
-      member={dueOn !== '' ? who.member : undefined}
+      member={who.member}
       setMemberId={who.setMemberId}
+      confirmDisabled={dueOn === ''}
       error={reschedule.error?.message}
       pending={reschedule.isPending}
       confirmLabel="Confirm rescheduling"

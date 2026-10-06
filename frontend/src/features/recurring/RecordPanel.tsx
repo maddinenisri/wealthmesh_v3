@@ -9,6 +9,7 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useRecordActual, useReviewRecord } from '../../hooks/useRecurring'
 import { formatMoney, parseAmount } from '../../lib/money'
 import { EnteredBy } from '../activity/EnteredBy'
+import { monthLabel } from '../budgets/budgetText'
 import { Panel } from '../activity/Panel'
 
 type Values = { amount: string; paidOn: string; categoryId: string }
@@ -21,19 +22,32 @@ const newKey = () => globalThis.crypto.randomUUID()
  * and marks the occurrence paid; the next occurrence follows the due date. Cancel and Back save nothing, and the
  * occurrence stays unpaid (RECURRING_003, 004).
  */
-export function RecordPanel({
+export function RecordPanel(props: {
+  schedule: Schedule
+  members: Member[]
+  onDone: (message: string) => void
+  onCancel: () => void
+}) {
+  // The payment date starts as today, so the form waits for the server's date rather than opening empty.
+  const today = useToday()
+  if (!today.data) return <p className="mt-3 text-sm text-ink-muted">Loading</p>
+  return <RecordForm {...props} today={today.data} />
+}
+
+function RecordForm({
   schedule,
   members,
   onDone,
   onCancel,
+  today,
 }: {
+  today: string
   schedule: Schedule
   members: Member[]
   onDone: (message: string) => void
   onCancel: () => void
 }) {
   const categories = useCategories('expense')
-  const today = useToday()
   const { member, setMemberId } = useEnteringAs(members)
   const review = useReviewRecord(schedule.id!)
   const record = useRecordActual(schedule.id!, schedule.accountId)
@@ -42,7 +56,7 @@ export function RecordPanel({
   const { control, handleSubmit, getValues } = useForm<Values>({
     defaultValues: {
       amount: schedule.amount,
-      paidOn: today.data ?? '',
+      paidOn: today,
       categoryId: schedule.categoryId,
     },
   })
@@ -64,7 +78,7 @@ export function RecordPanel({
         onSuccess: (saved) => {
           const early = values.paidOn < schedule.nextDueOn
           onDone(
-            `Recorded ${formatMoney(Number(parseAmount(values.amount)))} paid ${values.paidOn} for the ${schedule.nextDueOn} occurrence${early ? `, paid early on ${values.paidOn}` : ''}. The next occurrence is ${saved.nextDueOn}. The account Balance and ${values.paidOn.slice(0, 7)} spending include it on its own date.`,
+            `Recorded ${formatMoney(Number(parseAmount(values.amount)))} paid ${values.paidOn} for the ${schedule.nextDueOn} occurrence${early ? `, paid early on ${values.paidOn}` : ''}. The next occurrence is ${saved.nextDueOn}. The account Balance and ${monthLabel(values.paidOn.slice(0, 7), true)} spending include it on its own date.`,
           )
         },
       },
@@ -94,10 +108,11 @@ export function RecordPanel({
           </dl>
           <p className="text-sm">
             Saving records a real expense of {formatMoney(Number(result.amount))} on {result.paidOn}
-            , lowers the {result.accountName} Balance by that amount, and counts in{' '}
-            {result.paidOn.slice(0, 7)} spending on that date. The {result.dueOn} occurrence is
-            marked paid{result.early ? ` early on ${result.paidOn}` : ''}, and the next one stays{' '}
-            {result.nextDueOn}.
+            . The {result.accountName} Balance goes from {formatMoney(Number(result.balanceBefore))}{' '}
+            to {formatMoney(Number(result.balanceAfter))}, and the expense counts in{' '}
+            {monthLabel(result.paidOn.slice(0, 7), true)} spending on that date. The {result.dueOn}{' '}
+            occurrence is marked paid{result.early ? ` early on ${result.paidOn}` : ''}, and the
+            next one stays {result.nextDueOn}.
           </p>
           <p className="text-sm text-ink-muted">Nothing changes until you confirm.</p>
           <EnteredBy members={members} member={member} setMemberId={setMemberId} />
@@ -165,8 +180,7 @@ export function RecordPanel({
               label="Payment date"
               rules={{
                 required: 'Enter the date it was paid',
-                validate: (value) =>
-                  !today.data || value <= today.data || 'A payment date cannot be after today',
+                validate: (value) => value <= today || 'A payment date cannot be after today',
               }}
             />
             <SelectField control={control} name="categoryId" label="Category">

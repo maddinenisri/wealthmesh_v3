@@ -1,9 +1,22 @@
+import type { Member } from '../../api/household'
 import type { Schedule } from '../../api/recurring'
+import { ownerNames } from '../accounts/ownerNames'
 import { Badge, Button } from '../../design-system'
 import { formatMoney } from '../../lib/money'
 import { stamp } from '../../lib/stamp'
 import { Bills } from './Bills'
 import { FREQUENCY_LABEL, overdueText, stateLabel } from './recurringText'
+
+const EVENT_LABEL: Record<string, string> = {
+  created: 'Created',
+  changed: 'Changed',
+  paused: 'Paused',
+  resumed: 'Resumed',
+  rescheduled: 'Rescheduled',
+  paid: 'Paid',
+  dismissed: 'Dismissed',
+  deleted: 'Deleted',
+}
 
 export type ScheduleAction =
   'record' | 'reschedule' | 'dismissOccurrence' | 'change' | 'pause' | 'resume' | 'delete'
@@ -15,9 +28,11 @@ export type ScheduleAction =
  */
 export function ScheduleItem({
   schedule,
+  members,
   onAction,
 }: {
   schedule: Schedule
+  members: Member[]
   onAction: (action: ScheduleAction) => void
 }) {
   const open = schedule.accountStatus === 'active'
@@ -49,6 +64,14 @@ export function ScheduleItem({
           Paused. It was next due {schedule.nextDueOn}; no payment is expected until it resumes.
         </p>
       )}
+      {!open && (
+        <p className="mt-1 text-sm">
+          The {schedule.accountStatus === 'closed' ? 'closed' : 'archived'} account{' '}
+          {schedule.accountName} takes no new money, so recording, changing, resuming and
+          rescheduling wait until it is{' '}
+          {schedule.accountStatus === 'closed' ? 'reopened' : 'restored'}.
+        </p>
+      )}
       {schedule.overdueDays !== null && (
         <p className="mt-1 text-sm font-medium text-negative">
           {overdueText(schedule.overdueDays)}
@@ -76,7 +99,9 @@ export function ScheduleItem({
           <ul className="mt-1 text-ink-muted">
             {schedule.history.map((event, index) => (
               <li key={`${event.at}-${index}`}>
-                {event.action}, {stamp(event.at)}
+                {EVENT_LABEL[event.action] ?? event.action}
+                {event.memberId ? ` by ${ownerNames([event.memberId], members)}` : ''},{' '}
+                {stamp(event.at)}
                 {event.detail && <span className="block">{event.detail}</span>}
               </li>
             ))}
@@ -85,37 +110,71 @@ export function ScheduleItem({
       )}
       <div className="mt-2 flex flex-wrap gap-2">
         {open && schedule.status === 'active' && (
-          <Button size="sm" onClick={() => onAction('record')}>
+          <Button
+            size="sm"
+            aria-label={`Record actual expense for ${schedule.description}`}
+            onClick={() => onAction('record')}
+          >
             Record actual expense
           </Button>
         )}
         {open && schedule.overdueDays !== null && (
-          <Button size="sm" variant="secondary" onClick={() => onAction('reschedule')}>
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-label={`Reschedule ${schedule.description}`}
+            onClick={() => onAction('reschedule')}
+          >
             Reschedule
           </Button>
         )}
         {schedule.overdueDays !== null && (
-          <Button size="sm" variant="secondary" onClick={() => onAction('dismissOccurrence')}>
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-label={`Dismiss this occurrence of ${schedule.description}`}
+            onClick={() => onAction('dismissOccurrence')}
+          >
             Dismiss this occurrence
           </Button>
         )}
         {open && (
-          <Button size="sm" variant="secondary" onClick={() => onAction('change')}>
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-label={`Change ${schedule.description}`}
+            onClick={() => onAction('change')}
+          >
             Change
           </Button>
         )}
         {schedule.status === 'active' ? (
-          <Button size="sm" variant="secondary" onClick={() => onAction('pause')}>
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-label={`Pause ${schedule.description}`}
+            onClick={() => onAction('pause')}
+          >
             Pause
           </Button>
         ) : (
           open && (
-            <Button size="sm" variant="secondary" onClick={() => onAction('resume')}>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label={`Resume ${schedule.description}`}
+              onClick={() => onAction('resume')}
+            >
               Resume
             </Button>
           )
         )}
-        <Button size="sm" variant="ghost" onClick={() => onAction('delete')}>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label={`Delete ${schedule.description}`}
+          onClick={() => onAction('delete')}
+        >
           Delete
         </Button>
       </div>

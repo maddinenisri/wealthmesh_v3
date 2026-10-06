@@ -157,9 +157,21 @@ All resolved by the owner at checkpoint 1 (see `docs/decisions/questions.md`; D-
 
 ## Cowork findings
 
+Owner pass (Cowork): 710px by real clicks, 1280px by opening and cancelling each panel on one bill (no save at 1280px). All nine steps pass on behaviour; no focus or position fault recurred. Count against 8, 8, 5, 5, 5 and 7: **9** (8 in the second pass plus the button colour).
+
 | # | Check | Result | Fault seen | Test added |
 | --- | --- | --- | --- | --- |
 | 1 | colour (710px) | fixed | The label of "Record actual expense" (a small primary button) was dark on dark green | Cause: `cn` (tailwind-merge) read `text-caption` as a text colour and dropped `text-on-primary`; every small primary Button and Badge was affected. `cn` now knows the size; `cn.test.ts` and a `toHaveCSS('color')` assertion in `15-recurring` (both red before) |
+| 2 | 3 | fixed | Resume and Reschedule opened with an empty "Entered by" chooser although Entering as was set | `ActionPanel` always shows the member; Confirm waits for a date (`confirmDisabled`); two Vitest tests (red before) |
+| 3 | 8 | fixed | History showed what and when, not who | "Created by Maya, <time>"; Vitest (red before) |
+| 4 | 7 | fixed | Every row's buttons were named only "Change", "Pause", "Delete" | Each button names its bill ("Delete Gym"); suggestions the same; the Vitest tests find them by those names |
+| 5 | 3 | fixed | The payment date was empty the first time Record opened | The form waits for the server's date; Vitest (red before) and an e2e line (not seen red: the e2e DB has today loaded by then) |
+| 6 | 7 | fixed | On the account page an expense paid by a recurring bill looked like any other; its removal review did not say the occurrence stays paid | New `GET /recurring/payments?accountId=` (follows a corrected payment's replacement chain); "Recurring bill: X, occurrence <date>" on the row; a line in the removal and Undo reviews; API and Vitest tests (red before) |
+| 7 | 6 | fixed | The record review gave no resulting Balance and said "2026-10 spending" | `RecordReview.balanceBefore/After`; "Balance goes from $5,000.00 to $4,820.00", "October 2026 spending"; API and Vitest tests (red before) |
+| 8 | 7 | fixed | A schedule on an archived account said Active with no reason Record was missing | A line says the account takes no new money until restored or reopened; Vitest (red before) |
+| 9 | wording | fixed | History verbs lower case; "the months it was paused" for a weekly bill; a past first due date saved without a warning | Capitalised verbs, "the time it was paused", and a review line "has already passed, so this bill will show as overdue as soon as it is saved"; Vitest (red before) |
+
+Decisions the owner raised, not changed: Delete has no Undo (Q-047, owner's answer); a bill is paid from checking or savings, not a card (decision 12); the menu label is now "Recurring" (was "Recurring bills") after the owner saw it wrap at 710px: not reproduced in headless Chromium, so no assertion was seen red.
 
 ## How it works
 

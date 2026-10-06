@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import com.mdstech.wealthmesh.recurring.dto.EventView;
 import com.mdstech.wealthmesh.recurring.dto.OccurrenceView;
+import com.mdstech.wealthmesh.recurring.dto.PaymentView;
 import com.mdstech.wealthmesh.recurring.service.Suggestions;
 
 import reactor.core.publisher.Flux;
@@ -181,6 +182,27 @@ public class RecurringStore {
                 .bind("key", key)
                 .map((row, meta) -> new KeyHit(row.get("schedule_id", UUID.class),
                         row.get("fingerprint", String.class))).one();
+    }
+
+    /**
+     * The entries of an account that paid an occurrence of a recurring bill, each under every row of its replacement
+     * chain, so a corrected payment still says which bill it paid.
+     */
+    public Flux<PaymentView> paymentsOf(UUID accountId) {
+        return client.sql("""
+                        WITH RECURSIVE chain(root, id) AS (
+                            SELECT o.activity_id, o.activity_id FROM recurring_occurrence o
+                            WHERE o.activity_id IS NOT NULL
+                            UNION ALL
+                            SELECT c.root, r.id FROM chain c JOIN activity r ON r.replaces_id = c.id)
+                        SELECT c.id AS activity_id, s.id AS schedule_id, s.description, o.due_on
+                        FROM chain c JOIN recurring_occurrence o ON o.activity_id = c.root
+                        JOIN recurring_schedule s ON s.id = o.schedule_id
+                        JOIN activity a ON a.id = c.id WHERE a.account_id = :account""")
+                .bind("account", accountId)
+                .map((row, meta) -> new PaymentView(row.get("activity_id", UUID.class),
+                        row.get("schedule_id", UUID.class), row.get("description", String.class),
+                        row.get("due_on", LocalDate.class))).all();
     }
 
     /** The dismissed suggestions, as the keys they match (account, category, description). */

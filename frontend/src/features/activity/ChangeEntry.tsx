@@ -6,6 +6,7 @@ import { useChangeEntry, useIncome, useSpending } from '../../hooks/useActivity'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney } from '../../lib/money'
 import { balanceText } from '../accounts/cardBalance'
+import { useRecurringPayments } from '../../hooks/useRecurring'
 import { EnteredBy } from './EnteredBy'
 import { PortionList } from './PortionList'
 
@@ -66,6 +67,7 @@ export function ChangeEntry({
   const monthTotal = income ? incomeTotal : spending
   const change = useChangeEntry(account.id, entry.id, mode === 'remove' ? 'removal' : 'undo')
   const { member, setMemberId } = useEnteringAs(members)
+  const paid = useRecurringPayments(account.id).data?.find((p) => p.activityId === entry.id)
 
   // Money in raises the Balance and the month's income; money out lowers the Balance and counts as spending.
   const effect = (income || refund ? 1 : -1) * Number(entry.amount) * (mode === 'remove' ? -1 : 1)
@@ -110,6 +112,14 @@ export function ChangeEntry({
             ? 'This does not reverse a bank deposit. The entry stays in history, where Undo restores it.'
             : 'Removing a tracked expense does not obtain a merchant refund. The entry stays in history, where Undo restores it.'}
       </p>
+      {paid && (
+        <p className="mt-2 max-w-md text-sm">
+          This expense paid the {paid.dueOn} occurrence of the recurring bill {paid.description}.{' '}
+          {mode === 'remove'
+            ? 'Removing it leaves that occurrence marked paid, and the next due date does not move back.'
+            : 'Undo brings the payment back under that occurrence.'}
+        </p>
+      )}
       <EnteredBy members={members} member={member} setMemberId={setMemberId} />
       <div className="mt-4 flex gap-2">
         <Button

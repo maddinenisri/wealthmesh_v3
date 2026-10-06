@@ -172,7 +172,7 @@ describe('recurring bills: suggestions', () => {
     const api = mockApi(withBills())
     const { user } = renderRoute('/recurring')
     await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
-    await user.click(await screen.findByRole('button', { name: 'Review and confirm' }))
+    await user.click(await screen.findByRole('button', { name: /^Review and confirm / }))
     expect(await screen.findByLabelText('Expected amount')).toHaveValue('180.00')
     expect(screen.getByLabelText('First due date')).toHaveValue('2026-10-05')
     await user.click(screen.getByRole('button', { name: 'Review' }))
@@ -195,15 +195,15 @@ describe('recurring bills: suggestions', () => {
     const api = mockApi(withBills())
     const { user } = renderRoute('/recurring')
     await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
-    const opener = await screen.findByRole('button', { name: 'Dismiss suggestion' })
+    const opener = await screen.findByRole('button', { name: /^Dismiss the .* suggestion$/ })
     await user.click(opener)
     const review = await screen.findByRole('region', { name: /Review dismissing/ })
     await user.click(within(review).getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('region', { name: /Review dismissing/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Dismiss suggestion' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: /^Dismiss the .* suggestion$/ })).toHaveFocus()
     expect(screen.getByRole('region', { name: 'Suggestions' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Dismiss suggestion' }))
+    await user.click(screen.getByRole('button', { name: /^Dismiss the .* suggestion$/ }))
     await user.click(
       await screen.findByRole('button', { name: 'Confirm dismissing the suggestion' }),
     )
@@ -251,7 +251,7 @@ describe('recurring bills: change, pause, resume, delete', () => {
     const api = mockApi(withSchedule())
     const { user } = renderRoute('/recurring')
     await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
-    await user.click(await screen.findByRole('button', { name: 'Change' }))
+    await user.click(await screen.findByRole('button', { name: /^Change / }))
     expect(await screen.findByLabelText('Expected amount')).toHaveValue('180.00')
     expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
     await user.clear(screen.getByLabelText('Expected amount'))
@@ -279,7 +279,7 @@ describe('recurring bills: change, pause, resume, delete', () => {
     const api = mockApi(withSchedule())
     const { user } = renderRoute('/recurring')
     await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
-    const opener = await screen.findByRole('button', { name: 'Change' })
+    const opener = await screen.findByRole('button', { name: /^Change / })
     await user.click(opener)
     await user.clear(await screen.findByLabelText('Expected amount'))
     await user.type(screen.getByLabelText('Expected amount'), '200.00')
@@ -287,7 +287,7 @@ describe('recurring bills: change, pause, resume, delete', () => {
     await screen.findByRole('region', { name: /Review: Electricity/ })
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('region', { name: /Review: Electricity/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Change' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: /^Change / })).toHaveFocus()
     expect(screen.getByRole('region', { name: 'Schedules' })).toHaveTextContent('Expected $180.00')
     expect(api.schedules[0].amount).toBe('180.00')
     expect(api.activity).toHaveLength(1)
@@ -297,7 +297,7 @@ describe('recurring bills: change, pause, resume, delete', () => {
     const api = mockApi(withSchedule())
     const { user } = renderRoute('/recurring')
     await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
-    await user.click(await screen.findByRole('button', { name: 'Pause' }))
+    await user.click(await screen.findByRole('button', { name: /^Pause / }))
     const review = await screen.findByRole('region', { name: /Review pausing Electricity/ })
     expect(review).toHaveTextContent('never overdue')
     await user.click(within(review).getByRole('button', { name: 'Confirm pausing' }))
@@ -308,13 +308,13 @@ describe('recurring bills: change, pause, resume, delete', () => {
     expect(list).toHaveTextContent('no payment is expected until it resumes')
     expect(api.activity).toHaveLength(1)
 
-    await user.click(await screen.findByRole('button', { name: 'Resume' }))
+    await user.click(await screen.findByRole('button', { name: /^Resume / }))
     const resume = await screen.findByRole('region', { name: /Review resuming Electricity/ })
     expect(within(resume).getByRole('button', { name: 'Confirm resuming' })).toBeDisabled()
     fireEvent.change(within(resume).getByLabelText('Next due date'), {
       target: { value: '2026-11-05' },
     })
-    expect(resume).toHaveTextContent('Nothing is recorded for the months it was paused')
+    expect(resume).toHaveTextContent('Nothing is recorded for the time it was paused')
     await user.click(within(resume).getByRole('button', { name: 'Confirm resuming' }))
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Electricity is Active again: expected $180.00, next due 2026-11-05',
@@ -327,7 +327,7 @@ describe('recurring bills: change, pause, resume, delete', () => {
     const api = mockApi(withSchedule())
     const { user } = renderRoute('/recurring')
     await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
-    await user.click(await screen.findByRole('button', { name: 'Delete' }))
+    await user.click(await screen.findByRole('button', { name: /^Delete / }))
     const review = await screen.findByRole('region', { name: /Review deleting the Electricity/ })
     expect(review).toHaveTextContent('no reminder is created from it')
     await user.click(within(review).getByRole('button', { name: 'Confirm deleting the estimate' }))
@@ -348,10 +348,10 @@ describe('recurring bills: change, pause, resume, delete', () => {
     mockApi(seeded)
     renderRoute('/recurring')
     const list = await screen.findByRole('region', { name: 'Schedules' })
-    expect(await within(list).findByText(/archived account/)).toBeInTheDocument()
-    expect(within(list).queryByRole('button', { name: 'Change' })).not.toBeInTheDocument()
-    expect(within(list).getByRole('button', { name: 'Pause' })).toBeInTheDocument()
-    expect(within(list).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(await within(list).findByText(/takes no new money/)).toBeInTheDocument()
+    expect(within(list).queryByRole('button', { name: /^Change / })).not.toBeInTheDocument()
+    expect(within(list).getByRole('button', { name: /^Pause / })).toBeInTheDocument()
+    expect(within(list).getByRole('button', { name: /^Delete / })).toBeInTheDocument()
   })
 })
 
@@ -391,7 +391,7 @@ describe('recurring bills: record the actual expense', () => {
 
   async function openRecord(user: User, paidOn: string) {
     await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
-    await user.click(await screen.findByRole('button', { name: 'Record actual expense' }))
+    await user.click(await screen.findByRole('button', { name: /^Record actual expense for / }))
     expect(await screen.findByLabelText('Actual amount')).toHaveValue('180.00')
     expect(screen.getByLabelText('Category')).toHaveValue(utilities())
     fireEvent.change(screen.getByLabelText('Payment date'), { target: { value: paidOn } })
@@ -439,7 +439,7 @@ describe('recurring bills: record the actual expense', () => {
       }),
     )
     expect(screen.queryByRole('region', { name: /Review recording/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Record actual expense' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: /^Record actual expense for / })).toHaveFocus()
     expect(screen.getByRole('region', { name: 'Schedules' })).toHaveTextContent(
       'Next due 2026-10-05',
     )
@@ -452,7 +452,7 @@ describe('recurring bills: record the actual expense', () => {
     const api = mockApi(withSchedule())
     const { user } = renderRoute('/recurring')
     await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
-    await user.click(await screen.findByRole('button', { name: 'Record actual expense' }))
+    await user.click(await screen.findByRole('button', { name: /^Record actual expense for / }))
     fireEvent.change(await screen.findByLabelText('Payment date'), {
       target: { value: '2026-10-05' },
     })
@@ -488,10 +488,12 @@ describe('recurring bills: overdue', () => {
     renderRoute('/recurring')
     const list = await screen.findByRole('region', { name: 'Schedules' })
     expect(await within(list).findByText('Overdue by 2 days')).toBeInTheDocument()
-    expect(within(list).getByRole('button', { name: 'Record actual expense' })).toBeInTheDocument()
-    expect(within(list).getByRole('button', { name: 'Reschedule' })).toBeInTheDocument()
     expect(
-      within(list).getByRole('button', { name: 'Dismiss this occurrence' }),
+      within(list).getByRole('button', { name: /^Record actual expense for / }),
+    ).toBeInTheDocument()
+    expect(within(list).getByRole('button', { name: /^Reschedule / })).toBeInTheDocument()
+    expect(
+      within(list).getByRole('button', { name: /^Dismiss this occurrence of / }),
     ).toBeInTheDocument()
     expect(api.activity).toHaveLength(0)
     expect(api.accounts[0].balance.amount).toBe('5000.00')
@@ -509,14 +511,14 @@ describe('recurring bills: overdue', () => {
     const api = mockApi(overdue())
     const { user } = renderRoute('/recurring')
     await user.selectOptions(await screen.findByLabelText('Entering as'), 'Sam')
-    const opener = await screen.findByRole('button', { name: 'Dismiss this occurrence' })
+    const opener = await screen.findByRole('button', { name: /^Dismiss this occurrence of / })
     await user.click(opener)
     const review = await screen.findByRole('region', { name: /Review dismissing the 2026-10-05/ })
     await user.click(within(review).getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByRole('button', { name: 'Dismiss this occurrence' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: /^Dismiss this occurrence of / })).toHaveFocus()
     expect(api.schedules[0].occurrences).toHaveLength(0)
 
-    await user.click(screen.getByRole('button', { name: 'Dismiss this occurrence' }))
+    await user.click(screen.getByRole('button', { name: /^Dismiss this occurrence of / }))
     await user.click(
       await screen.findByRole('button', { name: 'Confirm dismissing this occurrence' }),
     )
@@ -537,7 +539,7 @@ describe('recurring bills: overdue', () => {
     const api = mockApi(overdue())
     const { user } = renderRoute('/recurring')
     await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
-    await user.click(await screen.findByRole('button', { name: 'Reschedule' }))
+    await user.click(await screen.findByRole('button', { name: /^Reschedule / }))
     const review = await screen.findByRole('region', { name: /Review rescheduling Electricity/ })
     expect(within(review).getByRole('button', { name: 'Confirm rescheduling' })).toBeDisabled()
     fireEvent.change(within(review).getByLabelText('New due date'), {
@@ -579,16 +581,149 @@ describe('recurring bills: switching rows', () => {
     })
     const { user } = renderRoute('/recurring')
     await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
-    const changes = await screen.findAllByRole('button', { name: 'Change' })
+    const changes = await screen.findAllByRole('button', { name: /^Change / })
     await user.click(changes[0])
     await user.clear(await screen.findByLabelText('Expected amount'))
     await user.type(screen.getByLabelText('Expected amount'), '250.00')
     await user.click(screen.getByRole('button', { name: 'Review' }))
     await screen.findByRole('region', { name: /Review: Electricity/ })
 
-    await user.click(screen.getAllByRole('button', { name: 'Change' })[1])
+    await user.click(screen.getAllByRole('button', { name: /^Change / })[1])
     expect(await screen.findByLabelText('Expected amount')).toHaveValue('40.00')
     expect(screen.getByRole('region', { name: /Change the Water estimate/ })).toBeInTheDocument()
     expect(api.schedules.map((s) => s.amount)).toEqual(['180.00', '40.00'])
+  })
+})
+
+describe('recurring bills: Cowork faults', () => {
+  const utilities = () => CATEGORIES.find((c) => c.name === 'Utilities')!.id
+  const bill: MockSchedule = {
+    id: '66666666-6666-4666-8666-000000000001',
+    accountId: checking.id,
+    description: 'Electricity',
+    categoryId: utilities(),
+    amount: '180.00',
+    frequency: 'monthly',
+    status: 'active',
+    nextDueOn: '2026-10-05',
+    anchorDay: 5,
+    occurrences: [],
+    events: [
+      {
+        action: 'created',
+        memberId: maya.id,
+        at: '2026-10-06T09:00:00Z',
+        detail: 'Expected $180.00 monthly, first due 2026-10-05',
+      },
+    ],
+  }
+  const seeded = (over: Partial<MockSchedule> = {}) => ({
+    ...seed(),
+    today: '2026-10-06',
+    schedules: [{ ...bill, ...over }],
+  })
+
+  it('V2_RECURRING_008 Resume and Reschedule open with who is entering already chosen and Confirm waits for a date', async () => {
+    mockApi(seeded({ status: 'paused' }))
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    await user.click(await screen.findByRole('button', { name: /^Resume / }))
+    const review = await screen.findByRole('region', { name: /Review resuming/ })
+    expect(review).toHaveTextContent('Entered by: Maya')
+    expect(within(review).getByRole('button', { name: 'Confirm resuming' })).toBeDisabled()
+  })
+
+  it('V2_RECURRING_010 Reschedule opens with who is entering already chosen', async () => {
+    mockApi(seeded({ nextDueOn: '2026-10-01' }))
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    await user.click(await screen.findByRole('button', { name: /^Reschedule / }))
+    const review = await screen.findByRole('region', { name: /Review rescheduling/ })
+    expect(review).toHaveTextContent('Entered by: Maya')
+    expect(within(review).getByRole('button', { name: 'Confirm rescheduling' })).toBeDisabled()
+  })
+
+  it('V2_RECURRING_008 the history says what, who and when, with a capital letter', async () => {
+    mockApi(seeded())
+    const { user } = renderRoute('/recurring')
+    await user.click(await screen.findByText('History (1)'))
+    expect(await screen.findByText(/^Created by Maya, /)).toBeInTheDocument()
+  })
+
+  it('V2_RECURRING_003 the payment date is today the first time Record opens', async () => {
+    mockApi(seeded())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    await user.click(await screen.findByRole('button', { name: /^Record actual expense for / }))
+    expect(await screen.findByLabelText('Payment date')).toHaveValue('2026-10-06')
+  })
+
+  it('V2_RECURRING_003 the record review gives the Balance before and after and the month by name', async () => {
+    mockApi(seeded())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    await user.click(await screen.findByRole('button', { name: /^Record actual expense for / }))
+    await user.click(await screen.findByRole('button', { name: 'Review' }))
+    const review = await screen.findByRole('region', { name: /Review recording/ })
+    expect(review).toHaveTextContent('Balance goes from $5,000.00 to $4,820.00')
+    expect(review).toHaveTextContent('October 2026 spending')
+  })
+
+  it('V2_RECURRING_008 a schedule on an archived account says why Record, Change and Resume are missing', async () => {
+    const data = seeded()
+    data.accounts = [{ ...checking, status: 'archived' }]
+    mockApi(data)
+    renderRoute('/recurring')
+    expect(await screen.findByText(/takes no new money/)).toHaveTextContent(
+      'archived account Everyday Checking takes no new money, so recording, changing, resuming and rescheduling wait until it is restored',
+    )
+  })
+
+  it('V2_RECURRING_006 a first due date in the past says the bill will be overdue at once', async () => {
+    mockApi(seeded())
+    const { user } = renderRoute('/recurring')
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    await fill(user, {
+      name: 'Late bill',
+      amount: '10.00',
+      frequency: 'Monthly',
+      due: '2026-10-01',
+    })
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    const review = await screen.findByRole('region', { name: /Review: Late bill/ })
+    expect(review).toHaveTextContent(
+      '2026-10-01 has already passed, so this bill will show as overdue',
+    )
+  })
+
+  it('V2_RECURRING_003 the account page names the recurring bill an expense paid and the removal review says the occurrence stays paid', async () => {
+    const paid = {
+      id: '55555555-5555-4555-8555-000000000009',
+      accountId: checking.id,
+      kind: 'expense',
+      amount: '195.00',
+      occurredOn: '2026-10-01',
+      description: 'Electricity',
+      categoryId: utilities(),
+      enteredByMemberId: maya.id,
+    }
+    mockApi({
+      ...seeded({
+        occurrences: [
+          { dueOn: '2026-10-05', outcome: 'paid', paidOn: '2026-10-01', activityId: paid.id },
+        ],
+      }),
+      activity: [paid],
+    })
+    const { user } = renderRoute(`/accounts/${checking.id}`)
+    expect(
+      await screen.findByText('Recurring bill: Electricity, occurrence 2026-10-05'),
+    ).toBeInTheDocument()
+    await user.selectOptions(await screen.findByLabelText('Entering as'), 'Maya')
+    await user.click(await screen.findByRole('button', { name: /^Remove / }))
+    const review = await screen.findByRole('region', { name: 'Review removal' })
+    expect(review).toHaveTextContent(
+      'Removing it leaves that occurrence marked paid, and the next due date does not move back.',
+    )
   })
 })

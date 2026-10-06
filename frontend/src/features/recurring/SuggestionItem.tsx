@@ -34,10 +34,19 @@ export function SuggestionItem({
       </p>
       <Bills bills={suggestion.bills} />
       <div className="mt-2 flex flex-wrap gap-2">
-        <Button size="sm" onClick={onConfirm}>
+        <Button
+          size="sm"
+          aria-label={`Review and confirm ${suggestion.description}`}
+          onClick={onConfirm}
+        >
           Review and confirm
         </Button>
-        <Button size="sm" variant="secondary" onClick={onDismiss}>
+        <Button
+          size="sm"
+          variant="secondary"
+          aria-label={`Dismiss the ${suggestion.description} suggestion`}
+          onClick={onDismiss}
+        >
           Dismiss suggestion
         </Button>
       </div>

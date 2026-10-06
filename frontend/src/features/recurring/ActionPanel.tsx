@@ -19,6 +19,7 @@ export function ActionPanel({
   onConfirm,
   onCancel,
   danger,
+  confirmDisabled,
   children,
 }: {
   heading: string
@@ -31,6 +32,8 @@ export function ActionPanel({
   onConfirm: () => void
   onCancel: () => void
   danger?: boolean
+  /** Confirm waits for something the panel still asks for (a date). */
+  confirmDisabled?: boolean
   children: ReactNode
 }) {
   return (
@@ -48,7 +51,7 @@ export function ActionPanel({
         <div className="flex flex-wrap gap-2">
           <Button
             variant={danger ? 'danger' : 'primary'}
-            disabled={pending || !member}
+            disabled={pending || !member || confirmDisabled}
             onClick={onConfirm}
           >
             {pending ? 'Saving' : confirmLabel}

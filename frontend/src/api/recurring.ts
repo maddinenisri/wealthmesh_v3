@@ -234,6 +234,8 @@ export type RecordReview = {
   accountName: string
   categoryName: string
   amount: string
+  balanceBefore: string
+  balanceAfter: string
   paidOn: string
   dueOn: string
   early: boolean
@@ -258,6 +260,8 @@ function parseRecordReview(value: unknown): RecordReview {
     accountName: str(data.accountName),
     categoryName: str(data.categoryName),
     amount: str(data.amount),
+    balanceBefore: str(data.balanceBefore),
+    balanceAfter: str(data.balanceAfter),
     paidOn: str(data.paidOn),
     dueOn: str(data.dueOn),
     early: data.early,
@@ -276,6 +280,28 @@ export const recordActual = (id: string, key: string, body: RecordBody) =>
     headers: { 'Idempotency-Key': key },
     body,
     parse: parseSchedule,
+  })
+
+/** An entry that paid an occurrence of a recurring bill (a corrected payment keeps this under its newest row). */
+export type RecurringPayment = {
+  activityId: string
+  scheduleId: string
+  description: string
+  dueOn: string
+}
+
+export const listRecurringPayments = (accountId: string) =>
+  request(`/recurring/payments?accountId=${accountId}`, {
+    parse: (value): RecurringPayment[] =>
+      list(value, (item) => {
+        const data = record(item)
+        return {
+          activityId: str(data.activityId),
+          scheduleId: str(data.scheduleId),
+          description: str(data.description),
+          dueOn: str(data.dueOn),
+        }
+      }),
   })
 
 export const getRecurring = () => request('/recurring', { parse: parseOverview })

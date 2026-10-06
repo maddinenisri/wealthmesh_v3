@@ -137,6 +137,12 @@ export function ScheduleForm({
             <Item label="Paid from">{result.accountName}</Item>
             <Item label="Category">{result.categoryName}</Item>
           </dl>
+          {today.data && result.nextDueOn < today.data && (
+            <p className="text-sm font-medium">
+              {result.nextDueOn} has already passed, so this bill will show as overdue as soon as it
+              is saved.
+            </p>
+          )}
           {changing && (
             <p className="text-sm">
               Was {formatMoney(Number(changing.amount))} {FREQUENCY_LABEL[changing.frequency]}, next

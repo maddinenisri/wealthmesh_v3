@@ -11,10 +11,12 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.recurring.dto.DismissSuggestionRequest;
+import com.mdstech.wealthmesh.recurring.dto.PaymentView;
 import com.mdstech.wealthmesh.recurring.dto.RecordRequest;
 import com.mdstech.wealthmesh.recurring.dto.RecordReview;
 import com.mdstech.wealthmesh.recurring.dto.RecurringOverview;
@@ -23,6 +25,7 @@ import com.mdstech.wealthmesh.recurring.dto.ScheduleRequest;
 import com.mdstech.wealthmesh.recurring.dto.ScheduleView;
 import com.mdstech.wealthmesh.recurring.service.RecurringService;
 
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /** Recurring bills (slice 14): schedules and expected amounts. Every write names who entered it (D-025). */
@@ -39,6 +42,12 @@ public class RecurringController {
     @GetMapping
     public Mono<RecurringOverview> overview() {
         return service.overview();
+    }
+
+    /** The entries of an account that paid an occurrence of a recurring bill. */
+    @GetMapping("/payments")
+    public Flux<PaymentView> payments(@RequestParam UUID accountId) {
+        return service.payments(accountId);
     }
 
     @GetMapping("/{id}")

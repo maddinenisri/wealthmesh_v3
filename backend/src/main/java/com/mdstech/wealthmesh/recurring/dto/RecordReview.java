@@ -11,6 +11,8 @@ public record RecordReview(
         String accountName,
         String categoryName,
         String amount,
+        String balanceBefore,
+        String balanceAfter,
         LocalDate paidOn,
         LocalDate dueOn,
         boolean early,
