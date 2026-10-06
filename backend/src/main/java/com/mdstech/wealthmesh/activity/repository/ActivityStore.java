@@ -250,6 +250,12 @@ public class ActivityStore {
                 .bind("at", at).bind("by", byMemberId).bind("id", id).fetch().rowsUpdated();
     }
 
+    /** The latest change recorded for a row (replaced, removed or restored); empty when it never changed. */
+    public Mono<String> lastEventAction(UUID activityId) {
+        return client.sql("SELECT action FROM activity_event WHERE activity_id = :id ORDER BY seq DESC LIMIT 1")
+                .bind("id", activityId).map((row, meta) -> row.get("action", String.class)).one();
+    }
+
     /** Records who replaced, removed or restored an entry, and when. */
     public Mono<Long> recordEvent(UUID activityId, String action, UUID memberId, Instant at) {
         return client.sql("INSERT INTO activity_event (activity_id, action, member_id, occurred_at) "

@@ -235,5 +235,62 @@ test.describe.serial('split expenses', () => {
       expect(activity).toHaveLength(1)
       expect(activity[0].amount).toBe('120.00')
     })
+
+    test(`V2_SPLITS_004 removes the whole split and Undo restores it with both portions at ${width}px`, async ({
+      page,
+      request,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await ensureGifts(request)
+      const id = await account(request, `Remove Split ${width}`)
+      await seedLongList(request, id)
+      await saveSplit(request, id)
+      await page.goto(`/accounts/${id}`)
+      await page.getByLabel('Entering as').selectOption({ label: OWNER })
+      const opener = page.getByRole('button', { name: 'Remove Mixed shop' })
+      await opener.click()
+      const review = page.getByRole('region', { name: 'Review removal' })
+      await expect(review).toBeInViewport()
+      await expect(review).toContainText('Mixed shop (split)')
+      await expect(review).toContainText('Groceries $90.00')
+      await expect(review).toContainText('Gifts $30.00')
+      await expect(review).toContainText('$4,988.00')
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+      await review.getByRole('button', { name: 'Confirm removal' }).click()
+      await expect(page.getByRole('region', { name: 'Review removal' })).toHaveCount(0)
+      await expect(page.getByRole('main')).toContainText('$4,988.00')
+      await expect(page.getByRole('row').filter({ hasText: 'Mixed shop' })).toHaveCount(0)
+      expect(
+        (await (await request.get(`/api/v1/accounts/${id}/activity`)).json()) as unknown[],
+      ).toHaveLength(12)
+
+      await page.getByRole('button', { name: 'Show history' }).click()
+      await page.getByRole('button', { name: 'Undo Mixed shop' }).click()
+      const undo = page.getByRole('region', { name: 'Review Undo' })
+      await expect(undo).toBeInViewport()
+      await expect(undo).toContainText('Groceries $90.00')
+      await undo.getByRole('button', { name: 'Confirm Undo' }).click()
+      await expect(page.getByRole('region', { name: 'Review Undo' })).toHaveCount(0)
+      await expect(page.getByRole('main')).toContainText('$4,868.00')
+      const row = page.getByRole('row').filter({ hasText: 'Mixed shop' }).first()
+      await expect(row).toContainText('Groceries $90.00')
+      await expect(row).toContainText('Gifts $30.00')
+      expect(await sideways(page)).toBeLessThanOrEqual(0)
+
+      // A second Undo of the same removal changes nothing (D-044).
+      const activity = (await (await request.get(`/api/v1/accounts/${id}/activity`)).json()) as {
+        id: string
+        portions: unknown[]
+      }[]
+      const split = activity.find((entry) => entry.portions.length === 2)!
+      const again = await request.post(`/api/v1/accounts/${id}/activity/${split.id}/undo`, {
+        data: { enteredByMemberId: await ownerId(request) },
+      })
+      expect(again.status()).toBe(200)
+      const after = (await (await request.get(`/api/v1/accounts/${id}`)).json()) as {
+        balance: { amount: string }
+      }
+      expect(after.balance.amount).toBe('4868.00')
+    })
   }
 })

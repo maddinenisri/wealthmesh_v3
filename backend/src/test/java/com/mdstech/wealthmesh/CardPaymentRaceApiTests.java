@@ -143,8 +143,9 @@ class CardPaymentRaceApiTests extends CardPaymentTestBase {
         assertThat(both(bank, () -> removePayment(first, mayaId), () -> removePayment(first, mayaId)))
                 .containsExactlyInAnyOrder(200, 409);
         assertBalance(bank, "500.00");
+        // Two Undos of one removal both answer 200 and restore it once (D-044).
         assertThat(both(bank, () -> undoPayment(first, mayaId), () -> undoPayment(first, mayaId)))
-                .containsExactlyInAnyOrder(200, 409);
+                .containsExactlyInAnyOrder(200, 200);
         assertBalance(bank, "490.00");
         assertBalance(owed, "-90.00");
 

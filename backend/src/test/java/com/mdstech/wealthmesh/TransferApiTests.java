@@ -183,7 +183,11 @@ class TransferApiTests extends TransferTestBase {
         assertActivityCount(holiday, 1);
         webTestClient.get().uri("/api/v1/accounts/{id}/activity", checking).exchange().expectBody()
                 .jsonPath("$[0].occurredOn").isEqualTo("2026-09-05");
-        undoTransfer(movement, mayaId).expectStatus().isEqualTo(409);
+        // A second Undo of the same removal changes nothing (D-044).
+        undoTransfer(movement, mayaId).expectStatus().isOk().expectBody().jsonPath("$.status")
+                .isEqualTo("effective");
+        assertBalance(checking, "3500.00");
+        assertActivityCount(checking, 1);
         noIncomeOrSpending("2026-09");
     }
 

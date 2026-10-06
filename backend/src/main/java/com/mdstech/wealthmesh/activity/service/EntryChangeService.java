@@ -79,15 +79,18 @@ public class EntryChangeService {
         return transactions.transactional(removed).then(Mono.defer(() -> entry(accountId, activityId)));
     }
 
-    /** Undo of a removal. A replaced entry stays replaced: edit or remove its replacement instead. */
+    /**
+     * Undo of a removal. A replaced entry stays replaced: edit or remove its replacement instead. A second Undo of
+     * the same removal changes nothing and returns the restored entry again, never a second restore or a 409 (D-044).
+     */
     public Mono<HistoryEntry> undo(UUID accountId, UUID activityId, UUID memberId) {
         Mono<Long> restored = original(accountId, activityId)
                 .flatMap(original -> actor(accountId, memberId)
                         .then(Mono.defer(() -> lockedStart(accountId, original.occurredOn())))
                         .then(Mono.defer(() -> store.clearRemoved(activityId))))
-                .filter(updated -> updated > 0)
-                .switchIfEmpty(Mono.error(conflict("Only a removed entry can be restored.")))
-                .flatMap(updated -> store.recordEvent(activityId, "restored", memberId, clock.instant()));
+                .flatMap(updated -> updated > 0
+                        ? store.recordEvent(activityId, "restored", memberId, clock.instant())
+                        : alreadyRestored(activityId));
         return transactions.transactional(restored).then(Mono.defer(() -> entry(accountId, activityId)));
     }
 
@@ -100,6 +103,13 @@ public class EntryChangeService {
                 .filter(account -> !date.isBefore(account.openedOn()))
                 .switchIfEmpty(Mono.error(conflict("This entry is dated before the account's tracking start.")))
                 .then();
+    }
+
+    /** Read under the account lock: the entry counts again and its latest change was a restore (D-044). */
+    private Mono<Long> alreadyRestored(UUID activityId) {
+        return activities.findById(activityId).filter(a -> a.removedAt() == null)
+                .flatMap(a -> store.lastEventAction(activityId)).filter("restored"::equals).map(action -> 0L)
+                .switchIfEmpty(Mono.error(conflict("Only a removed entry can be restored.")));
     }
 
     private Mono<UUID> actor(UUID accountId, UUID memberId) {

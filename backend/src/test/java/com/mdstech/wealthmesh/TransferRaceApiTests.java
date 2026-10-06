@@ -237,7 +237,7 @@ class TransferRaceApiTests extends TransferTestBase {
     @Test
     @DisplayName("V2_TRANSFER_002 two removals, two Undos, and a removal against a change of one transfer at once: "
             + "one wins, the "
-            + "other is 409, and the pair is never half changed")
+            + "other is 409, a repeated Undo is a 200, and the pair is never half changed")
     void onePairOneWinner() throws Exception {
         String a = savings("Pair A", "100.00", "2026-09-01");
         String b = savings("Pair B", "100.00", "2026-09-01");
@@ -246,8 +246,9 @@ class TransferRaceApiTests extends TransferTestBase {
         assertThat(both(a, () -> removeTransfer(first, mayaId), () -> removeTransfer(first, mayaId)))
                 .containsExactlyInAnyOrder(200, 409);
         assertBalance(a, "100.00");
+        // Two Undos of one removal both answer 200 and restore it once (D-044).
         assertThat(both(a, () -> undoTransfer(first, mayaId), () -> undoTransfer(first, mayaId)))
-                .containsExactlyInAnyOrder(200, 409);
+                .containsExactlyInAnyOrder(200, 200);
         assertBalance(a, "90.00");
         assertBalance(b, "110.00");
 

@@ -87,12 +87,13 @@ class RemoveEntryApiTests extends LedgerApiTestBase {
 
     @Order(3)
     @Test
-    @DisplayName("removing twice, or undoing an entry that is not removed, is refused and changes nothing")
+    @DisplayName("removing twice is refused; undoing twice restores once and the second Undo changes nothing (D-044)")
     void wrongState() {
         remove(groceriesId, samId).expectStatus().isOk();
         remove(groceriesId, samId).expectStatus().isEqualTo(409);
         undo(groceriesId, samId).expectStatus().isOk();
-        undo(groceriesId, samId).expectStatus().isEqualTo(409);
+        // Removed and restored earlier, removed and restored here: the repeated Undo adds no fifth event.
+        undo(groceriesId, samId).expectStatus().isOk().expectBody().jsonPath("$.events.length()").isEqualTo(4);
         assertBalance(accountId, "10875.00");
     }
 

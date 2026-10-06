@@ -142,18 +142,22 @@ public class MovementService {
         }).then(Mono.defer(() -> get(movementId)));
     }
 
-    /** Brings back a removed transfer unless it was replaced; both dates must still be inside tracking. */
+    /**
+     * Brings back a removed transfer unless it was replaced; both dates must still be inside tracking. A second Undo
+     * of the same removal changes nothing and returns the restored movement again (D-044).
+     */
     public Mono<Transfer> undo(UUID movementId, UUID memberId) {
         Instant now = clock.instant();
         return legs(movementId).flatMap(old -> {
             Mono<Void> work = movements.lockAccounts(accountsOf(old, null))
                     .then(Mono.defer(() -> legs(movementId)))
-                    .flatMap(fresh -> requireRemoved(fresh)
+                    .flatMap(fresh -> alreadyRestored(fresh).flatMap(already -> already ? Mono.<Void>empty()
+                            : requireRemoved(fresh)
                             .then(Mono.defer(() -> actor(fresh, memberId)))
                             .then(Mono.defer(() -> startsStillCover(fresh)))
                             .then(Mono.defer(() -> movements.restorePair(movementId)))
                             .flatMap(n -> n == 2 ? events(fresh, "restored", memberId, now)
-                                    : Mono.error(notRemoved())));
+                                    : Mono.error(notRemoved()))));
             return transactions.transactional(work);
         }).then(Mono.defer(() -> get(movementId)));
     }
@@ -345,6 +349,14 @@ public class MovementService {
     private Mono<Void> requireLive(List<Leg> legs) {
         return legs.stream().allMatch(l -> l.removedAt() == null) ? Mono.empty()
                 : Mono.error(changed());
+    }
+
+    /** Both rows count again and the latest change to them was a restore: this Undo has already happened. */
+    private Mono<Boolean> alreadyRestored(List<Leg> legs) {
+        if (!legs.stream().allMatch(l -> l.removedAt() == null)) {
+            return Mono.just(false);
+        }
+        return store.lastEventAction(legs.getFirst().id()).map("restored"::equals).defaultIfEmpty(false);
     }
 
     private Mono<Void> requireRemoved(List<Leg> legs) {
