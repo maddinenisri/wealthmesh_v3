@@ -24,7 +24,7 @@ import {
 import { useAccounts } from '../../hooks/useAccounts'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney, parseAmount } from '../../lib/money'
-import { ACCOUNT_TYPES } from '../accounts/accountTypes'
+import { usableAccounts } from '../transfers/accountChoice'
 import { balanceText, isCard } from '../accounts/cardBalance'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { CLASS_LABEL, classText } from './classes'
@@ -114,9 +114,7 @@ export function SplitEntry({
 
   // An edit may move the payment to another account that holds money activity (the server decides, too).
   const accounts = useAccounts()
-  const choices = (accounts.data ?? []).filter((candidate) =>
-    ACCOUNT_TYPES.some((type) => type.ready && type.value === candidate.type),
-  )
+  const choices = usableAccounts(accounts.data, account.id)
   const target =
     choices.find((candidate) => candidate.id === (reviewing?.accountId ?? chosenAccount)) ?? account
   const moving = !!editing && target.id !== account.id

@@ -25,7 +25,7 @@ import { useAccounts } from '../../hooks/useAccounts'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney, parseAmount } from '../../lib/money'
 import { MONTH_NAMES } from '../../lib/months'
-import { ACCOUNT_TYPES } from '../accounts/accountTypes'
+import { usableAccounts } from '../transfers/accountChoice'
 import { balanceText, isCard } from '../accounts/cardBalance'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { CLASS_LABEL, classText } from './classes'
@@ -122,10 +122,8 @@ export function AddEntry({
   })
   // An edit may move the entry to another account that holds money activity (the server decides, too).
   const accounts = useAccounts()
-  const choices = (accounts.data ?? []).filter(
-    (candidate) =>
-      ACCOUNT_TYPES.some((type) => type.ready && type.value === candidate.type) &&
-      !(kind === 'income' && isCard(candidate.type)),
+  const choices = usableAccounts(accounts.data, account.id).filter(
+    (candidate) => !(kind === 'income' && isCard(candidate.type)),
   )
   const chosenId = useWatch({ control, name: 'accountId' })
   const targetOf = (id: string) => choices.find((candidate) => candidate.id === id) ?? account

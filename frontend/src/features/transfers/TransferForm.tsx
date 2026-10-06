@@ -8,12 +8,11 @@ import { useAccounts } from '../../hooks/useAccounts'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useSaveTransfer, useTransferPreview } from '../../hooks/useTransfers'
 import { formatMoney, parseAmount } from '../../lib/money'
-import { ACCOUNT_TYPES } from '../accounts/accountTypes'
 import { isCard } from '../accounts/cardBalance'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { EnteredBy } from '../activity/EnteredBy'
 import { givesMoney, isPayment } from '../activity/transferRows'
-import { accountChoice } from './accountChoice'
+import { accountChoice, usableAccounts } from './accountChoice'
 import { TransferFigures } from './TransferFigures'
 import { useRevealReview } from './useRevealReview'
 
@@ -77,17 +76,12 @@ export function TransferForm({
   const isPay = payment ?? (editing ? isPayment(editing) : false)
   const words = WORDS[isPay ? 'payment' : 'transfer']
   // A card is paid, never moved to or from: transfer choices leave cards out, payment sources are banks only.
-  const choices = (accounts.data ?? []).filter(
-    (candidate) =>
-      ACCOUNT_TYPES.some((type) => type.ready && type.value === candidate.type) &&
-      !isCard(candidate.type),
+  const kept = [account.id, editing?.counterAccountId ?? ''].filter(Boolean)
+  const choices = usableAccounts(accounts.data, ...kept).filter(
+    (candidate) => !isCard(candidate.type),
   )
   const cardOf = (id: string) => accounts.data?.find((candidate) => candidate.id === id)
-  const cards = (accounts.data ?? []).filter(
-    (candidate) =>
-      ACCOUNT_TYPES.some((type) => type.ready && type.value === candidate.type) &&
-      isCard(candidate.type),
-  )
+  const cards = usableAccounts(accounts.data, ...kept).filter((candidate) => isCard(candidate.type))
   const outgoing = editing ? givesMoney(editing) : !isPay
   const other = editing?.counterAccountId ?? ''
   const save = useSaveTransfer(
