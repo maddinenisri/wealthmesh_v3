@@ -1,7 +1,7 @@
 # Slice 13: Budgets
 
 - Slice: 13 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/spending/budgets/manage-budgets.feature` (all 7), `spending/monthly-review/review-spending.feature` (003 of 5 here; 004 and 005 are other slices)
-- Status: done, local (not pushed, D-002)
+- Status: done, pushed (6754add)
 - Started: 2026-10-06 10:46 (session clock)  Finished:  Commit:
 
 ## Prompts and directions
