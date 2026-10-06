@@ -88,12 +88,15 @@ public class StatementService {
                         .flatMap(parsed -> transactions.transactional(lock.lockAccount(accountId)
                                 // A statement is a record, not money: archived may take one, closed may not.
                                 .then(Mono.defer(() -> account(accountId)))
-                                .map(AccountState::requireNotClosed)
-                                .then(Mono.defer(() -> store.expireKey(key, cutoff)))
-                                .then(Mono.defer(() -> statements.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
+                                // The key is read first; the state gate meets only a new key (Q-040).
+                                .flatMap(locked -> store.expireKey(key, cutoff)
+                                        .then(Mono.defer(() -> statements
+                                                .findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)))
                                         .flatMap(existing -> replay(existing, accountId, replacesId, parsed))
-                                        .switchIfEmpty(Mono.defer(() -> insert(accountId, replacesId, key, parsed,
-                                                now))))))))
+                                        .switchIfEmpty(Mono.defer(() -> Mono
+                                                .fromCallable(() -> AccountState.requireNotClosed(locked))
+                                                .then(Mono.defer(() -> insert(accountId, replacesId, key, parsed,
+                                                        now)))))))))
                 .onErrorMap(DuplicateKeyException.class, e -> conflict("This statement was already revised."));
     }
 

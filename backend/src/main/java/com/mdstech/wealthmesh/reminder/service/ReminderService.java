@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.mdstech.wealthmesh.account.domain.Account;
 import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
@@ -72,24 +73,28 @@ public class ReminderService {
                         .then(Mono.defer(() -> accounts.findById(first.id())))
                         .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
                                 "Account not found: " + accountId)))
-                        .map(AccountState::requireOpen)
-                        .flatMap(account -> validator.parseReminder(account, request.kind(), request.asEntry())
-                                .flatMap(entry -> validator.memberLocked(account, entry.memberId())
-                                        .thenReturn(entry)))
-                        .flatMap(entry -> saveLocked(key, entry, now, cutoff))))
+                        // The key is read first; the state gate meets only a new key (Q-040).
+                        .flatMap(account -> storedOrNew(account, key, request, now, cutoff))))
                 .onErrorMap(DuplicateKeyException.class, e -> new ResponseStatusException(HttpStatus.CONFLICT,
                         "This save was already used. Start a new entry."));
     }
 
-    private Mono<Saved> saveLocked(String key, EntryValidator.Entry entry, Instant now, Instant cutoff) {
-        return Mono.just(entry)
-                .flatMap(e -> store.expireKey(key, cutoff)
-                        .then(reminders.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
-                                .flatMap(existing -> replay(existing, entry))
-                                .switchIfEmpty(Mono.defer(() -> reminders.save(new Reminder(null, entry.accountId(),
-                                        entry.kind(), entry.amount(), entry.occurredOn(), entry.description(),
-                                        entry.categoryId(), entry.memberId(), key, now))
-                                        .flatMap(saved -> store.byId(saved.id())).map(r -> new Saved(r, true))))));
+    private Mono<Saved> storedOrNew(Account account, String key, ReminderRequest request, Instant now,
+            Instant cutoff) {
+        return store.expireKey(key, cutoff)
+                .then(Mono.defer(() -> reminders.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)))
+                .flatMap(existing -> parsed(account, request).flatMap(entry -> replay(existing, entry)))
+                .switchIfEmpty(Mono.defer(() -> Mono.fromCallable(() -> AccountState.requireOpen(account))
+                        .flatMap(open -> parsed(open, request))
+                        .flatMap(entry -> reminders.save(new Reminder(null, entry.accountId(), entry.kind(),
+                                entry.amount(), entry.occurredOn(), entry.description(), entry.categoryId(),
+                                entry.memberId(), key, now))
+                                .flatMap(saved -> store.byId(saved.id())).map(r -> new Saved(r, true)))));
+    }
+
+    private Mono<EntryValidator.Entry> parsed(Account account, ReminderRequest request) {
+        return validator.parseReminder(account, request.kind(), request.asEntry())
+                .flatMap(entry -> validator.memberLocked(account, entry.memberId()).thenReturn(entry));
     }
 
     private Mono<Saved> replay(Reminder existing, EntryValidator.Entry entry) {

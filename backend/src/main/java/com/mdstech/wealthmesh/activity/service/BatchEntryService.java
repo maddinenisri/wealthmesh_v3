@@ -60,14 +60,21 @@ public class BatchEntryService {
         this.transactions = transactions;
     }
 
+    /** A retry of a batch that was saved replays it even after its account was archived or closed (Q-040). */
     public Mono<Saved> record(UUID accountId, String key, BatchRequest request) {
         return Mono.fromCallable(() -> check(key, request))
                 .then(Mono.defer(() -> load(accountId)))
                 .flatMap(account -> transactions.transactional(store.lockAccount(account.id())
                         .then(Mono.defer(() -> load(accountId)))
-                        .flatMap(fresh -> parse(fresh, request)
-                                .flatMap(entries -> validator.memberLocked(fresh, request.enteredByMemberId())
-                                        .then(Mono.defer(() -> saveOrReplay(key, entries)))))));
+                        .flatMap(fresh -> stored(key, request.entries().size())
+                                .flatMap(stored -> (stored.isEmpty()
+                                        ? Mono.fromCallable(() -> AccountState.requireOpen(fresh))
+                                                .then(Mono.defer(() -> parse(fresh, request)))
+                                        : parse(fresh, request))
+                                        .flatMap(entries -> validator.memberLocked(fresh, request.enteredByMemberId())
+                                                .then(Mono.defer(() -> stored.isEmpty()
+                                                        ? create(key, entries, clock.instant())
+                                                        : replay(stored, entries))))))));
     }
 
     private Mono<List<EntryValidator.Entry>> parse(Account account, BatchRequest request) {
@@ -82,14 +89,12 @@ public class BatchEntryService {
         }).collectList();
     }
 
-    private Mono<Saved> saveOrReplay(String key, List<EntryValidator.Entry> entries) {
-        Instant now = clock.instant();
-        Instant cutoff = now.minus(EntryService.KEY_LIFETIME);
-        return Flux.range(0, entries.size()).concatMap(i -> store.expireKey(rowKey(key, i), cutoff)).then()
-                .then(Mono.defer(() -> Flux.range(0, entries.size()).concatMap(i -> activities
+    private Mono<List<Stored>> stored(String key, int size) {
+        Instant cutoff = clock.instant().minus(EntryService.KEY_LIFETIME);
+        return Flux.range(0, size).concatMap(i -> store.expireKey(rowKey(key, i), cutoff)).then()
+                .then(Mono.defer(() -> Flux.range(0, size).concatMap(i -> activities
                         .findByIdempotencyKeyAndCreatedAtAfter(rowKey(key, i), cutoff)
-                        .map(existing -> new Stored(i, existing))).collectList()))
-                .flatMap(stored -> stored.isEmpty() ? create(key, entries, now) : replay(stored, entries));
+                        .map(existing -> new Stored(i, existing))).collectList()));
     }
 
     private record Stored(int index, Activity activity) {
@@ -143,7 +148,6 @@ public class BatchEntryService {
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
                 .flatMap(account -> AccountType.holdsActivity(account.type()) ? Mono.just(account)
                         : Mono.error(EntryValidator.bad("Money in and out cannot be recorded on this type of "
-                                + "account yet")))
-                .map(AccountState::requireOpen);
+                                + "account yet")));
     }
 }

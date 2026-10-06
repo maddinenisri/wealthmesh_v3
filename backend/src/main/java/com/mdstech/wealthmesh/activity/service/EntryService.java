@@ -63,28 +63,35 @@ public class EntryService {
     public Mono<Saved> record(UUID accountId, String key, String kind, ExpenseRequest request) {
         // The account row is locked and read again, so a tracking-start move cannot slip in between the date check
         // and the insert (an entry would be left dated before the start).
+        // A retry of a save that already succeeded replays it even if the account was archived or closed since (D-024,
+        // Q-040): under the lock the key is read first, and only a new key meets the state gate.
+        Instant cutoff = clock.instant().minus(KEY_LIFETIME);
         return Mono.fromCallable(() -> requireKey(key))
-                .then(Mono.defer(() -> loadOpen(accountId)))
+                .then(Mono.defer(() -> load(accountId)))
                 .flatMap(account -> transactions.transactional(store.lockAccount(account.id())
-                        .then(Mono.defer(() -> loadOpen(accountId)))
-                        .flatMap(fresh -> validator.parseSplittable(fresh, kind, request, java.util.Set.of())
-                                // The member is read again under a share lock, so a deactivate cannot slip in (D-034).
-                                .flatMap(entry -> validator.memberLocked(fresh, entry.memberId()).thenReturn(entry)))
-                        .flatMap(entry -> save(entry, key))));
+                        .then(Mono.defer(() -> load(accountId)))
+                        .flatMap(fresh -> store.expireKey(key, cutoff)
+                                .then(Mono.defer(() -> activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)))
+                                .flatMap(existing -> validator.parseSplittable(fresh, kind, request, java.util.Set.of())
+                                        .flatMap(entry -> replay(existing, entry)))
+                                .switchIfEmpty(Mono.defer(() -> Mono.fromCallable(() -> AccountState.requireOpen(fresh))
+                                        .flatMap(open -> validator.parseSplittable(open, kind, request,
+                                                java.util.Set.of()))
+                                        // The member is read again under a share lock, so a deactivate cannot slip
+                                        // in (D-034).
+                                        .flatMap(entry -> validator.memberLocked(fresh, entry.memberId())
+                                                .thenReturn(entry))
+                                        .flatMap(entry -> insert(entry, key)))))));
     }
 
-    private Mono<Saved> save(EntryValidator.Entry entry, String key) {
+    private Mono<Saved> insert(EntryValidator.Entry entry, String key) {
         Instant now = clock.instant();
         Instant cutoff = now.minus(KEY_LIFETIME);
-        Mono<Saved> insert = activities.save(new Activity(null, entry.accountId(), entry.kind(), entry.amount(),
+        return activities.save(new Activity(null, entry.accountId(), entry.kind(), entry.amount(),
                         entry.occurredOn(), entry.description(), entry.categoryId(), entry.memberId(), key, now,
                         null, null, null, null, entry.classification()))
                 .flatMap(saved -> portions.insert(saved.id(), entry.portions()).thenReturn(saved))
-                .flatMap(saved -> store.byId(saved.id())).map(a -> new Saved(a, true));
-        return store.expireKey(key, cutoff)
-                .then(activities.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
-                        .flatMap(existing -> replay(existing, entry))
-                        .switchIfEmpty(Mono.defer(() -> insert)))
+                .flatMap(saved -> store.byId(saved.id())).map(a -> new Saved(a, true))
                 // Unreachable while record() holds the account lock; in its transaction this recovery could not run.
                 .onErrorResume(DuplicateKeyException.class, e -> activities
                         .findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
@@ -107,11 +114,6 @@ public class EntryService {
             throw bad("Missing save key");
         }
         return key;
-    }
-
-    /** The account for a new entry: archived and closed accounts take no new money (checked again under the lock). */
-    private Mono<Account> loadOpen(UUID id) {
-        return load(id).map(AccountState::requireOpen);
     }
 
     private Mono<Account> load(UUID id) {

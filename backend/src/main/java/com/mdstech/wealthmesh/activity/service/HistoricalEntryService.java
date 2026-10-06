@@ -70,7 +70,9 @@ public class HistoricalEntryService {
     private Mono<EntryService.Saved> create(Account locked, String key, HistoricalEntryRequest request,
             Instant now) {
         UUID memberId = request.startRevision().enteredByMemberId();
-        return validator.member(locked, memberId)
+        // The state gate meets only a new key: a retry of a save that succeeded replays after Archive or Close (Q-040).
+        return Mono.fromCallable(() -> AccountState.requireOpen(locked))
+                .then(Mono.defer(() -> validator.member(locked, memberId)))
                 .then(Mono.defer(() -> openings.applyLocked(locked, key, request.startRevision(), memberId, now)))
                 .then(Mono.defer(() -> load(locked.id())))
                 .flatMap(moved -> validator.parse(moved, request.kind(), request.entry()))
@@ -121,8 +123,7 @@ public class HistoricalEntryService {
                         ? Mono.error(EntryValidator.bad("Use Update balance"))
                         : AccountType.holdsActivity(account.type()) ? Mono.just(account)
                         : Mono.error(EntryValidator.bad(
-                                "Money in and out cannot be recorded on this type of account yet")))
-                .map(AccountState::requireOpen);
+                                "Money in and out cannot be recorded on this type of account yet")));
     }
 
     private static ResponseStatusException conflict(String message) {
