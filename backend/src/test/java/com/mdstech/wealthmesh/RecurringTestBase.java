@@ -1,11 +1,19 @@
 package com.mdstech.wealthmesh;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
+
+import io.r2dbc.spi.Connection;
 
 /** Helpers for the recurring bill tests (slice 14): save, review and read schedules, and a month's figures. */
 abstract class RecurringTestBase extends LifecycleTestBase {
@@ -117,12 +125,63 @@ abstract class RecurringTestBase extends LifecycleTestBase {
                         .formatted(account, categoryId, description, mayaId)).exchange();
     }
 
+    protected void createCategory(String name, String kind) {
+        webTestClient.post().uri("/api/v1/categories").contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"name\": \"%s\", \"kind\": \"%s\", \"enteredByMemberId\": \"%s\"}"
+                        .formatted(name, kind, mayaId)).exchange().expectStatus().isCreated();
+    }
+
+    protected String categoryId(String kind, String name) {
+        AtomicReference<String> id = new AtomicReference<>();
+        webTestClient.get().uri("/api/v1/categories?kind=" + kind).exchange().expectBody()
+                .jsonPath("$[?(@.name=='" + name + "')].id")
+                .value(List.class, ids -> id.set((String) ids.getFirst()));
+        return id.get();
+    }
+
     protected String categoryId(String name) {
         AtomicReference<String> id = new AtomicReference<>();
         webTestClient.get().uri("/api/v1/categories?kind=spending").exchange().expectBody()
                 .jsonPath("$[?(@.name=='" + name + "')].id")
                 .value(List.class, ids -> id.set((String) ids.getFirst()));
         return id.get();
+    }
+
+    /** The household row lock every schedule write takes first. */
+    protected static final String HOUSEHOLD_LOCK = "SELECT id FROM wealthmesh.household WHERE id = $1 FOR UPDATE";
+
+    protected String householdId() {
+        AtomicReference<String> id = new AtomicReference<>();
+        webTestClient.get().uri("/api/v1/household").exchange().expectBody().jsonPath("$.id")
+                .value(String.class, id::set);
+        return id.get();
+    }
+
+    /**
+     * Holds `sql` uncommitted (with the row lock it takes), runs each call, checks every one waits, then commits and
+     * returns the statuses. A race test must go red when the lock it claims is taken out of the service.
+     */
+    @SafeVarargs
+    protected final List<Integer> afterHeld(String sql, String id, Supplier<WebTestClient.ResponseSpec>... calls)
+            throws Exception {
+        Connection other = holdUncommitted(sql, id);
+        List<CompletableFuture<Integer>> running = new ArrayList<>();
+        try {
+            for (Supplier<WebTestClient.ResponseSpec> call : calls) {
+                running.add(CompletableFuture.supplyAsync(() -> call.get().returnResult(String.class).getStatus()
+                        .value()));
+            }
+            Thread.sleep(700);
+            running.forEach(call -> assertThat(call).as("the request waits for the lock").isNotDone());
+            commit(other);
+        } finally {
+            close(other);
+        }
+        List<Integer> statuses = new ArrayList<>();
+        for (CompletableFuture<Integer> call : running) {
+            statuses.add(call.get(15, TimeUnit.SECONDS));
+        }
+        return statuses;
     }
 
     protected void setToday(String date) {

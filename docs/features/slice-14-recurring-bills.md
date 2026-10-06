@@ -70,7 +70,7 @@ What to watch for in slice 14
 | 3 Change, pause, resume, delete, cancel paths | `V2_RECURRING_005` (cancel half), `V2_RECURRING_007`, `V2_RECURRING_008`, `V2_RECURRING_009` (delete half) | API + UI + e2e | done |
 | 4 Record actual expense: review, early payment, next due, cancel | `V2_RECURRING_003`, `V2_RECURRING_004` | API + UI + e2e | done |
 | 5 Overdue: status, reschedule, dismiss one occurrence | `V2_RECURRING_010` | API + UI + e2e | done |
-| 6 Guards, races, focus and layout at 710px and 1280px; archived account, closed account, deactivated member, archived and merged category; Cowork list | cites 001 to 010 | API + e2e | todo |
+| 6 Guards, races, focus and layout at 710px and 1280px; archived account, closed account, deactivated member, archived and merged category; Cowork list | cites 001 to 010 | API + e2e | built, Cowork list below |
 
 Order: 0, 1, 2, 3, 4, 5, 6, one commit per group, local only (D-002).
 

@@ -613,3 +613,80 @@ for (const [width, account, description] of [
     }
   })
 }
+
+for (const [width, account] of [
+  [710, 'Recurring Long 710'],
+  [1280, 'Recurring Long 1280'],
+] as const) {
+  test.describe.serial(`Recurring long list and long names at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+
+    test(`V2_RECURRING_006 a long list, a long name and Back from the review keep focus, scroll and layout (${width}px)`, async ({
+      page,
+    }) => {
+      const owner = await ownerId(page)
+      const id = await makeAccount(page, account)
+      const longName =
+        `Width ${width} quarterly property maintenance and building insurance contribution for the whole household ${'and more words '.repeat(5)}`.slice(
+          0,
+          190,
+        )
+      for (let index = 0; index < 12; index++) {
+        const saved = await page.request.post('/api/v1/recurring', {
+          headers: { 'Idempotency-Key': `e2e-rec-long-${width}-${index}` },
+          data: {
+            description: index === 0 ? longName : `Long list bill ${width} ${index}`,
+            amount: '25.00',
+            frequency: 'weekly',
+            nextDueOn: '2026-10-09',
+            accountId: id,
+            category: 'Utilities',
+            enteredByMemberId: owner,
+          },
+        })
+        expect(saved.ok()).toBeTruthy()
+      }
+      await page.goto('/recurring')
+      await expect(
+        page.getByRole('listitem').filter({ hasText: longName.slice(0, 40) }),
+      ).toBeVisible()
+      await expectNoSidewaysScroll(page)
+
+      // Open the form from the bottom of a long list: it is brought into view with focus inside it.
+      const opener = page.getByRole('button', { name: 'Add recurring bill' })
+      await opener.scrollIntoViewIfNeeded()
+      await opener.click()
+      const form = page.getByRole('region', { name: 'New recurring bill' })
+      await expectFocusInside(form)
+      await page.getByLabel('Name', { exact: true }).fill(`New long ${width}`)
+      await page.getByLabel('Expected amount').fill('30')
+      await page.getByLabel(/due date/).fill('2026-10-09')
+      await page.getByLabel('Paid from').selectOption({ label: account })
+      await page.getByLabel('Category').selectOption({ label: 'Utilities' })
+      await page.getByRole('button', { name: 'Review', exact: true }).click()
+      const review = page.getByRole('region', { name: new RegExp(`Review: New long ${width}`) })
+      await expectFocusInside(review)
+      await review.getByRole('button', { name: 'Back' }).click()
+      await expectFocusInside(page.getByRole('region', { name: 'New recurring bill' }))
+      await expect(page.getByLabel('Name', { exact: true })).toHaveValue(`New long ${width}`)
+      await expect(page.getByLabel('Expected amount')).toHaveValue('30')
+      await page.getByRole('button', { name: 'Review', exact: true }).click()
+      await page.getByRole('button', { name: 'Confirm saving the schedule' }).click()
+
+      // After Confirm the status line is in view and focused, though the list is long.
+      const status = page.getByRole('status')
+      await expect(status).toContainText(`Saved New long ${width}`)
+      await expect(status).toBeFocused()
+      await expect(status).toBeInViewport({ ratio: 1 })
+      await expect(
+        page.getByRole('listitem').filter({ hasText: `New long ${width}` }),
+      ).toBeVisible()
+      await expectNoSidewaysScroll(page)
+
+      // A long name wraps inside its row instead of widening the page.
+      const row = page.getByRole('listitem').filter({ hasText: longName.slice(0, 40) })
+      const box = await row.boundingBox()
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width)
+    })
+  })
+}

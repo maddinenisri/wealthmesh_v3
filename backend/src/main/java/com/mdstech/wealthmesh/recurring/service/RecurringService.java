@@ -165,7 +165,7 @@ public class RecurringService {
     public Mono<ScheduleView> review(ScheduleRequest request) {
         return Mono.fromCallable(() -> parse(request)).flatMap(parsed -> accounts.findById(parsed.accountId)
                 .switchIfEmpty(Mono.error(notFound("Account not found: " + parsed.accountId)))
-                .flatMap(account -> Mono.fromCallable(() -> requireScheduleAccount(account)))
+                .flatMap(account -> Mono.fromCallable(() -> AccountState.requireOpen(requireScheduleAccount(account))))
                 .then(Mono.defer(() -> validator.scheduleCategory(parsed.category, parsed.categoryId)))
                 .flatMap(category -> accounts.findById(parsed.accountId)
                         .map(account -> preview(parsed, account, category))));
