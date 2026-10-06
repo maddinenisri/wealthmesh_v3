@@ -67,8 +67,8 @@ Proposed, pending checkpoint 1 (to promote after approval as D-045 and D-046):
   (details are not money) and still refuses an inactive new owner (D-034).
 - **Lifecycle writes, mirroring slice 05 (`HouseholdMemberController`: `POST /{id}/deactivate` and `/restore`, row `FOR UPDATE`, state-based replay
   returns 200 with the same result, no key, no event row, review lives in the UI):** `POST /api/v1/accounts/{id}/archive|restore|close|reopen|delete|undo-delete`.
-  Each takes the account row `FOR UPDATE` (`lockAccount`) and re-reads status and Balance under it. No `account_event` table, no entered-by (members
-  have none either; `updated_at` moves). A read-only `GET /accounts/{id}/lifecycle` gives the review its facts (`balance`, `canClose`, `canDelete`,
+  Each takes the account row `FOR UPDATE` (`lockAccount`) and re-reads status and Balance under it. (First draft: no event row, as members have none;
+  Cowork finding 1 added `account_event`, V19, with who and when, and an optional `enteredByMemberId` body field.) A read-only `GET /accounts/{id}/lifecycle` gives the review its facts (`balance`, `canClose`, `canDelete`,
   and why not: history rows, opening amount) so scenario 006 can show "history must be retained" before Confirm; the 409 on the write is the guard.
   (The first draft also said the close review would list reminders that stay; that was not built, a reminder is not Balance.)
   Transitions: active to archived, active to closed, archived or closed back to active. A closed account must be reopened before it can be archived.
@@ -180,6 +180,14 @@ Count: 5 against 8, 8 and 5; no 710px table fault and no focus fault. Also from 
 
 Written after Land by a read-only agent and checked against the code (brief in `docs/process/prompts.md`): what the
 user can do now, what changed, how the main path works, decisions and open items, how to verify.
+
+Written by the read-only walkthrough agent over `d916e2b..HEAD`; I checked each claim against the code and corrected the one stale point (it said no event row; V19 and `/events` exist).
+
+1. **What you can do.** Household shows Bank money, Cards (owed or Card credit) and What makes up debts, plus Net worth; archived and closed accounts keep a label. On an account page the Account status card offers Archive, Close and Delete (Restore and Reopen when they apply). Each opens a review that shows who is entering; Cancel returns focus to the button, Confirm moves focus to a status line. Accounts has "Show archived and closed". A delete lands on the list with a status line and Undo. The card lists who changed the status and when.
+2. **What changed.** V18 (`deleted_at`), V19 (`account_event`); `AccountLifecycleService`, `AccountState`, `AccountUsageStore`, `AccountController` (archive, restore, close, reopen, delete, undo-delete, lifecycle, events); `WealthService` and `WealthSummary` groups; `AccountStatusCard`, `useStateChangeFocus`, `usableAccounts`; nine API test classes plus `AccountEventsApiTests`, `AccountStatusCard.test.tsx`, `WealthGroups.test.tsx`, `e2e/tests/13-lifecycle.spec.ts`.
+3. **The main path (close).** Review reads `GET /lifecycle`; Confirm posts `/close`; the service takes the account row `FOR UPDATE`, re-reads status and Balance, refuses unless the Balance is exactly zero and nothing is dated after today, then saves the status and an event in one transaction. Every other writer locks, re-reads, then calls `AccountState.requireOpen` (new money) or `requireNotClosed` (change of what exists; an archived account passes). Delete is soft, refused for any activity row (removed ones too), reminder, statement, correction or a non-zero opening amount; every account read skips deleted rows; a repeat Undo returns the same account.
+4. **Decisions and deferred.** D-045, D-046, Q-037 (block a non-zero opening), Q-038 (archived entries stay editable). Out: `ACCOUNT_LIFECYCLE_007` (slice 17). Open: Q-040 and the handoff items.
+5. **How to verify.** `npm test`, `npm run e2e`, `npm run coverage -- --require --slice 12` (9/9); on screen: the flows above.
 
 ## Handoff
 
