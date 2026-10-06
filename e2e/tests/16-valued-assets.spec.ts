@@ -59,7 +59,7 @@ for (const [width, type, label, name, balance, shown] of [
   test.describe.serial(`Valued asset setup at ${width}px`, () => {
     test.use({ viewport: { width, height: 900 } })
 
-    test(`V2_PROPERTY_002 setting up a ${label}: reviewed, Back keeps the details, Confirm saves one account (${width}px)`, async ({
+    test(`${type === 'Property' ? 'V2_PROPERTY_002' : 'V2_OTHER_ASSET_002'} setting up a ${label}: reviewed, Back keeps the details, Confirm saves one account (${width}px)`, async ({
       page,
     }) => {
       await page.goto('/accounts/new')
@@ -163,6 +163,13 @@ for (const [width, name, first, second] of [
       await expectFocusInside(review)
       await expect(review).toContainText('asset value increase')
       await expectNoSidewaysScroll(page)
+
+      // Back returns to the form with what was typed, and focus goes into it.
+      await review.getByRole('button', { name: 'Back' }).click()
+      const form = page.getByRole('region', { name: 'Record new value' })
+      await expectFocusInside(form)
+      await expect(page.getByLabel('Value', { exact: true })).toHaveValue(first)
+      await page.getByRole('button', { name: 'Review', exact: true }).click()
 
       await review.getByRole('button', { name: 'Cancel' }).click()
       await expect(review).toBeHidden()

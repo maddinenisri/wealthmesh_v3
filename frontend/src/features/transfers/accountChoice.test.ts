@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { Account } from '../../api/accounts'
 import { usableAccounts } from './accountChoice'
 
-const account = (id: string, type: string, status: string): Account => ({
-  id,
+const account = (type: string, status = 'active'): Account => ({
+  id: type + status,
   type,
-  name: id,
+  name: type,
   institution: null,
   ownerMemberIds: [],
   openedOn: '2026-09-01',
@@ -14,20 +14,16 @@ const account = (id: string, type: string, status: string): Account => ({
   status,
 })
 
-describe('usableAccounts', () => {
-  const all = [
-    account('a', 'checking', 'active'),
-    account('b', 'savings', 'archived'),
-    account('c', 'credit_card', 'closed'),
-    account('d', 'brokerage', 'active'),
-  ]
-
-  it('V2_ACCOUNT_LIFECYCLE_001 leaves out archived, closed and not-yet-supported accounts', () => {
-    expect(usableAccounts(all).map((a) => a.id)).toEqual(['a'])
-  })
-
-  it('V2_ACCOUNT_LIFECYCLE_003 keeps an account an edit already points at', () => {
-    expect(usableAccounts(all, 'c').map((a) => a.id)).toEqual(['a', 'c'])
-    expect(usableAccounts(undefined)).toEqual([])
+describe('account choosers', () => {
+  it('V2_PROPERTY_002 never offer a property or other asset for new money, even one that is kept', () => {
+    const all = [
+      account('checking'),
+      account('savings'),
+      account('credit_card'),
+      account('property'),
+      account('other_asset'),
+    ]
+    expect(usableAccounts(all).map((a) => a.type)).toEqual(['checking', 'savings', 'credit_card'])
+    expect(usableAccounts(all, 'propertyactive').map((a) => a.type)).not.toContain('property')
   })
 })

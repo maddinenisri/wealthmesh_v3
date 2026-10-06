@@ -125,6 +125,11 @@ class ValuedSetupApiTests extends ValuedTestBase {
             post(target, "starting-balance-corrections", "v-s", """
                     {"openingAmount": "1.00", "openedOn": "2026-08-01", "reason": "Earlier",
                      "enteredByMemberId": "%s"}""".formatted(mayaId)).expectStatus().isBadRequest();
+            post(target, "statements", "v-st", """
+                    {"statementOn": "2026-09-30", "balance": "0.00", "note": "Sep", "enteredByMemberId": "%s"}"""
+                    .formatted(mayaId)).expectStatus().isBadRequest();
+            webTestClient.get().uri("/api/v1/accounts/{id}/statements", target).exchange().expectStatus()
+                    .isBadRequest();
             postTransfer("v-t1", bank, target, "5.00", "2026-09-07", mayaId).expectStatus().isBadRequest();
             postTransfer("v-t2", target, bank, "5.00", "2026-09-07", mayaId).expectStatus().isBadRequest();
             createSchedule("v-sched", schedule("Bill", "10.00", "monthly", "2026-10-20", target, "Utilities"))

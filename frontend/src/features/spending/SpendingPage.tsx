@@ -9,6 +9,7 @@ import {
   useSpendingEntries,
   useSpendingHistory,
 } from '../../hooks/useActivity'
+import { isValued } from '../accounts/accountTypes'
 import { accountChoice } from '../transfers/accountChoice'
 import { UNCATEGORIZED } from '../../api/activity'
 import { formatMoney } from '../../lib/money'
@@ -63,11 +64,13 @@ export function SpendingPage() {
                 onChange={(event) => setAccountId(event.target.value || null)}
               >
                 <option value="">All accounts</option>
-                {accounts.data?.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {accountChoice(account)}
-                  </option>
-                ))}
+                {accounts.data
+                  ?.filter((account) => !isValued(account.type))
+                  .map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {accountChoice(account)}
+                    </option>
+                  ))}
               </Select>
             </div>
           </div>

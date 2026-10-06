@@ -15,6 +15,8 @@ const seed = { household, members: [maya, sam] }
 
 beforeEach(() => window.localStorage.clear())
 
+// Scenarios built here (the test titles below are generated per type): V2_PROPERTY_002, V2_PROPERTY_004,
+// V2_OTHER_ASSET_002 and V2_OTHER_ASSET_004.
 type User = ReturnType<typeof renderRoute>['user']
 
 async function fill(user: User, type: string, name: string, balance: string) {

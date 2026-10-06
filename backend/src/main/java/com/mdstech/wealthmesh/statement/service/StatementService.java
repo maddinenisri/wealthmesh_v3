@@ -15,6 +15,7 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
+import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.service.AccountService;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
@@ -153,7 +154,10 @@ public class StatementService {
     }
 
     private Mono<Account> account(UUID accountId) {
-        return accounts.findById(accountId).switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)));
+        return accounts.findById(accountId).switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)))
+                .filter(account -> AccountType.holdsActivity(account.type()))
+                .switchIfEmpty(Mono.error(EntryValidator.bad(
+                        "Supporting statements belong to an account that holds money activity")));
     }
 
     private static String requireKey(String key) {
