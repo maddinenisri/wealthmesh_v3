@@ -1918,7 +1918,22 @@ export function mockApi(
       const month = query.get('month') ?? ''
       const income = Number(monthTotals(month, 'income', query.get('accountId')).total)
       const spending = Number(monthTotals(month, 'expense', query.get('accountId')).total)
+      const saved = query.get('accountId')
+        ? undefined
+        : state.budgets.find((b) => b.month === month && !b.removed)
       return HttpResponse.json({
+        budget: saved
+          ? {
+              total: Number(saved.total).toFixed(2),
+              state:
+                spending > Number(saved.total)
+                  ? 'over'
+                  : spending < Number(saved.total)
+                    ? 'under'
+                    : 'on',
+              difference: Math.abs(spending - Number(saved.total)).toFixed(2),
+            }
+          : null,
         month,
         income: income.toFixed(2),
         spending: spending.toFixed(2),

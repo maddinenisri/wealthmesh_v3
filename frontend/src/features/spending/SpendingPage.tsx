@@ -11,6 +11,7 @@ import {
 } from '../../hooks/useActivity'
 import { accountChoice } from '../transfers/accountChoice'
 import { UNCATEGORIZED } from '../../api/activity'
+import { formatMoney } from '../../lib/money'
 import { BudgetSection } from '../budgets/BudgetSection'
 import { Entries } from './EntriesTable'
 
@@ -128,6 +129,22 @@ function Review({ month, accountId }: { month: string; accountId: string | null 
           <p>
             Income minus spending <Amount value={Number(review.data.incomeMinusSpending)} />
           </p>
+          {review.data.budget && (
+            <>
+              <p>
+                {monthName(month)} Budget {formatMoney(Number(review.data.budget.total))}:{' '}
+                <strong>
+                  {review.data.budget.state === 'on'
+                    ? 'On Budget'
+                    : `${formatMoney(Number(review.data.budget.difference))} ${review.data.budget.state} Budget`}
+                </strong>
+              </p>
+              <p className="text-sm text-ink-muted">
+                Category details, to see where spending went past its target, are in the Budget
+                section below.
+              </p>
+            </>
+          )}
         </div>
       )}
     </Card>

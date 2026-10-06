@@ -150,6 +150,8 @@ export type MonthReview = {
   income: string
   spending: string
   incomeMinusSpending: string
+  /** That month's saved Budget (whole-household review only); state is over, under or on. */
+  budget: { total: string; state: 'over' | 'under' | 'on'; difference: string } | null
 }
 export type SpendingMonth = { month: string; total: string; recorded: boolean }
 export type SpendingHistory = {
@@ -716,6 +718,14 @@ export const listIncomeEntries = (
     parse: (value) => list(value, parseActivity),
   })
 
+function parseReviewBudget(value: unknown): MonthReview['budget'] {
+  if (value == null) return null
+  const data = record(value)
+  const state = str(data.state)
+  if (state !== 'over' && state !== 'under' && state !== 'on') throw bad()
+  return { total: str(data.total), state, difference: str(data.difference) }
+}
+
 export const getMonthReview = (month: string, accountId: string | null = null) =>
   request(`/review?month=${month}${forAccount(accountId)}`, {
     parse: (value): MonthReview => {
@@ -725,6 +735,7 @@ export const getMonthReview = (month: string, accountId: string | null = null) =
         income: str(data.income),
         spending: str(data.spending),
         incomeMinusSpending: str(data.incomeMinusSpending),
+        budget: parseReviewBudget(data.budget),
       }
     },
   })

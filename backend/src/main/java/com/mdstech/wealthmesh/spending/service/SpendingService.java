@@ -19,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.activity.dto.ActivityResponse;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
+import com.mdstech.wealthmesh.budget.repository.BudgetStore;
 import com.mdstech.wealthmesh.money.Money;
 import com.mdstech.wealthmesh.spending.dto.MonthReview;
 import com.mdstech.wealthmesh.spending.dto.SpendingHistory;
@@ -37,11 +38,13 @@ public class SpendingService {
     private static final BigDecimal TWELVE = BigDecimal.valueOf(12);
 
     private final ActivityStore store;
+    private final BudgetStore budgets;
     private final AccountRepository accounts;
     private final Clock clock;
 
-    public SpendingService(ActivityStore store, AccountRepository accounts, Clock clock) {
+    public SpendingService(ActivityStore store, BudgetStore budgets, AccountRepository accounts, Clock clock) {
         this.store = store;
+        this.budgets = budgets;
         this.accounts = accounts;
         this.clock = clock;
     }
@@ -76,11 +79,21 @@ public class SpendingService {
 
     /** Income, spending and the difference for one month, optionally for one account. */
     public Mono<MonthReview> review(String month, UUID accountId) {
-        return Mono.zip(incomeSummary(month, accountId), summary(month, accountId)).map(totals -> {
+        // A Budget is household-wide, so only the whole-household review carries one (MONTHLY_003).
+        Mono<Optional<BudgetStore.Row>> budget = accountId != null ? Mono.just(Optional.empty())
+                : Mono.fromCallable(() -> parse(month)).flatMap(ym -> budgets.active(ym.atDay(1)))
+                        .map(Optional::of).defaultIfEmpty(Optional.empty());
+        return Mono.zip(incomeSummary(month, accountId), summary(month, accountId), budget).map(totals -> {
             BigDecimal income = Money.parse(totals.getT1().total()).orElseThrow();
             BigDecimal spending = Money.parse(totals.getT2().total()).orElseThrow();
+            MonthReview.Budget status = totals.getT3().map(b -> {
+                int compared = spending.compareTo(b.total());
+                return new MonthReview.Budget(Money.format(b.total()),
+                        compared > 0 ? "over" : compared < 0 ? "under" : "on",
+                        Money.format(spending.subtract(b.total()).abs()));
+            }).orElse(null);
             return new MonthReview(totals.getT1().month(), Money.format(income), Money.format(spending),
-                    Money.format(income.subtract(spending)));
+                    Money.format(income.subtract(spending)), status);
         });
     }
 

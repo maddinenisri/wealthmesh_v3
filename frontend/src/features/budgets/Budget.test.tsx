@@ -277,3 +277,23 @@ describe('Budget on the Spending page', () => {
     expect(await screen.findByText('No recorded expenses.')).toBeInTheDocument()
   })
 })
+
+describe('Budget in the month review', () => {
+  it("V2_MONTHLY_003 explains spending over September's Budget without using October's", async () => {
+    const state = mockApi({ household, members: [maya, sam], accounts: [everyday], activity: [] })
+    addCategories()
+    state.activity.push(...september())
+    state.budgets.push(
+      { id: 'b1', month: '2026-09', total: '3600.00', targets: [] },
+      { id: 'b2', month: '2026-10', total: '4000.00', targets: [] },
+    )
+    const { user } = renderRoute('/spending')
+    await openSeptember(user)
+
+    const review = await screen.findByRole('region', { name: 'Month review' })
+    expect(await within(review).findByText(/September Budget \$3,600\.00/)).toBeInTheDocument()
+    expect(review).toHaveTextContent('$60.00 over Budget')
+    expect(review).toHaveTextContent('Category details')
+    expect(review).not.toHaveTextContent('$4,000.00')
+  })
+})

@@ -170,6 +170,18 @@ for (const [width, month, name] of [
       await expect(page.getByText(/Category targets total \$3,600\.00/)).toBeVisible()
     })
 
+    test(`V2_MONTHLY_003 the month review shows the month's Budget and how far spending is over it (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto('/spending')
+      await page.getByRole('textbox', { name: 'Month' }).fill(month)
+      const review = page.getByRole('region', { name: 'Month review' })
+      await expect(review).toContainText(`${name} Budget $3,600.00`)
+      await expect(review).toContainText('$60.00 over Budget')
+      await expect(review).toContainText('Category details')
+      await expectNoSidewaysScroll(page)
+    })
+
     test(`V2_BUDGET_007 a negative target is refused on the field (${width}px)`, async ({
       page,
     }) => {
