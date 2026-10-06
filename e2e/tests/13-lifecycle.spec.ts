@@ -6,11 +6,26 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 type Wealth = { financialAssets: string; debts: string; netWorth: string }
 
 async function ownerId(page: Page): Promise<string> {
-  const households = (await (await page.request.get('/api/v1/household')).json()) as { id: string }
-  const members = (await (
-    await page.request.get(`/api/v1/household-members?householdId=${households.id}`)
+  // The spec runs after the others in a full run; alone (for a red check) it makes its own household.
+  let household = await page.request.get('/api/v1/household')
+  if (!household.ok()) {
+    household = await page.request.post('/api/v1/household', {
+      data: { name: 'Lifecycle Household' },
+    })
+    expect(household.ok()).toBeTruthy()
+  }
+  const { id } = (await household.json()) as { id: string }
+  let members = (await (
+    await page.request.get(`/api/v1/household-members?householdId=${id}`)
   ).json()) as { id: string; active: boolean }[]
-  return members.find((member) => member.active)!.id
+  if (!members.some((member) => member.active)) {
+    const made = await page.request.post('/api/v1/household-members', {
+      data: { householdId: id, name: 'Lifecycle Owner' },
+    })
+    expect(made.ok()).toBeTruthy()
+    members = [(await made.json()) as { id: string; active: boolean }]
+  }
+  return members.find((member) => member.id && (member.active ?? true))!.id
 }
 
 async function createAccount(
