@@ -194,3 +194,66 @@ Not reached by the reviewer: the success messages after Confirm, the Restore rev
 - What slowed this session: the payment shape (portions or a separate interest row) took a design review to settle; the full backend suite failed twice because the dev stack was running; the screenshot step and Cowork between them found 30 mostly wording and focus faults on a slice whose numbers were right.
 - What went well: every rule, lock and refusal was planted away and seen red; the identity test over five periods stayed whole through the new kinds; the owner's count (8) is the lowest so far.
 - Process change to try: the two checklist lines added (Confirm, removal, Undo and Back end with a sentence and focus; a refusal at save is also refused in the review).
+
+---
+
+# Slice 16b: mortgages and planned debt values
+
+Started: 2026-10-07 09:07 EDT (session clock). Status: checkpoint 1 (task list) pending.
+
+## 16b prompts and directions
+
+- Kickoff prompt (v2, 16b), summarized, no transcript: run `feature-session` for 16b. Owner answers 2026-10-07: Q-031 stays as built and the correction form gets a hint that a later change to an earlier amount moves this figure; group 0 also adds the opening-revision lock with a test that fails when the lock is removed; `DATED_VALUE_001` on a debt saves a planned value no reader counts, reusing slice 15's exclusion test; visual-reviewer after Prove and before Checkpoint 2, also reading `document.activeElement` and the visible status sentence after each step; report the Cowork count against 8, 8, 5, 5, 5, 7, 9, 9 and 8; stop at task-list approval and when the app is ready to look at.
+
+- 2026-10-07 Checkpoint 1 answer: approved with four additions. 0a: plant the lock removal, show the test red, restore it, record it (this was the unproven lock). 1: a test that net worth, the Household total and the change explanation count a mortgage once after the split from loans. 2: a mortgage payment through the raw API with a wrong interest category is refused or ignored (category comes from the type). UI: list every `type === 'loan'` branch in the inventory, replace with one helper. Decision 2: close/archive refuse while a plan exists, same rule, message and test as slice 15. Decisions 1 and 3 fine. Run the advisor again before Land (it was unavailable at checkpoint 1); visual-reviewer with the activeElement and status-sentence check before Checkpoint 2.
+
+## 16b gap analysis (all 9 IDs citeable; none blocked)
+
+| Need | Today | Gap |
+| --- | --- | --- |
+| Type | `AccountType.LOAN(DEBT)`; V2 check already allows `mortgage` | add `MORTGAGE(DEBT)`; `isDebt` already covers both, so every debt writer/gate/reader works unchanged |
+| Payment | `MovementKind.LOAN_PAYMENT` (interest category `LOAN_INTEREST`); `MORTGAGE_INTEREST` seeded and protected (V25, `CategoryLifecycleService`) | interest category chosen by the debt's type (mortgage: `MORTGAGE_INTEREST`) on create, preview, replace; same endpoint family or `mortgage-payments` (decide in group 5) |
+| Wealth | `loans` group = every debt line (`WealthService.summarize`) | split into Loans and Mortgages groups (`WealthSummary.mortgages`), Household page and API type |
+| Words | `loanWords.ts`, `type === 'loan'` in ~15 UI places (EntryHistory, ActivityList, signedAmount, BalanceFigure, LoanPaymentForm, ...) | one `isDebtType` helper; noun "mortgage"/"loan" in labels, "Lender" kept |
+| DATED_VALUE_001 on a debt | correction in the future is refused; planned rows live in `account_value` for valued accounts only (`ValueService` gate `isValued`) | debt takes `plan` rows in `account_value` (never effective): where exactly decided in group 8 |
+| Q-031 hint | none | one sentence on the balance correction form |
+| Opening-revision lock | `OpeningRevisionService.locked` locks the account row; race test stays green without it | race test that fails when the lock is planted away (group 0) |
+
+## 16b task list (for checkpoint 1)
+
+| Group | Scenario IDs | Test level | Status |
+| --- | --- | --- | --- |
+| 0a opening-revision lock: a race test red without `lockAccount` | none new (cites `LOAN_004`) | API race | done: `LoanCorrectionRaceApiTests.twoInitialAmounts` (two different initial amounts at once must chain). Planted: removed `lockAccount` from `OpeningRevisionService.locked`, test FAILED; restored (`git checkout`), 5 of 5 green. This was the unproven lock of 16a |
+| 0b Q-031 form hint: "A later change to an earlier amount moves this figure" on the balance correction form | cites `DATED_VALUE_003` | Vitest | done: the sentence was already in `BalanceCorrection.tsx` (commit `6a14bad`; one component for ledger and debt) and tested only for a loan; added the ledger test in `BalanceCorrection.test.tsx`. Not seen red (the text pre-exists). Q-031 marked resolved |
+| 1 `MORTGAGE` type, setup, edit, blank is $0.00, validation, Lender, lists, Mortgages group in wealth/Household | `MORTGAGE_001`, `002`, `007` | API + UI + e2e | API + UI done (e2e line at the end of the slice): `MortgageSetupApiTests` 9 (8 seen red before the type existed), `MortgageSetup.test.tsx` 7 (7 red first). `AccountType.MORTGAGE(DEBT)`, `WealthSummary.mortgages`; the counted-once test is `MortgageSetupApiTests.loanAndMortgageCountOnce` (loan + mortgage + home: debts 225,000, net worth 80,000, the change explanation's `accountsAdded` equals the change and `other` is 0) and the Household Vitest. Addition 2 |
+| 2 mortgage payment: interest category by type, sum rule, same identity and wealth | `MORTGAGE_003`, `006` | API (identity: loan and mortgage interest equal on Spending, Month, budgets, change explanation) + UI + e2e | todo |
+| 3 correct payment portions, remove and Undo twice | `MORTGAGE_004`, `005` | API + UI + e2e | todo |
+| 4 dated lender correction, cancel | `MORTGAGE_008` | API + UI + e2e | todo |
+| 5 planned value on a debt for all four rows (home, car, car loan, mortgage); reuse slice 15 exclusion test over the debt | `DATED_VALUE_001` | API + UI + e2e | todo |
+
+Groups renumbered from the 16a plan (4 to 8 become 1 to 5) because the lock and hint are group 0. Six groups with 0a/0b merged under 0: close to the 5-group guide, but groups 1 to 4 are mostly a noun over 16a.
+
+### 16b inventory
+
+| Row or state | Readers | Writers | Race test |
+| --- | --- | --- | --- |
+| `account.type` = mortgage | every `isDebt` caller (done in 16a), frontend `=== 'loan'` branches (~15), mock API | AccountService create/edit | none new |
+| mortgage payment legs and portions | as 16a loan payment; category id by type | payment create/replace/remove/Undo | overpayment race on a mortgage (reuse 16a pattern) |
+| planned `account_value` on a debt | `AccountUsageStore.plannedValues`, `AccountLifecycleService` (close/archive refuse), ValueStore readers, WealthStore, ActivityStore (all `NOT planned`) | ValueService plan save/remove | plan vs close |
+| opening-revision account lock | OpeningRevisionService | OpeningRevisionService | group 0a |
+
+### 16b UI inventory: every `'loan'` type literal and what became of it (addition 4)
+
+One helper, `isDebt(type)` in `accountTypes.ts` (already the gate for loans; `mortgage` is now `debt: true`). Literals found by `grep "'loan'"` over `frontend/src` (non-test), each replaced:
+
+| Site | Was | Now |
+| --- | --- | --- |
+| `EntryHistory.tsx` (5 branches: row width, change text, correction label, opening figure, "Initial amount owed") | `opening?.type === 'loan'` | `isDebt(opening?.type ?? '')` |
+| `EntryHistory.tsx` opening `BalanceFigure` | `type="loan"` | `type={opening?.type}` |
+| `ActivityList.tsx` (empty text, change text) | `accountType === 'loan'` | `isDebt(accountType ?? '')` |
+| `signedAmount.ts` `shownAmount` | `accountType === 'loan'` | `isDebt(accountType ?? '')` |
+| `HouseholdPage.tsx` group filter | `isDebt` (both types in Loans) | `type === 'loan'` for Loans, `type === 'mortgage'` for the new Mortgages group (group membership, not a gate) |
+| `accountTypes.ts` list | `mortgage` not ready | `ready: true, debt: true` |
+| `test/mockApi.ts` (10 sites: opening sign, payment gates, overdraft, preview, wealth) | `type === 'loan'` | `isDebtType` (the same helper) |
+
+Sites that already used `isDebt` need no change (about 40). Words, not gates, still to read in group 2: `LoanPaymentForm` ("Loan", "Loan to pay", "Choose a loan"), `LoanPaymentChange` ("Loan"), `AccountDetailPage` ("Pay a loan"), `EntriesTable` ("Loan payment to", "Loan interest"), `AccountForms` ("who owes this loan"), `WealthOverTime` ("loan principal").

@@ -116,6 +116,17 @@ describe('updating the balance', () => {
     expect(api.activity).toHaveLength(1)
   })
 
+  it('V2_CHECKING_009 the form says a later change to an earlier amount moves this figure (Q-031)', async () => {
+    const account = checking('5000.00', '5000.00', '2026-09-01')
+    mockApi({ household, members: [maya], accounts: [account] })
+    const { user } = renderRoute(`/accounts/${account.id}`)
+    await openAccount(user, account.id)
+    await user.click(await screen.findByRole('button', { name: 'Update balance' }))
+    expect(
+      await screen.findByText(/A later change to an earlier amount moves this figure/),
+    ).toBeInTheDocument()
+  })
+
   it('shows what the form refuses without a request', async () => {
     const account = checking('5000.00', '5000.00', '2026-09-01')
     const api = mockApi({ household, members: [maya], accounts: [account] })

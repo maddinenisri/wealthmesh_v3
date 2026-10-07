@@ -91,4 +91,26 @@ class LoanCorrectionRaceApiTests extends DebtTestBase {
         // Each difference is read under the lock, against the Balance on its own date, so the order decides the end.
         assertThat(balanceOf(own)).isIn("-700.00", "-600.00");
     }
+
+    @Order(5)
+    @Test
+    @DisplayName("V2_LOAN_004 two different initial amounts at once are applied one after the other: each replaces "
+            + "what the one before saved (the opening-revision lock)")
+    void twoInitialAmounts() throws Exception {
+        String own = loan("Chain Loan", "1000.00", "2026-09-01");
+        List<Integer> two = both(own, () -> correctInitial(own, key(), "900.00", "First"),
+                () -> correctInitial(own, key(), "800.00", "Second"));
+        assertThat(two).containsExactlyInAnyOrder(201, 201);
+        List<String> previous = new java.util.ArrayList<>();
+        List<String> set = new java.util.ArrayList<>();
+        webTestClient.get().uri("/api/v1/accounts/{id}/starting-balance-corrections", own).exchange().expectBody()
+                .jsonPath("$[*].previousAmount").value(List.class, l -> l.forEach(v -> previous.add((String) v)))
+                .jsonPath("$[*].openingAmount").value(List.class, l -> l.forEach(v -> set.add((String) v)));
+        // One saved against the original, the other against what the first saved: the history is a chain.
+        assertThat(previous).as("previous amounts").hasSize(2).contains("-1000.00");
+        String first = previous.get(0).equals("-1000.00") ? set.get(0) : set.get(1);
+        String second = previous.get(0).equals("-1000.00") ? previous.get(1) : previous.get(0);
+        assertThat(second).as("the later one replaced the earlier one's amount").isEqualTo(first);
+        assertThat(balanceOf(own)).isIn("-900.00", "-800.00");
+    }
 }
