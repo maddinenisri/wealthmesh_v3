@@ -320,6 +320,7 @@ class WealthAsOfApiTests extends DebtTestBase {
             assertBalance(loanId, "-4900.00");
             assertBalance(mortgageId, "-100000.00");
             assertThat(json(wealth("2026-09-20"))).isEqualTo(beforeAsOf);
+            assertThat(field(wealth("2027-01-05"), "$.debts")).isEqualTo(field(wealth(null), "$.debts"));
         } finally {
             clock.setToday(java.time.LocalDate.of(2026, 10, 3));
         }

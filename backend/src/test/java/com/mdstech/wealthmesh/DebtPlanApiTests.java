@@ -165,4 +165,43 @@ class DebtPlanApiTests extends DebtTestBase {
                 .isCreated().expectBody().jsonPath("$.value.id").value(String.class, id::set);
         return id.get();
     }
+
+    @Order(5)
+    @Test
+    @DisplayName("V2_PROPERTY_005 a plan and a Close of a paid-off debt at once: exactly one is saved (the plan "
+            + "writers take the account lock)")
+    void planAndCloseRace() throws Exception {
+        String own = mortgage("Race Mortgage", null, "2026-09-01");
+        List<Integer> statuses = both(own, () -> saveValue(own, "race-plan",
+                valueBody(mayaId, "1.00", "2026-12-31", null, true)), () -> act(own, "close"));
+        assertThat(statuses.stream().filter(status -> status >= 200 && status < 300).count()).isEqualTo(1);
+    }
+
+    @Order(6)
+    @Test
+    @DisplayName("V2_PROPERTY_005 Delete is refused while a debt has a plan, removed ones counting; Close on a debt "
+            + "that still owes is refused for the amount first")
+    void deleteAndCloseOrder() {
+        String own = loan("Delete Loan", null, "2026-09-01");
+        String plan = planOf(own);
+        assertRefused(act(own, "delete"), "dated value");
+        valueAction(own, plan, "removal", mayaId).expectStatus().isOk();
+        assertRefused(act(own, "delete"), "dated value");
+        String owing = loan("Owing Loan", "100.00", "2026-09-01");
+        planOf(owing);
+        assertRefused(act(owing, "close"), "needs a zero Balance owed");
+    }
+
+    @Order(7)
+    @Test
+    @DisplayName("V2_DATED_VALUE_001 a savings or card account takes no plan or value, like checking")
+    void otherTypesRefused() {
+        String saver = savings("Plan Savings", "10.00", "2026-09-01");
+        String cardId = card("Plan Card", "10.00", "owed", "2026-09-01");
+        for (String other : List.of(saver, cardId)) {
+            saveValue(other, "o-" + other, valueBody(mayaId, "1.00", "2026-12-31", null, true)).expectStatus()
+                    .isBadRequest();
+            valueHistory(other).expectStatus().isBadRequest();
+        }
+    }
 }

@@ -172,3 +172,33 @@ describe('working with a plan on a debt', () => {
     expect(screen.queryByRole('region', { name: 'Planned amounts owed' })).not.toBeInTheDocument()
   })
 })
+
+describe('plans on a closed debt', () => {
+  it('V2_DATED_VALUE_001 a closed debt lists its removed plan but offers no Undo', async () => {
+    mockApi({
+      ...seed('loan'),
+      accounts: [
+        { ...debt('loan'), status: 'closed', balance: { amount: '0.00', asOf: '2026-09-01' } },
+      ],
+      values: [
+        {
+          id: 'v1',
+          accountId: ID,
+          valueOn: '2026-12-31',
+          amount: '-15000.00',
+          reason: null,
+          planned: true,
+          enteredBy: maya.id,
+          replacesId: null,
+          replaced: false,
+          removedAt: '2026-10-01T10:00:00Z',
+          removedBy: maya.id,
+          createdAt: '2026-09-30T10:00:00Z',
+        },
+      ],
+    } as never)
+    renderRoute(`/accounts/${ID}`)
+    const undo = await screen.findByRole('button', { name: 'Undo plan for 2026-12-31' })
+    expect(undo).toBeDisabled()
+  })
+})

@@ -467,7 +467,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
       {debt && (
         <DebtPlans
           account={account}
-          disabled={!ready}
+          disabled={!canChange}
           onChange={(mode, row) => {
             remember()
             setPlanChange({ mode, row })

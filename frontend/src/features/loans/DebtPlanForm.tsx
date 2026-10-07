@@ -123,7 +123,14 @@ export function DebtPlanForm({
             <Button onClick={confirm} disabled={save.isPending || !member}>
               {save.isPending ? 'Saving' : 'Confirm plan'}
             </Button>
-            <Button variant="secondary" onClick={() => setDraft(null)} disabled={save.isPending}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                save.reset()
+                setDraft(null)
+              }}
+              disabled={save.isPending}
+            >
               Back
             </Button>
             <Button variant="ghost" onClick={() => onDone()} disabled={save.isPending}>

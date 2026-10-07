@@ -199,7 +199,7 @@ Not reached by the reviewer: the success messages after Confirm, the Restore rev
 
 # Slice 16b: mortgages and planned debt values
 
-Started: 2026-10-07 09:07 EDT (session clock). Status: checkpoint 1 (task list) pending.
+Started: 2026-10-07 09:07 EDT (session clock). Status: groups 0 to 5 built and proven (backend, frontend, e2e green); visual-reviewer and Checkpoint 2 next. Checkpoint 1 approved 2026-10-07.
 
 ## 16b prompts and directions
 
@@ -239,7 +239,7 @@ Groups renumbered from the 16a plan (4 to 8 become 1 to 5) because the lock and 
 | --- | --- | --- | --- |
 | `account.type` = mortgage | every `isDebt` caller (done in 16a), frontend `=== 'loan'` branches (~15), mock API | AccountService create/edit | none new |
 | mortgage payment legs and portions | as 16a loan payment; category id by type | payment create/replace/remove/Undo | overpayment race on a mortgage (reuse 16a pattern) |
-| planned `account_value` on a debt | `AccountUsageStore.plannedValues`, `AccountLifecycleService` (close/archive refuse), ValueStore readers, WealthStore, ActivityStore (all `NOT planned`) | ValueService plan save/remove | plan vs close |
+| planned `account_value` on a debt | `AccountUsageStore.plannedValues`, `AccountLifecycleService` (close refuses; archive does not), ValueStore readers, WealthStore, ActivityStore (all `NOT planned`) | ValueService plan save/remove | plan vs close |
 | opening-revision account lock | OpeningRevisionService | OpeningRevisionService | group 0a |
 | payment interest category (addition 3) | spending, month review, budgets, change explanation read `activity_portion.category_id` | `MovementService.insertPair` via `MovementKind.interestFor(debt)`: from the debt's type, never the request | `MortgagePaymentApiTests.categoryComesFromTheType` (raw API with `categoryId`, `interestCategoryId`, `interestCategory`, on a mortgage and a loan) |
 
@@ -263,6 +263,13 @@ Sites that already used `isDebt` need no change (about 40). Words, not gates, st
 
 - **Storage.** A plan on a loan or mortgage is an `account_value` row with `planned = true` (V26 relaxes `amount >= 0` to `planned OR amount >= 0`), stored **with the debt's sign** (negative is owed, D-053) so `balanceText` reads "$15,000.00 owed" with no special case. The API takes the amount as a positive "amount owed" and negates it (a negative is refused: "Enter zero or a positive amount owed"); replay fingerprints negate the same way.
 - **Gate.** `ValueService` lets a debt through for plan save and review, history, removal review, removal and Undo (`loadPlannable`). A recorded (non-plan) value on a debt is refused ("What is owed changes by a payment or Update balance owed. A future amount can be saved as a plan."); a future date is refused first with slice 15's guidance text; start-extension stays valued-only. A debt's `currentBalance` is opening + payments and corrections, never a value row, so the review's "now" and "after" are the real Balance owed; `history` lists plans only (no invented "Initial value" row).
-- **Readers.** Every reader of `account_value` already filters `NOT planned`, and a debt's Balance never reads it; `DebtPlanApiTests` compares the account, activity, history, wealth now, wealth on a past date and the change explanation before and after each of the four rows' plans, and `WealthAsOfApiTests.debtPlanIsNeverCounted` moves the clock past the plan's date.
+- **Readers.** Every reader of `account_value` filters `NOT planned`. A debt's Balance does not use a value row, but `ActivityStore.deltaOf` and `deltasByAccount` read the valued deltas for every type, so `NOT v.planned` is the only thing that keeps a plan out of a debt's Balance (validator planted its removal: 4 of 5 `DebtPlanApiTests` failed); `DebtPlanApiTests` compares the account, activity, history, wealth now, wealth on a past date and the change explanation before and after each of the four rows' plans, and `WealthAsOfApiTests.debtPlanIsNeverCounted` moves the clock past the plan's date.
 - **Close and archive (decision 2 corrected).** Slice 15 refuses **Close** only (not archive) while a plan exists, after the zero check, with "<name> has N planned value(s). Remove it first, then close." A debt gets the same rule, message and review line (`closeBlockedBy`); archive is not blocked. My checkpoint-1 wording ("close and archive") was wrong about slice 15; the owner's "same rule, message and test" holds.
 - **UI.** The debt page shows a "Planned amounts owed" card (only once a plan exists) above Activity, with Remove and Undo per plan (the existing `ValueChange` review, worded for a debt). A date after today in the Update balance owed form shows slice 15's guidance with "Save as a future plan" and "Choose another date"; the plan form (`DebtPlanForm`) reviews and saves, ends with a status sentence and focus on the Activity heading, and Back returns focus to the plan form heading.
+
+### Decisions taken at Checkpoint 1 and after (16b)
+
+1. Mortgage payments reuse the loan-payment endpoint and form; **the interest category comes from the debt's type**. This changes 16a decision 4 ("a bean per noun"): there is still one `MovementKind.LOAN_PAYMENT`; `interestFor(debt)` picks `MORTGAGE_INTEREST` for a mortgage. A client-sent category is ignored.
+2. Close refuses while a plan exists (not archive), as slice 15; see "Group 5 as built".
+3. `WealthSummary.mortgages` is its own group; `loans` holds loans only; each debt is in exactly one and in `debtLines` once.
+4. Validator findings fixed after Prove: plan Undo disabled on a closed debt; Back from the plan review clears the save error; the property plan Undo no longer says "Balance owed"; a race test (`DebtPlanApiTests.planAndCloseRace`, red with the plan lock planted away, restored); tests for delete with a plan, close order, savings and card, and wealth after the plan's date. Left: `WealthOverTime` still says "loan principal" (applies to both); no e2e line for plan Undo/Cancel focus (Vitest only); the plan Undo-on-closed Vitest was not seen red.

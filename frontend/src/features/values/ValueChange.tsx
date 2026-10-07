@@ -6,6 +6,7 @@ import { Button, Card, CardTitle, FormAlert } from '../../design-system'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useChangeValue, useRemovalReview } from '../../hooks/useValues'
 import { formatMoney } from '../../lib/money'
+import { isDebt } from '../accounts/accountTypes'
 import { balanceText } from '../accounts/cardBalance'
 import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
@@ -57,7 +58,7 @@ export function ValueChange({
           {mode === 'remove'
             ? `The ${plan ? 'plan' : 'value'} stays in history, where Undo restores it. No cash or spending changes.`
             : plan
-              ? 'It returns as a plan. A plan is never counted in the Balance owed, wealth or any past date.'
+              ? `It returns as a plan. A plan is never counted in the ${isDebt(account.type) ? 'Balance owed' : 'value'}, wealth or any past date.`
               : 'It returns under its original date. The value with the latest date is the one that counts.'}
         </p>
         <EnteredBy members={members} member={member} setMemberId={setMemberId} />
