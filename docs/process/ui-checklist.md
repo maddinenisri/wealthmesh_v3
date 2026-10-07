@@ -12,4 +12,6 @@ before the fix (a Cowork finding is a missing test).
 6. The same figure matches on every screen that shows it (account card, list, Household card, Spending).
 7. Anything new that tells accounts or entries apart (type, status, owner) is visible in the lists.
 8. The history of every account involved shows the change, who made it and when.
-9. Say what was left in the dev data.
+9. Every label and sentence uses the words of the thing shown (a property says value, not Balance, Bank or joint
+   account; a card says owed; a plan says expect), and a date or amount never wraps onto two lines.
+10. Say what was left in the dev data.

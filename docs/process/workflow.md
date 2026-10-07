@@ -8,7 +8,10 @@ One slice (capabilities plus the scenario IDs they make citeable; D-018) is buil
 1. **Start**: paste the slice kickoff prompt from [prompts.md](prompts.md) (same text as in `features/INDEX.md`). The session reads the repo, not any earlier chat.
 2. **Checkpoint 1**: you approve the task list (scenario groups and test levels). Nothing is built before this.
 3. **Build**: test first, every test cites its scenario ID. Stuck for 15 minutes means defer the scenario with a reason.
-4. **Prove**: `npm run coverage -- --require --slice NN`, `npm test`, `npm run e2e`, `npm run check`, then the `validator` agent filling in the [build checklist](build-checklist.md).
+4. **Prove**: `npm run coverage -- --require --slice NN`, `npm test`, `npm run e2e`, `npm run check`, then the `validator` agent filling in the [build checklist](build-checklist.md), then, for a slice that adds or
+   changes a screen, the `visual-reviewer` agent (`.claude/agents/visual-reviewer.md`): it screenshots each new screen and
+   state at 710px and 1280px (`e2e/screens/shoot.mjs`) and reads the pictures against the UI checklist. Fix its findings
+   (each with a test) before Checkpoint 2.
 5. **Checkpoint 2**: you look at the running app, with the Cowork pass ([ui-checklist.md](ui-checklist.md)); each fault becomes a test.
 6. **Land**: commit in logical pieces, update the board, write the handoff in the feature notes, and write the retro row
    before the closing commit, then a read-only agent writes the walkthrough into the notes. Push only when you say so (D-002); a slice is `done` once pushed.
