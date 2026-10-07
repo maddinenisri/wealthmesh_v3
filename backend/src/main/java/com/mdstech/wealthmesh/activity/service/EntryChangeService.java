@@ -19,7 +19,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
 import com.mdstech.wealthmesh.account.domain.AccountState;
-import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.account.service.DebtRules;
 import com.mdstech.wealthmesh.activity.domain.Activity;

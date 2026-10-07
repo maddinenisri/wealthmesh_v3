@@ -115,14 +115,15 @@ class CorrectCorrectionApiTests extends LedgerApiTestBase {
 
     @Order(6)
     @Test
-    @DisplayName("a correction can be removed and brought back (owner, 2026-10-07), a replaced one cannot be "
-            + "replaced again, and another account's correction is not found")
+    @DisplayName("a replaced correction can be neither removed nor restored (a current one can, owner 2026-10-07), "
+            + "nor replaced again, and another account's correction is not found")
     void guards() {
+        // The first correction was replaced by an edit: it can be neither removed nor restored.
         for (String action : new String[] { "removal", "undo" }) {
             webTestClient.post().uri("/api/v1/accounts/{id}/activity/{entry}/" + action, accountId, correctionId)
                     .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                     .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange()
-                    .expectStatus().isOk();
+                    .expectStatus().isEqualTo(409);
         }
         replaceWithFee("k-fee-again", "40.00", "2026-09-30").expectStatus().isEqualTo(409);
         correct(accountId, "k-foreign", "4000.00", "2026-09-30", "Wrong account", feeCorrectionId)
