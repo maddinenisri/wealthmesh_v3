@@ -3,6 +3,7 @@ import type { ValueRow } from '../../api/values'
 import { Button, Card, CardTitle, Table, Td, Th } from '../../design-system'
 import { useValueHistory } from '../../hooks/useValues'
 import { balanceText } from '../accounts/cardBalance'
+import { Stamped } from '../values/Dated'
 
 /**
  * The plans saved for a loan or mortgage (DATED_VALUE_001): future amounts owed that nothing counts. Removed plans
@@ -48,7 +49,15 @@ export function DebtPlans({
               <Td className="text-right whitespace-nowrap">
                 {balanceText(account.type, row.amount)}
               </Td>
-              <Td>{row.reason ?? ''}</Td>
+              <Td>
+                {row.reason ?? ''}
+                {row.reason && row.enteredBy ? ' · ' : ''}
+                {row.enteredBy && (
+                  <>
+                    Entered by {row.enteredBy} on <Stamped at={row.createdAt} />
+                  </>
+                )}
+              </Td>
               <Td>{row.status === 'removed' ? 'Removed' : 'Planned'}</Td>
               <Td>
                 <Button

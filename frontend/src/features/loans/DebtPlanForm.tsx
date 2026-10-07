@@ -48,12 +48,16 @@ export function DebtPlanForm({
   // Back from the review brings the form back in place: its heading takes focus, not the page body.
   const wasReviewing = useRef(false)
   useEffect(() => {
-    if (draft) {
-      wasReviewing.current = true
-      document.getElementById('plan-review-heading')?.focus({ preventScroll: true })
-    } else if (wasReviewing.current) {
-      document.getElementById('plan-form-heading')?.focus()
-    }
+    // The panel wrapper takes focus when it mounts, after this effect, so the heading is focused a frame later.
+    if (draft) wasReviewing.current = true
+    const frame = requestAnimationFrame(() => {
+      if (draft) {
+        document.getElementById('plan-review-heading')?.focus({ preventScroll: true })
+      } else if (wasReviewing.current) {
+        document.getElementById('plan-form-heading')?.focus()
+      }
+    })
+    return () => cancelAnimationFrame(frame)
   }, [draft])
 
   const ask = handleSubmit((values) => {

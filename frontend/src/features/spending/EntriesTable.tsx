@@ -48,7 +48,7 @@ export function Entries({
                       words.column)}
                 </Button>
               </Td>
-              <Td>{entry.occurredOn}</Td>
+              <Td className="whitespace-nowrap">{entry.occurredOn}</Td>
               <Td>{entry.accountName}</Td>
               <Td className="text-right">
                 <Amount value={listedAmount(entry, categoryId)} />

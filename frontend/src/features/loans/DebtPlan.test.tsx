@@ -12,7 +12,7 @@ const maya = {
 }
 const ID = '44444444-4444-4444-8444-444444444444'
 const FUTURE =
-  'Future values are not completed account history. Save it as a future plan, or choose a date on or before today.'
+  'A future amount is not completed account history. Save it as a future plan, or choose a date on or before today.'
 
 const debt = (type: 'loan' | 'mortgage'): MockAccount => ({
   id: ID,
@@ -200,5 +200,34 @@ describe('plans on a closed debt', () => {
     renderRoute(`/accounts/${ID}`)
     const undo = await screen.findByRole('button', { name: 'Undo plan for 2026-12-31' })
     expect(undo).toBeDisabled()
+  })
+})
+
+describe('closing a debt that has a plan', () => {
+  it('V2_PROPERTY_005 the Close review of a debt that still owes names the amount owed and the plan', async () => {
+    mockApi({
+      ...seed('mortgage'),
+      values: [
+        {
+          id: 'v1',
+          accountId: ID,
+          valueOn: '2026-12-31',
+          amount: '-150000.00',
+          reason: null,
+          planned: true,
+          enteredBy: maya.id,
+          replacesId: null,
+          replaced: false,
+          removedAt: null,
+          removedBy: null,
+          createdAt: '2026-09-30T10:00:00Z',
+        },
+      ],
+    } as never)
+    const { user } = renderRoute(`/accounts/${ID}`)
+    await user.click(await screen.findByRole('button', { name: 'Close account' }))
+    const review = await screen.findByRole('region', { name: 'Review closing Home Mortgage' })
+    await waitFor(() => expect(review).toHaveTextContent('has 1 planned value. Remove it first'))
+    expect(review).toHaveTextContent('Closing needs a zero Balance owed')
   })
 })

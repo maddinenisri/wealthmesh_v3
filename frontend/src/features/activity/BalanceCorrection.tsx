@@ -42,7 +42,7 @@ const requestedRules = {
 
 /** Said when a debt is given a date after today: the same words as a property's (PROPERTY_006). */
 const FUTURE =
-  'Future values are not completed account history. Save it as a future plan, or choose a date on or before today.'
+  'A future amount is not completed account history. Save it as a future plan, or choose a date on or before today.'
 
 /** A loan's amount owed is typed as zero or more; there is no side (it is always owed). */
 const debtRules = {

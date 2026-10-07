@@ -2,6 +2,7 @@ import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
 import type { ValueRow } from '../../api/values'
 import { Dated } from './Dated'
+import { withDates } from './withDates'
 import { Button, Card, CardTitle, FormAlert } from '../../design-system'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useChangeValue, useRemovalReview } from '../../hooks/useValues'
@@ -43,9 +44,11 @@ export function ValueChange({
         </CardTitle>
         <FormAlert message={change.error?.message ?? removal.error?.message} />
         <p className="mt-3 max-w-md">
-          {mode === 'remove'
-            ? `Remove the ${plan ? 'plan' : 'value'} ${what}.`
-            : `Bring back the ${plan ? 'plan' : 'value'} ${what}.`}
+          {withDates(
+            mode === 'remove'
+              ? `Remove the ${plan ? 'plan' : 'value'} ${what}.`
+              : `Bring back the ${plan ? 'plan' : 'value'} ${what}.`,
+          )}
         </p>
         {mode === 'remove' && removal.data && !plan && (
           <p className="mt-2 max-w-md text-sm">

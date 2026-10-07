@@ -273,3 +273,18 @@ Sites that already used `isDebt` need no change (about 40). Words, not gates, st
 2. Close refuses while a plan exists (not archive), as slice 15; see "Group 5 as built".
 3. `WealthSummary.mortgages` is its own group; `loans` holds loans only; each debt is in exactly one and in `debtLines` once.
 4. Validator findings fixed after Prove: plan Undo disabled on a closed debt; Back from the plan review clears the save error; the property plan Undo no longer says "Balance owed"; a race test (`DebtPlanApiTests.planAndCloseRace`, red with the plan lock planted away, restored); tests for delete with a plan, close order, savings and card, and wealth after the plan's date. Left: `WealthOverTime` still says "loan principal" (applies to both); no e2e line for plan Undo/Cancel focus (Vitest only); the plan Undo-on-closed Vitest was not seen red.
+
+### 16b visual-reviewer (after Prove, with focus and status-sentence checks): 14 faults
+
+Run on the dev stack at 710px and 1280px, one picture per step, `document.activeElement` and the visible sentence recorded after each step. Fixed (Vitest first where noted):
+
+| # | Fault | Fix |
+| --- | --- | --- |
+| 1 | Close review of a debt that still owes with a plan showed only the plan sentence, never the amount owed | Both sentences (`DebtPlan.test.tsx`, red first by the finding) |
+| 5 | Back from the plan review put focus on the panel wrapper (Panel focuses after the child's effect) | Heading focused a frame later; Vitest already covered it, and it was red after the first attempt |
+| 8 | Plan Undo/Remove sentence broke a date over two lines | `withDates` |
+| 9 | Spending entries Date column broke "2026-10-/02" | `whitespace-nowrap` |
+| 10 | Planned amounts rows showed no who or when | "Entered by X on <stamp>" |
+| 12 | Guidance said "Future values" on a debt | "A future amount is not completed account history..." (UI only) |
+
+Not fixed, with reason: 2 (the Close message "planned value" on a debt is slice 15's message, kept by the owner's "same message"); 3 and 4 (Add account Confirm has no sentence and Back focuses the first field: older behaviour for every type, not mortgage-specific); 6 (a stale "Saved a plan" sentence stays under Activity beside the Close review, which lives in the status card); 7, 13 (wraps in the older history/review grids); 11 (empty "Saved by" on the initial row: older, from 16a); 14 (correction sentence has no figure: older). Already logged: Wealth on a date omits debts; "Entered by" header wraps. Not reached: plan row in the debt's history, overpayment on a mortgage, Correct initial amount on a mortgage, a long name, Archive/Restore of a mortgage.

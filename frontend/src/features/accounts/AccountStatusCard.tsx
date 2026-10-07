@@ -153,7 +153,7 @@ export function AccountStatusCard({ account }: { account: Account }) {
                 {debt ? 'balance owed' : word} ({figure}) and complete history.
               </p>
             ) : review === 'close' ? (
-              closeBlocked.length > 0 ? (
+              closeBlocked.length > 0 && atZero ? (
                 <p className="text-sm">{closeBlocked.join(' ')}</p>
               ) : atZero ? (
                 <p className="text-sm">
@@ -170,10 +170,13 @@ export function AccountStatusCard({ account }: { account: Account }) {
                   first (for example when it is sold), then review closing again.
                 </p>
               ) : debt ? (
-                <p className="text-sm">
-                  Closing needs a zero Balance owed. {account.name} has {figure}: record a payment
-                  for it, then review closing again.
-                </p>
+                <>
+                  <p className="text-sm">
+                    Closing needs a zero Balance owed. {account.name} has {figure}: record a payment
+                    for it, then review closing again.
+                  </p>
+                  {closeBlocked.length > 0 && <p className="text-sm">{closeBlocked.join(' ')}</p>}
+                </>
               ) : (
                 <p className="text-sm">
                   Closing needs a zero Balance. {account.name} has {figure}, which must be accounted
