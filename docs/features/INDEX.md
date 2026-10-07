@@ -13,11 +13,11 @@ Check a session with `npm run coverage -- --require --slice NN`; a file is compl
 ## Where we are (2026-10-06)
 
 - **Done:** slices 00a to 15 (Milestones A and B complete, plus property and other assets with dated values). `npm run coverage`: 126 of 262 scenarios covered, 3 deferred, 133 missing.
-- **Next:** slice 16 (loans and mortgages, 16 IDs), then 17 and 18 (Milestone C), then 19 to 25 (investments, Milestone D).
+- **Next:** slice 16a (loans, 7 IDs), then 16b (mortgages, 9 IDs), then 17 and 18 (Milestone C), then 19 to 25 (investments, Milestone D).
 - **Tests on `main`:** backend 571, frontend 286, e2e 221, all green; the pre-push hooks pass.
 - **Open for the owner:** reviews of a property still say "Balance now/after" (decisions use Balance across the app); Q-004 (TypeScript 7, msw 3, Gradle 9.8) deferred; a process review is scheduled for the start of Milestone D (the Cowork fault count has been 8, 8, 5, 5, 5, 7, 9, 9, and slice 15 added a `visual-reviewer` screenshot step to lower it).
 - **Open in the code:** the removable "Value when tracking began" row; slice 14's untested inventory cells and the shorter-batch retry; three unexplained backend flakes (`scripts/flake-check.sh`, pitfall 33).
-- **Slice 16 must:** extend `WealthStore.flowsBetween` and the wealth change identity test with principal and interest kinds.
+- **Slice 16a must:** extend `WealthStore.flowsBetween` and the wealth change identity test with principal and interest kinds.
 
 ## Starting a session
 
@@ -55,7 +55,8 @@ One row per session. Do not start a second row, even if time remains.
 | 14 | Recurring bills | S6 | RECURRING 001, 002, 003, 004, 005, 006, 007, 008, 009, 010 | 10 | L | done | 2026-10-06 | `ee6d388`, pushed | Notes: `slice-14-recurring-bills.md`. Schedules and expected amounts that never move money (D-048); suggestions from recorded bills; record the actual expense through the entry rules; pause, resume, overdue, dismiss, delete; Q-044 fixed first with one replay path (D-049); owner's Cowork pass: 9 faults (against 8, 8, 5, 5, 5 and 7), all fixed |
 | | **Milestone B** | | everyday money complete (categories, splits, groups, lifecycle, budgets, recurring). | | | | | | |
 | 15 | Property and other assets, dated values | T3, W4, W5 | DATED_VALUE 002, 004; OTHER_ASSET 002, 003, 004, 005, 006; PROPERTY 002, 003, 004, 005, 006 | 12 | L | done | 2026-10-06 | `b776e07`, pushed | Notes: `slice-15-property-other-assets-dated-values.md`. Property and other assets as dated values (D-050), plans, earlier start, wealth on a date and the change explanation (D-051); group 0 first: one occurrence per due date, by-name replay after a rename (D-052); owner's Cowork pass: 9 faults (against 8, 8, 5, 5, 5, 7 and 9), all fixed |
-| 16 | Loans and mortgages | T4, T5 | DATED_VALUE 001, 003; LOAN 001, 002, 003, 004, 005, 006; MORTGAGE 001, 002, 003, 004, 005, 006, 007, 008 | 16 | L | todo | | | Loans, mortgages, and principal/interest portions linked from checking |
+| 16a | Loans, debt corrections | T4 | DATED_VALUE 003; LOAN 001, 002, 003, 004, 005, 006 | 7 | M | in-progress | | | Loans with principal/interest payments from checking and debt corrections; property review says "Value". Notes: `slice-16-loans-mortgages.md` |
+| 16b | Mortgages, planned debt values | T5 | DATED_VALUE 001; MORTGAGE 001, 002, 003, 004, 005, 006, 007, 008 | 9 | M | todo | | | Mortgages reuse 16a; `DATED_VALUE_001` planned values on a debt. Notes: `slice-16-loans-mortgages.md` |
 | 17 | Investment accounts, generic setup | T7, T8 | 401K 002, 003, 005, 006; ACCOUNT_LIFECYCLE 007; BROKERAGE 002, 003, 005, 006; HSA 002, 003, 005, 006; INV_CORRECTION 005; ROTH_IRA 002, 003, 005, 006; TRAD_IRA 002, 003, 005, 006 | 22 | L | todo | | | Five account types share one capability |
 | 18 | Defined benefit, wealth groups, individual owners | T6, W3, M3, M4 | 401K 007; DB 001, 002, 003, 004, 005, 006; HOLDINGS 001, 007; HOUSEHOLD_SETUP 002, 005; HSA 007; MEMBERS 002; OTHER_ASSET 001; PROPERTY 001; RETIREMENT_ACTIVITY 007; ROTH_IRA 007; TRAD_IRA 007; WEALTH 002, 008, 009 | 21 | L | todo | | | Plan value, Retirement/Investments/Health/Property groups, per-person view, individual-owner rule |
 | | **Milestone C** | | every account type can be set up and appears in its wealth group; per-person views work. | | | | | | |
@@ -87,9 +88,9 @@ Status of each file follows from its sessions. A file is complete after its last
 | `accounts/checking/activity.feature` | 11 | 01 (2), 02 (1), 03 (4), 04 (1), 07 (2), 12 (1) | 12 |
 | `spending/budgets/manage-budgets.feature` | 7 | 13 (7) | 13 |
 | `spending/recurring/manage-recurring.feature` | 10 | 14 (10) | 14 |
-| `accounts/lifecycle/dated-values.feature` | 4 | 15 (2), 16 (2) | 16 |
-| `accounts/loans/manage-loans.feature` | 6 | 16 (6) | 16 |
-| `accounts/mortgage/manage-mortgage.feature` | 8 | 16 (8) | 16 |
+| `accounts/lifecycle/dated-values.feature` | 4 | 15 (2), 16a (1), 16b (1) | 16b |
+| `accounts/loans/manage-loans.feature` | 6 | 16a (6) | 16a |
+| `accounts/mortgage/manage-mortgage.feature` | 8 | 16b (8) | 16b |
 | `accounts/lifecycle/manage-accounts.feature` | 7 | 12 (6), 17 (1) | 17 |
 | `accounts/defined-benefit/setup.feature` | 6 | 18 (6) | 18 |
 | `accounts/other-assets/setup.feature` | 6 | 15 (5), 18 (1) | 18 |
