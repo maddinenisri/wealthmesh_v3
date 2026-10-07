@@ -52,6 +52,8 @@ public class MovementService {
             BiFunction<Account, Account, String> refusal, UUID interestCategory) {
         /** The seeded "Loan interest" category (V25), found by id so a rename does not lose it. */
         public static final UUID LOAN_INTEREST = UUID.fromString("a16a0000-0000-4000-8000-000000000001");
+        /** The seeded "Mortgage interest" category (V25), used by mortgage payments in slice 16b. */
+        public static final UUID MORTGAGE_INTEREST = UUID.fromString("a16a0000-0000-4000-8000-000000000002");
 
         public static final MovementKind TRANSFER = new MovementKind("transfer_out", "transfer_in", "transfer",
                 (from, to) -> AccountType.isCard(from.type()) || AccountType.isCard(to.type()) ? CARD_TYPE : null,

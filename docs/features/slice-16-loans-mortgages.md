@@ -3,7 +3,7 @@
 Copy this file to `docs/features/slice-NN-<name>.md` at the start of the session. One file per slice, edited only by
 the session working it. Keep it short; it exists so the next session needs no memory of this one.
 
-- Slice: 16 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/loans/manage-loans.feature`, `accounts/mortgage/manage-mortgage.feature`, `accounts/lifecycle/dated-values.feature` (001, 003)
+- Slice: 16a (and 16b, next) in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/loans/manage-loans.feature`, `accounts/mortgage/manage-mortgage.feature`, `accounts/lifecycle/dated-values.feature` (001, 003)
 - Status: done for 16a (loans, groups 0 to 3); 16b (mortgages) is the next session
 - Started: 2026-10-06 21:40 EDT (session clock)  Finished: 2026-10-07  Commit: `cd473cc` (local, not pushed)
 
@@ -28,7 +28,7 @@ Owner note: the loan and mortgage wording is left open on purpose. An earlier li
 ```
 
 - 2026-10-06 Checkpoint 1 answer: design, wording list and task list approved. Q1 split: this session is slice 16a (groups 0 to 3; IDs `LOAN_001` to `006` and `DATED_VALUE_003`), 16b (groups 4 to 8; the rest) next session; two rows in `INDEX.md` and `slices.txt`. Q2 yes: `DATED_VALUE_001` on a debt saves a planned value no reader counts; say where a debt's planned rows live and reuse slice 15's exclusion test (16b). Additions: (1) per-leg amounts must not weaken transfers and card payments: a raw-API test that a plain transfer and a card payment still refuse unequal legs, and the existing transfer, card payment and race suites run as regression; (2) one test that loan and mortgage interest spending shows the same figure on Spending, the Month review, budgets and the change explanation; both interest categories get default class Essential. Build in order, one commit per group, local only, no push, no trailer; each new e2e assertion run alone against unfixed code; visual-reviewer after Prove and before Checkpoint 2; Cowork count against 8, 8, 5, 5, 5, 7, 9 and 9.
-- 2026-10-07 Checkpoint 2 answer: 8 faults against 8, 8, 5, 5, 5, 7, 9 and 9 (22 found by the screenshot step before); the slice is right on the numbers. Owner: make ledger Balance corrections removable with Undo (done). Asked: is a dated correction stored as a change, not a figure, the wanted behaviour (answered below, Q-031).
+- 2026-10-07 Checkpoint 2 answer: 8 faults against 8, 8, 5, 5, 5, 7, 9 and 9 (22 found by the screenshot step before); the slice is right on the numbers. Owner: make ledger Balance corrections removable with Undo (done). Asked: is a dated correction stored as a change, not a figure, the wanted behaviour (folded into the open Q-031 with a note; the owner decides).
 
 ## Scope
 
@@ -128,9 +128,9 @@ Cells to grep at build: `Counted`, `activity_part`, `SIGNED`, `kind IN (` in eve
 | 5 | Back from a review, and Confirm removal and Undo, left focus on the page body | Back focuses the form heading (payment, correction, initial amount); removal and Undo announce (Vitest). e2e line for Back on the initial amount |
 | 6 | "Loan interest" could be archived but payments still saved into it | The two interest categories cannot be archived or merged away (409, rename allowed): `LoanCorrectionApiTests` order 13 |
 | 7 | Two payments from one account had identical button names; a row showed only the principal | Names carry the amount and date; the loan row says "Part of a $500.00 payment, $50.00 of it interest" (`paymentTotal`, `paymentInterest`, API and Vitest) |
-| 8 | "Balance owed $20,000.00 owed"; "Starting balance correction" in a loan's history; Edit payment Reason not marked optional | The details figure drops "owed"; "Initial amount correction"; "Reason (optional)". The Accounts list heading was already "Bank or lender" in the build the owner used? No: it was fixed after; the dev stack now serves it |
+| 8 | "Balance owed $20,000.00 owed"; "Starting balance correction" in a loan's history; Edit payment Reason not marked optional | The details figure drops "owed"; "Initial amount correction"; "Reason (optional)". The Accounts list heading was changed to "Bank or lender" in `781a47b`; the owner's build predates it and the dev stack now serves it |
 
-Owner's two questions: (a) ledger corrections removable with Undo: yes, built (`EntryChangeService`, the Remove button for every correction, `CorrectCorrectionApiTests` guard test rewritten, `aLedgerCorrectionIsRemovableToo`). (b) a dated correction is stored as a signed change plus the requested figure (slice 03, Q-031 open): kept; the form says "Enter what was owed at the end of that day" and the review shows the change; an owner decision on Q-031 is still wanted.
+Owner's two questions: (a) ledger corrections removable with Undo: yes, built (`EntryChangeService`, the Remove button for every correction, `CorrectCorrectionApiTests` guard test rewritten, `aLedgerCorrectionIsRemovableToo`). (b) a dated correction is stored as a signed change plus the requested figure (slice 03): this is open Q-031 (slice 04), so it is not a second question: kept as built; the form says "Enter what was owed at the end of that day" and the review shows the change. A cheap improvement if wanted: a form hint "a later change to an earlier amount moves this figure".
 
 ## Coverage
 
@@ -176,16 +176,16 @@ Not reached by the reviewer: the success messages after Confirm, the Restore rev
 
 **A payment.** (1) The review asks the server for both Balances after; an overpayment is refused there. (2) Confirm locks both accounts (lowest id first), re-reads the loan's debt and refuses an overpayment, saves the paying row (whole amount, principal and interest portions) and the loan's row (principal), and then checks the loan holds no credit on any date. (3) Only the interest counts as spending, in "Loan interest"; the principal is a transfer that cancels in the wealth explanation. (4) A repeated key returns the stored payment; the same key with other figures is 409.
 
-**Decisions.** D-053 (a loan is a debt; a debt never becomes an asset; corrections; any correction removable), D-054 (the payment shape; interest categories cannot be archived or merged away). Open: Q-055 (a dated correction is stored as a change), the as-of wealth lines leave loans out, the opening-revision lock has no race test that fails without it. Mortgages and DATED_VALUE_001 are slice 16b.
+**Decisions.** D-053 (a loan is a debt; a debt never becomes an asset; corrections; any correction removable), D-054 (the payment shape; interest categories cannot be archived or merged away). Open: Q-031 (a dated correction is stored as a change), the as-of wealth lines leave loans out, the opening-revision lock has no race test that fails without it. Mortgages and DATED_VALUE_001 are slice 16b.
 
 **Verify.** `npm test` (backend and frontend, with the dev stack stopped), `npm run e2e`, `npm run coverage -- --require --slice 16a`; then Accounts > Add account > Loan, a loan's page, Household and Spending at 710px and 1280px.
 
 ## Handoff
 
-- Built: groups 0 to 3 (slice 16a), V25, D-053 and D-054, Q-054 (yes) and Q-055 (open). Eleven local commits on `main`, **not pushed** (the owner has not said to push, D-002). Frontend 318, e2e 247, backend suite green (stop the dev stack first, pitfall 35).
+- Built: groups 0 to 3 (slice 16a), V25, D-053 and D-054, Q-054 (yes); Q-031 (open, extended). Eleven local commits on `main`, **not pushed** (the owner has not said to push, D-002). Frontend 318, e2e 247, backend suite green (stop the dev stack first, pitfall 35).
 - 16b (groups 4 to 8, next session): `AccountType.MORTGAGE` as a second `Kind.DEBT` type (setup, Lender, wealth group "Mortgages", `MovementKind` for mortgage payments with `MORTGAGE_INTEREST` id `a16a0000-0000-4000-8000-000000000002`, already seeded and protected), the mortgage scenarios `MORTGAGE_001` to `008`, and `DATED_VALUE_001` (a future-dated correction on a debt saves a planned value no reader counts: owner approved; where it lives is open, `account_value` is refused for a loan today, so the plan needs its own table or a widened gate, and slice 15's exclusion test is reused).
 - Watch for: every writer that changes a loan's Balance must call `DebtRules.requireNotCredit` after the change under the lock (payment create and replace, correction save, removal and Undo of a correction, the Undo of a payment, a new initial amount); a new reader of spending must read `activity_part`; ledger words on a debt page (Bank, Balance, entries, transfer) are what Cowork finds, read the new type's pages in its own words before Cowork; Confirm, removal, Undo and Back each need a sentence and focus; run Gradle test classes one pattern per invocation.
-- Left open (logged): the as-of wealth lines on the Household page leave loans out; the opening-revision lock race test is green without the lock; no state-matrix cell for a payment on a closed loan or a removal on an archived one; two minor wraps at 1280px; Q-055.
+- Left open (logged): the as-of wealth lines on the Household page leave loans out; the opening-revision lock race test is green without the lock; no state-matrix cell for a payment on a closed loan or a removal on an archived one; two minor wraps at 1280px; Q-031.
 - v1 showed: not consulted.
 
 ## Retro (3 lines, also appended to `docs/process/retro.md`)

@@ -79,8 +79,8 @@ public class CategoryLifecycleService {
 
     /** The categories every loan and mortgage payment's interest counts under (V25): they stay available. */
     private static final java.util.Set<UUID> IN_USE_BY_PAYMENTS = java.util.Set.of(
-            UUID.fromString("a16a0000-0000-4000-8000-000000000001"),
-            UUID.fromString("a16a0000-0000-4000-8000-000000000002"));
+            com.mdstech.wealthmesh.activity.service.MovementService.MovementKind.LOAN_INTEREST,
+            com.mdstech.wealthmesh.activity.service.MovementService.MovementKind.MORTGAGE_INTEREST);
 
     private static ResponseStatusException usedByPayments(Category category) {
         return conflict("\"" + category.name() + "\" is where the interest of every loan payment is counted, so it "
