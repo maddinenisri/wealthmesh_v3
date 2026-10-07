@@ -69,6 +69,10 @@ All 16 are citeable once the debt type exists (the map is right); none is blocke
 8. **Lender**: the institution field; its over-120 message says "Lender" for a loan, "Bank" for the rest, on create and on edit.
 9. **Open, not fixed (group 1):** the as-of wealth lines on the Household page list only property and other assets, so a loan shows only in the net figure on a past date; a card's line there reads with a minus sign (older than this slice).
 
+10. **Group 2 payment shape: DRAFT, deviates from decision 4 (advisor review, then the owner at Checkpoint 2).** Decision 4 said one `MovementKind` with per-leg amounts (checking -total, debt +principal) and principal and interest as `activity_portion` rows read by spending through `activity_part` and `Counted`. Reading the code showed the cost: every spending reader (`monthEntries`, `monthTotal`, `spendingByMonth`, `classTotals`, `totalsByCategory`, `CategoryStore`, budgets, `flowsBetween`) is portion-blind except by category, `monthEntries` would list a $500 payment under "Loan interest" with a $50 total, and `MovementService` assumes both legs share one amount in `matches`, `toTransfer`, `insertPair` and the preview.
+    **Alternative (W):** the payment is the same two-leg movement of the **principal** only (`loan_payment` on checking -450, `loan_payment_in` on the loan +450, equal legs, so `MovementService`, transfers and card payments keep their one-amount rule), plus **one ordinary `expense` row** on checking for the interest (-50, category "Loan interest" or "Mortgage interest", class Essential) tied to the movement by a new column `activity.interest_of_movement_id` (V25; not `movement_id`, so the two-leg code and the counter-account joins do not see it). Every spending reader, budget, month review and `flowsBetween`'s spending already count it, because it is an expense; `flowsBetween` only gains the two new kinds in its transfer list (they cancel). Checking: -450 - 50 = -500; loan owed 20,000 - 450 = 19,550; spending 50; net worth -15,050 (LOAN_003); MORTGAGE_003 the same with 800 and 400.
+    The movement view (`Transfer`) reports `amount` = principal + interest (the $500 payment) with `principal` and `interest`; the checking list shows the interest row as read-only ("Interest on the payment to Car Loan"). Costs of W: remove, Undo and replace of the pair also move the interest row; every writer of a single entry (change, remove, Undo, move, convert, split, batch) must refuse a row with `interest_of_movement_id` (one raw-API refusal test per writer); a zero-interest payment has no interest row.
+
 ## Task list (approved at checkpoint 1)
 
 Nine groups, more than 5. Proposed split (owner item 3): see question 1.
@@ -104,28 +108,6 @@ Cells to grep at build: `Counted`, `activity_part`, `SIGNED`, `kind IN (` in eve
 1. **Split.** The owner asked for loans first, then mortgages. Loans and mortgages share every mechanism, so mortgage groups 4 to 7 are mostly tests and a noun. Recommended: one session for groups 0 to 3 (slice 16a: 4 groups, 7 IDs plus the debt mechanism) and a second for groups 4 to 8 (16b), with `INDEX.md` split into two rows. Fallback if you prefer one session: all nine groups and `partial` if a stop rule hits.
 2. **DATED_VALUE_001 for a debt.** A future date on a correction is refused today with no reminder or plan. Options: (a) allow a `planned` `account_value` row on a debt (never effective, listed, removable, as slice 15), (b) refuse with guidance and defer `001` whole (D-016). Recommended: (a).
 3. **Wording** in decision 6: approve or change.
-
-## Decisions
-
-Choices made that the feature file does not settle, each with the reason. Keep feature-local choices here; promote
-a choice to `docs/decisions/decisions.md` only when other features will rely on it. Foundation rules live in
-`docs/guides/domain-foundations.md`; do not restate them, only link.
-
-## Task list (approved at checkpoint 1)
-
-| Group | Scenario IDs | Test level | Status |
-| --- | --- | --- | --- |
-| e.g. create a checking account | `V2_..._001`, `V2_..._002` | API + UI (MSW) + e2e | todo |
-
-Levels: unit, API (Testcontainers), UI (Vitest + MSW), e2e (Playwright). Each ID needs at least one test that cites
-it by name, for example in the test title or a comment.
-
-### Inventory
-
-Every shared row or state this slice changes, with each reader and writer (grep result, not memory):
-
-| Row or state | Readers | Writers | Race test |
-| --- | --- | --- | --- |
 
 ## Coverage
 
