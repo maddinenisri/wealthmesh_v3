@@ -287,7 +287,7 @@ Run on the dev stack at 710px and 1280px, one picture per step, `document.active
 | 10 | Planned amounts rows showed no who or when | "Entered by X on <stamp>" |
 | 12 | Guidance said "Future values" on a debt | "A future amount is not completed account history..." (UI only) |
 
-Not fixed, with reason: 2 (the Close message "planned value" on a debt is slice 15's message, kept by the owner's "same message"); 3 and 4 (Add account Confirm has no sentence and Back focuses the first field: older behaviour for every type, not mortgage-specific); 6 (a stale "Saved a plan" sentence stays under Activity beside the Close review, which lives in the status card); 7, 13 (wraps in the older history/review grids); 11 (empty "Saved by" on the initial row: older, from 16a); 14 (correction sentence has no figure: older). Already logged: Wealth on a date omits debts; "Entered by" header wraps. Not reached: plan row in the debt's history, overpayment on a mortgage, Correct initial amount on a mortgage, a long name, Archive/Restore of a mortgage.
+Not fixed, with reason: 2 (the Close message "planned value" on a debt was slice 15's message; the Cowork pass changed the noun to "planned amount" for a debt, rule and structure unchanged); 3 and 4 (Add account Confirm has no sentence and Back focuses the first field: older behaviour for every type, not mortgage-specific); 6 (a stale "Saved a plan" sentence stays under Activity beside the Close review, which lives in the status card); 7, 13 (wraps in the older history/review grids); 11 (empty "Saved by" on the initial row: older, from 16a); 14 (correction sentence has no figure: older). Already logged: Wealth on a date omits debts; "Entered by" header wraps. Not reached: plan row in the debt's history, overpayment on a mortgage, Correct initial amount on a mortgage, a long name, Archive/Restore of a mortgage.
 
 ### 16b Cowork pass (2026-10-07): 5 faults (previous slices: 8, 8, 5, 5, 5, 7, 9, 9, 8)
 
@@ -300,3 +300,21 @@ All eight steps passed. Faults, each fixed with an e2e assertion in `20-mortgage
 | 3 | Debt screens said "planned value", "dated value", "loan principal" | A debt says "planned amount"; the What changed note says "loan or mortgage principal" |
 | 4 | Shortfall worded two ways ("still to assign" vs "remains unassigned") | One wording: "$X remains unassigned" |
 | 5 | Plan card put "Entered by" under Reason; a removed plan named nobody | Separate Entered column; "Removed by … on …"; table scrolls inside the card |
+
+## Handoff (16b)
+
+- Built: groups 0 to 5, V26, D-055, D-056, Q-031 resolved. Backend suite green (dev stack stopped), frontend 343, e2e 257. Not pushed (ask the owner, D-002).
+- State: the dev stack is stopped. Dev data left: `CW Home Mortgage`, `RB Bills Checking` and 8 `VR16b` accounts.
+- Left open: the items in the visual-reviewer table marked older or not mortgage-specific (Add account Confirm sentence, older history grid wraps, empty "Saved by" on the initial row, stale "Saved a plan" sentence beside the Close review).
+
+## How it works (16b)
+
+Checked against the code (plan date rule `ValueService.checkDate`, negative amount refusal `ValueService`, Close rule `AccountLifecycleService`, interest by type `MovementService.interestFor`).
+
+- **Adding a mortgage:** like a loan, but the type is Mortgage. The form asks for a Lender and "Amount owed" (blank is $0.00). A negative amount is refused: "Enter zero or a positive amount owed".
+- **In wealth:** a mortgage is a debt. The Household page lists it in its own Mortgages group beside Loans; each debt is in exactly one group, so net worth, the Household total and the change explanation count it once.
+- **Paying:** the same payment form and endpoint as a loan ("Pay a loan or mortgage"). The principal lowers the amount owed, the interest counts as spending under "Mortgage interest". The category comes from the debt's type; one sent by the browser is ignored or refused. If principal and interest do not add up, the form says "$X remains unassigned" and nothing is saved. "Mortgage interest" cannot be archived or merged while payments use it.
+- **Corrections:** a payment's portions can be changed, or the payment removed and brought back with Undo (16a behaviour). A lender correction is reviewed first and can be cancelled; it is never income or a payment.
+- **Future amounts:** a date after today on a loan or mortgage is not recorded history. The form offers "Save as a future plan"; the plan is reviewed, saved and listed under "Planned amounts owed" with Remove and Undo. Nothing counts a plan: not the Balance owed, wealth today, wealth on a past date or the change explanation. A plan must be dated after today and its amount must not be negative.
+- **Close:** refused while a plan exists ("<name> has N planned amount(s). Remove it first, then close."), the same rule as a property. Archive is not blocked.
+- **Refused on a debt:** a recorded (non-plan) amount, with "What is owed changes by a payment or Update balance owed. A future amount can be saved as a plan."
