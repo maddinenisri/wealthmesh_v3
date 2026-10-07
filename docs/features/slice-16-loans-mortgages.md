@@ -5,7 +5,7 @@ the session working it. Keep it short; it exists so the next session needs no me
 
 - Slice: 16a (and 16b, next) in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/loans/manage-loans.feature`, `accounts/mortgage/manage-mortgage.feature`, `accounts/lifecycle/dated-values.feature` (001, 003)
 - Status: done for 16a (loans, groups 0 to 3); 16b (mortgages) is the next session
-- Started: 2026-10-06 21:40 EDT (session clock)  Finished: 2026-10-07  Commit: `cd473cc` (local, not pushed)
+- Started: 2026-10-06 21:40 EDT (session clock)  Finished: 2026-10-07  Commit: `6a14bad`, pushed 2026-10-07
 
 ## Prompts and directions
 
@@ -182,7 +182,7 @@ Not reached by the reviewer: the success messages after Confirm, the Restore rev
 
 ## Handoff
 
-- Built: groups 0 to 3 (slice 16a), V25, D-053 and D-054, Q-054 (yes); Q-031 (open, extended). Eleven local commits on `main`, **not pushed** (the owner has not said to push, D-002). Frontend 318, e2e 247, backend suite green (stop the dev stack first, pitfall 35).
+- Built: groups 0 to 3 (slice 16a), V25, D-053 and D-054, Q-054 (yes); Q-031 (open, extended). Pushed to `origin/main` on 2026-10-07 (owner approved, D-002; the pre-push hooks passed). Frontend 318, e2e 247, backend suite green (stop the dev stack first, pitfall 35).
 - 16b (groups 4 to 8, next session): `AccountType.MORTGAGE` as a second `Kind.DEBT` type (setup, Lender, wealth group "Mortgages", `MovementKind` for mortgage payments with `MORTGAGE_INTEREST` id `a16a0000-0000-4000-8000-000000000002`, already seeded and protected), the mortgage scenarios `MORTGAGE_001` to `008`, and `DATED_VALUE_001` (a future-dated correction on a debt saves a planned value no reader counts: owner approved; where it lives is open, `account_value` is refused for a loan today, so the plan needs its own table or a widened gate, and slice 15's exclusion test is reused).
 - Watch for: every writer that changes a loan's Balance must call `DebtRules.requireNotCredit` after the change under the lock (payment create and replace, correction save, removal and Undo of a correction, the Undo of a payment, a new initial amount); a new reader of spending must read `activity_part`; ledger words on a debt page (Bank, Balance, entries, transfer) are what Cowork finds, read the new type's pages in its own words before Cowork; Confirm, removal, Undo and Back each need a sentence and focus; run Gradle test classes one pattern per invocation.
 - Left open (logged): the as-of wealth lines on the Household page leave loans out; the opening-revision lock race test is green without the lock; no state-matrix cell for a payment on a closed loan or a removal on an archived one; two minor wraps at 1280px; Q-031.
