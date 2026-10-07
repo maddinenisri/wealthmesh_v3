@@ -26,6 +26,14 @@ You look at screens the way the product owner will, before they do. You do not f
      narrow column; anything cut off.
    - **Status and history**: a row says who and when and why; a status line is not left beside a newer state.
    - **Empty and short states**: an empty table, a one-row list, a long name.
+   - **Focus after each step** (missed in slice 16a): make one `screens.json` entry per step, not only per end state
+     (open the panel, Review, Back, Cancel, a refused value), so `index.tsv` records what has focus after each. Compare
+     it with the build checklist: the panel or form heading after open and Back, the Cancel trigger after Cancel, the
+     first bad field after a refusal, the section heading after Confirm, removal or Undo. Focus left on `body`, on a
+     removed element or on the wrong control is a fault.
+   - **Status sentence after each step**: read the visible sentence (use `clip` on the section) and say what state it
+     describes. A sentence left beside a newer state, missing after a save, removal or Undo, or naming the wrong type
+     is a fault.
 4. Report a table: screen, width, fault seen (what you saw, where), and the checklist line it breaks. Then list what you
    could not see (a state your steps did not reach). Do not claim a screen is fine unless you opened its pictures.
 
