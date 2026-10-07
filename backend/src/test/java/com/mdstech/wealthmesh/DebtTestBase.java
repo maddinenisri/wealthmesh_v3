@@ -59,8 +59,12 @@ abstract class DebtTestBase extends ValuedTestBase {
     protected String loanPayment(String key, String from, String to, String principal, String interest, String date) {
         AtomicReference<String> id = new AtomicReference<>();
         String amount = new java.math.BigDecimal(principal).add(new java.math.BigDecimal(interest)).toPlainString();
-        postLoanPayment(key, from, to, amount, principal, interest, date, mayaId).expectStatus().isCreated()
-                .expectBody().jsonPath("$.movementId").value(String.class, id::set);
+        org.springframework.test.web.reactive.server.EntityExchangeResult<byte[]> result =
+                postLoanPayment(key, from, to, amount, principal, interest, date, mayaId)
+                        .expectBody().returnResult();
+        String body = new String(result.getResponseBodyContent());
+        org.assertj.core.api.Assertions.assertThat(result.getStatus().value()).as(body).isEqualTo(201);
+        id.set(com.jayway.jsonpath.JsonPath.read(body, "$.movementId"));
         return id.get();
     }
 

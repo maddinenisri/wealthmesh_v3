@@ -114,6 +114,17 @@ public class ActivityStore {
                 .one().switchIfEmpty(ledger);
     }
 
+    /** The net signed change of each date that has activity, oldest first (removed rows never count). */
+    public Flux<Delta> dailyChanges(UUID accountId) {
+        return client.sql("SELECT occurred_on, SUM(" + SIGNED + ") AS delta FROM activity "
+                        + "WHERE removed_at IS NULL AND account_id = :account "
+                        + "GROUP BY occurred_on ORDER BY occurred_on")
+                .bind("account", accountId)
+                .map((row, meta) -> new Delta(row.get("delta", BigDecimal.class),
+                        row.get("occurred_on", LocalDate.class)))
+                .all();
+    }
+
     /** How many entries that still count are dated after `today` (a close refuses while any exist). */
     public Mono<Long> countAfter(UUID accountId, LocalDate today) {
         return client.sql("SELECT COUNT(*) AS n FROM activity WHERE removed_at IS NULL AND account_id = :account "

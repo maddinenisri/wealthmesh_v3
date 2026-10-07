@@ -235,6 +235,7 @@ public class MovementService {
                 .then(Mono.defer(() -> validator.memberLocked(pair.from(), parsed.memberId())))
                 .then(Mono.defer(() -> requireNotOverpaid(pair, parsed)))
                 .then(Mono.defer(() -> insertPair(pair, parsed, key, now, replacesOut, replacesIn)))
+                .flatMap(movement -> debt.requireNotCredit(pair.to().id()).thenReturn(movement))
                 .flatMap(movement -> get(movement)).map(t -> new Saved(t, true));
     }
 
@@ -251,6 +252,7 @@ public class MovementService {
                         .then(Mono.defer(() -> requireNotOverpaid(pair, parsed)))
                         .then(Mono.defer(() -> insertPair(pair, parsed, key, now, leg(fresh, kind.outKind()).id(),
                                 leg(fresh, kind.inKind()).id())))
+                        .flatMap(movement -> debt.requireNotCredit(pair.to().id()).thenReturn(movement))
                         .flatMap(this::get).map(t -> new Saved(t, true))));
     }
 

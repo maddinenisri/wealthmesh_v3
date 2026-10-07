@@ -255,4 +255,83 @@ class LoanCorrectionApiTests extends DebtTestBase {
         correctInitial(own, "s-5", "10.00", "After close").expectStatus().is4xxClientError();
         act(own, "reopen").expectStatus().isOk();
     }
+
+    private String firstCorrection(String account) {
+        AtomicReference<String> row = new AtomicReference<>();
+        webTestClient.get().uri("/api/v1/accounts/{id}/activity", account).exchange().expectBody()
+                .jsonPath("$[?(@.kind=='correction')].id").value(List.class, ids -> row.set((String) ids.get(0)));
+        return row.get();
+    }
+
+    @Order(11)
+    @Test
+    @DisplayName("V2_LOAN_006 a payment dated before a later correction may not leave the loan as a credit on the "
+            + "days between, even when today's total is still owed")
+    void noCreditOnAnyDate() {
+        String bank = account("Dates Checking", "5000.00");
+        String own = loan("Dates Loan", "1000.00", "2026-09-01");
+        correctOn(own, "t-1", "2000.00", "2026-09-25", "Lender raised it").expectStatus().isCreated();
+        postLoanPayment("t-2", bank, own, "1500.00", "1500.00", "0.00", "2026-09-15", mayaId).expectStatus()
+                .is4xxClientError().expectBody().jsonPath("$.message")
+                .value(String.class, m -> assertThat(m).contains("credit").contains("2026-09-15"));
+        assertBalance(own, "-2000.00");
+        webTestClient.get().uri("/api/v1/accounts/{id}/balance?asOf=2026-09-20", own).exchange().expectBody()
+                .jsonPath("$.amount").isEqualTo("-1000.00");
+        assertActivityCount(bank, 0);
+        // The same payment dated after the correction is fine.
+        postLoanPayment("t-3", bank, own, "1500.00", "1500.00", "0.00", "2026-09-26", mayaId).expectStatus()
+                .isCreated();
+        assertBalance(own, "-500.00");
+    }
+
+    @Order(12)
+    @Test
+    @DisplayName("V2_DATED_VALUE_003 bringing a removed correction back, or replacing a correction, is refused when "
+            + "the loan would hold a credit")
+    void undoAndReplaceOfACorrectionCannotCreateACredit() {
+        String bank = account("Undo Checking", "5000.00");
+        String own = loan("Undo Loan", "1000.00", "2026-09-01");
+        correctOn(own, "u-1", "100.00", "2026-09-10", "Lender statement").expectStatus().isCreated();
+        String lowered = firstCorrection(own);
+        webTestClient.post().uri("/api/v1/accounts/{a}/activity/{id}/removal", own, lowered)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange().expectStatus().isOk();
+        loanPayment("u-2", bank, own, "800.00", "0.00", "2026-09-20");
+        webTestClient.post().uri("/api/v1/accounts/{a}/activity/{id}/undo", own, lowered)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange().expectStatus()
+                .is4xxClientError().expectBody().jsonPath("$.message")
+                .value(String.class, m -> assertThat(m).contains("credit"));
+        assertBalance(own, "-200.00");
+
+        String other = loan("Replace Loan", "1000.00", "2026-09-01");
+        correctOn(other, "u-3", "1500.00", "2026-09-10", "Lender raised it").expectStatus().isCreated();
+        String raised = firstCorrection(other);
+        loanPayment("u-4", bank, other, "1200.00", "0.00", "2026-09-20");
+        post(other, "balance-corrections", "u-5", """
+                {"requestedBalance": "1000.00", "asOn": "2026-09-10", "reason": "Back down", "replacesId": "%s",
+                 "enteredByMemberId": "%s"}""".formatted(raised, mayaId)).expectStatus().is4xxClientError()
+                .expectBody().jsonPath("$.message").value(String.class, m -> assertThat(m).contains("credit"));
+        assertBalance(other, "-300.00");
+    }
+
+    @Order(13)
+    @Test
+    @DisplayName("V2_LOAN_003 a payment still saves after its interest category is archived: the portion keeps the "
+            + "category, shown as archived")
+    void archivedInterestCategoryStillSaves() {
+        String bank = account("Archive Checking", "5000.00");
+        String own = loan("Archive Loan", "1000.00", "2026-09-01");
+        String interest = categoryId("Loan interest");
+        webTestClient.post().uri("/api/v1/categories/{id}/archive", interest)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange().expectStatus().isOk();
+        loanPayment("a-1", bank, own, "100.00", "10.00", "2026-09-12");
+        webTestClient.get().uri("/api/v1/accounts/{id}/activity", bank).exchange().expectBody()
+                .jsonPath("$[0].portions[0].categoryName").isEqualTo("Loan interest")
+                .jsonPath("$[0].portions[0].categoryArchived").isEqualTo(true);
+        webTestClient.post().uri("/api/v1/categories/{id}/restore", interest)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange();
+    }
 }
