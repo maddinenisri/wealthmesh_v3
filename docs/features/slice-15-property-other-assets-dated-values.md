@@ -119,6 +119,23 @@ Owner's pass (2026-10-06), at 710px with real clicks and 1280px by opening and c
 
 Run alone against the unfixed code: faults 3, 7 and 8 in e2e (red, then green after the fix). The other e2e lines depend on the account made by an earlier line of the serial run (so they cannot run alone); each of their Vitest tests was red before its fix.
 
+### Screenshot step trial (visual-reviewer, after the owner's pass)
+
+The new `visual-reviewer` agent shot 31 states at both widths and read them against the UI checklist. It found faults the owner's pass and 219 e2e tests had not; fixed with a Vitest test red first (`ValuesVisual.test.tsx`, `WealthOverTime.test.tsx`, `ValueApiTests`) and one e2e line (`Screenshot findings`):
+
+| Fault seen | Fix |
+| --- | --- |
+| A time stamp, a status badge, the dates in a review and in the wealth sentences broke over two lines | `Dated` and `Stamped` keep them whole; the badge reads "Replaced"; "Not tracking yet" is a list |
+| The Add account page still said "Balance is optional"; the blank review said "The Balance was left blank"; the summary card said Balance; the edit page spoke of a bank and Update balance; Archive and Close reviews spoke of entries, transfers, payments and a bank | Words of a property: value, no bank, "no new values" |
+| A plan review said "Value"; removing a plan said "The value stays in history" | "Planned value"; "The plan stays in history" |
+| A correction review showed two different changes | The change is from the value it replaces |
+| The Changes list had raw "320000.00" | The server writes "$320,000.00" |
+| The future-date guidance sat above the form, away from the Date field | Under the Date field |
+| The system row "Value when tracking began" said "Entered by Maya on <back-dated time>" | It shows no who or when; the Changes list has the start move |
+| The stale backend (started before the last commit) showed old Close and Delete wording | The tool now warns when the backend is older than the last commit |
+
+Not fixed, left to the owner: reviews still say "Balance now/after" for a property (decisions use Balance across the app); "Financial assets" includes the house; the Car with one value has no Changes list (setup writes no event); "Harbor Bank" wraps in the Accounts list at 1280px (older than this slice).
+
 ## How it works
 
 (Written by a read-only agent from the diff and these notes; its claims were checked against the code and the screen title "Wealth over time" it gave was corrected to "Wealth on a date".)
