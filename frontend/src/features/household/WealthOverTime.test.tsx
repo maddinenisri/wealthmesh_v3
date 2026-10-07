@@ -169,4 +169,17 @@ describe('what changed', () => {
     ).toBeInTheDocument()
     expect(api.requests.some((r) => r.includes('/wealth/change'))).toBe(false)
   })
+
+  it('V2_PROPERTY_003 a date after today is explained, not silently replaced by today (Cowork fault 8)', async () => {
+    mockApi(seed(home('300000.00', '2026-09-01'), []))
+    renderRoute('/')
+
+    const card = await overTime()
+    fireEvent.change(await within(card).findByLabelText('Show wealth on'), {
+      target: { value: '2026-12-01' },
+    })
+    expect(await within(card).findByText('The date cannot be in the future')).toBeInTheDocument()
+    expect(within(card).queryByText(/Household wealth on/)).not.toBeInTheDocument()
+    expect(within(card).getByLabelText('Show wealth on')).toHaveValue('2026-12-01')
+  })
 })

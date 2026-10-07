@@ -66,8 +66,8 @@ for (const [width, type, label, name, balance, shown] of [
       await page.getByLabel('Account type').selectOption({ label: type })
       await page.getByLabel('Account name').fill(name)
       await page.getByRole('checkbox').first().check()
-      await page.getByLabel('Opened on').fill('2026-09-01')
-      if (balance) await page.getByLabel('Balance').fill(balance)
+      await page.getByLabel('Value date').fill('2026-09-01')
+      if (balance) await page.getByLabel('Value', { exact: true }).fill(balance)
       await page.getByRole('button', { name: 'Review' }).click()
       const review = page.getByRole('region', { name: new RegExp(`Review new ${label}`) })
       await expectFocusInside(review)
@@ -94,7 +94,7 @@ for (const [width, type, label, name, balance, shown] of [
       await page.getByLabel('Account type').selectOption({ label: type })
       await page.getByLabel('Account name').fill(`Refused ${name}`)
       await page.getByRole('checkbox').first().check()
-      await page.getByLabel('Balance').fill('-1.00')
+      await page.getByLabel('Value', { exact: true }).fill('-1.00')
       await page.getByRole('button', { name: 'Review' }).click()
       await expect(
         page.getByText(
@@ -103,7 +103,7 @@ for (const [width, type, label, name, balance, shown] of [
             : 'Enter zero or a positive asset value',
         ),
       ).toBeInViewport({ ratio: 1 })
-      await expect(page.getByLabel('Balance')).toBeFocused()
+      await expect(page.getByLabel('Value', { exact: true })).toBeFocused()
       await page.goto('/accounts')
       await expect(page.getByRole('main')).not.toContainText(`Refused ${name}`)
     })
@@ -373,6 +373,114 @@ for (const [width, name] of [
       await expect(line).toContainText('Value dated 2026-09-01')
       await expect(line).toContainText('Older value')
       await expectNoSidewaysScroll(page)
+    })
+  })
+}
+
+// Owner's Cowork pass on slice 15 (9 faults): each assertion below was run alone against the unfixed code first.
+for (const [width, name] of [
+  [710, 'Cowork Home 710'],
+  [1280, 'Cowork Home 1280'],
+] as const) {
+  test.describe.serial(`Cowork findings at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+    let id = ''
+
+    test(`V2_PROPERTY_002 Add account for a property says value, has no Bank, and Back focuses the form (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto('/accounts/new')
+      await page.getByLabel('Account type').selectOption({ label: 'Property' })
+      await expect(page.getByLabel('Value date')).toBeVisible()
+      await expect(page.getByLabel('Value', { exact: true })).toBeVisible()
+      await expect(page.getByLabel('Bank')).toHaveCount(0)
+      await expect(page.getByLabel('Balance')).toHaveCount(0)
+      await expect(page.getByText(/joint account/)).toHaveCount(0)
+      await page.getByLabel('Account name').fill(`Back ${name}`)
+      await page.getByRole('checkbox').first().check()
+      await page.getByRole('button', { name: 'Review' }).click()
+      await page.getByRole('button', { name: 'Back' }).click()
+      await expect(page.getByLabel('Account name')).toBeFocused()
+    })
+
+    test(`V2_PROPERTY_003 value history keeps a date on one line and says when a row was saved (${width}px)`, async ({
+      page,
+    }) => {
+      id = await makeAsset(page, 'property', name, '50000.00')
+      const owner = await ownerId(page)
+      const saved = await page.request.post(`/api/v1/accounts/${id}/values`, {
+        headers: { 'Idempotency-Key': `cowork-${width}` },
+        data: { amount: '60000.00', valueOn: '2026-09-30', enteredByMemberId: owner },
+      })
+      expect(saved.ok()).toBeTruthy()
+      await page.goto(`/accounts/${id}`)
+      const row = page.getByRole('row').filter({ hasText: '$60,000.00' })
+      await expect(row.getByRole('cell').first()).toHaveCSS('white-space', 'nowrap')
+      await expect(row).toContainText(/Entered by .+ on \d{4}-\d{2}-\d{2} \d{2}:\d{2}/)
+      await expect(page.getByRole('main')).not.toContainText('Bank')
+      await expect(page.getByRole('main')).toContainText('Initial value')
+    })
+
+    test(`V2_DATED_VALUE_002 an earlier start keeps its reason and Undo leaves a trace in the list of changes (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto(`/accounts/${id}`)
+      await page.getByRole('button', { name: 'Record new value' }).click()
+      await page.getByLabel('Value', { exact: true }).fill('40,000.00')
+      await page.getByLabel('Date', { exact: true }).fill('2026-08-01')
+      await page.getByRole('button', { name: 'Review', exact: true }).click()
+      await page.getByLabel('Reason', { exact: true }).fill('Bought in June')
+      await page.getByRole('button', { name: 'Confirm earlier start' }).click()
+      await expect(page.getByRole('status')).toContainText('now starts at')
+      await page.getByRole('button', { name: /^Remove \$60,000.00/ }).click()
+      await page.getByRole('button', { name: 'Confirm removal' }).click()
+      await page.getByRole('button', { name: /^Undo removal of \$60,000.00/ }).click()
+      await page.getByRole('button', { name: 'Confirm Undo' }).click()
+      const changes = page.getByRole('list', { name: 'Changes' })
+      await expect(changes).toContainText(
+        'Start moved from 2026-09-01 to 2026-08-01: Bought in June',
+      )
+      await expect(changes).toContainText('Removed $60,000.00 dated 2026-09-30')
+      await expect(changes).toContainText('Restored $60,000.00 dated 2026-09-30')
+    })
+
+    test(`V2_PROPERTY_005 Close names a plan before Confirm and says to record a $0.00 value, focus stays in the review (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto(`/accounts/${id}`)
+      await page.getByRole('button', { name: 'Close account' }).click()
+      const review = page.getByRole('region', { name: new RegExp(`Review closing ${name}`) })
+      await expect(review).toContainText('record a $0.00 value')
+      await expect(review).not.toContainText('transfer')
+      await review.getByRole('button', { name: 'Cancel' }).click()
+
+      const owner = await ownerId(page)
+      const zero = await page.request.post(`/api/v1/accounts/${id}/values`, {
+        headers: { 'Idempotency-Key': `cowork-zero-${width}` },
+        data: { amount: '0.00', valueOn: '2026-10-01', reason: 'Sold', enteredByMemberId: owner },
+      })
+      expect(zero.ok()).toBeTruthy()
+      const plan = await page.request.post(`/api/v1/accounts/${id}/values`, {
+        headers: { 'Idempotency-Key': `cowork-plan-${width}` },
+        data: { amount: '1.00', valueOn: '2026-12-01', plan: true, enteredByMemberId: owner },
+      })
+      expect(plan.ok()).toBeTruthy()
+      await page.reload()
+      await page.getByRole('button', { name: 'Close account' }).click()
+      const again = page.getByRole('region', { name: new RegExp(`Review closing ${name}`) })
+      await expect(again).toContainText('has 1 planned value. Remove it first')
+      await expect(again.getByRole('button', { name: `Close ${name}` })).toBeDisabled()
+    })
+
+    test(`V2_PROPERTY_003 a wealth date after today is explained, not replaced by today (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto('/')
+      const card = page.getByRole('region', { name: 'Wealth on a date' })
+      await card.scrollIntoViewIfNeeded()
+      await card.getByLabel('Show wealth on').fill('2027-01-05')
+      await expect(card.getByText('The date cannot be in the future')).toBeVisible()
+      await expect(card).not.toContainText('Household wealth on')
     })
   })
 }

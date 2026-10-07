@@ -23,8 +23,8 @@ async function fill(user: User, type: string, name: string, balance: string) {
   await user.selectOptions(await screen.findByLabelText('Account type'), type)
   await user.type(screen.getByLabelText('Account name'), name)
   await user.click(screen.getByRole('checkbox', { name: 'Sam' }))
-  fireEvent.change(screen.getByLabelText('Opened on'), { target: { value: '2026-09-01' } })
-  if (balance) await user.type(screen.getByLabelText('Balance'), balance)
+  fireEvent.change(screen.getByLabelText('Value date'), { target: { value: '2026-09-01' } })
+  if (balance) await user.type(screen.getByLabelText('Value'), balance)
 }
 
 describe.each([
@@ -68,7 +68,7 @@ describe.each([
     await user.click(screen.getByRole('button', { name: 'Back' }))
 
     expect(screen.getByLabelText('Account name')).toHaveValue(name)
-    expect(screen.getByLabelText('Balance')).toHaveValue('$25,000.00')
+    expect(screen.getByLabelText('Value')).toHaveValue('$25,000.00')
     await user.click(screen.getByRole('button', { name: 'Review' }))
     await user.click(await screen.findByRole('link', { name: 'Cancel' }))
     expect(await screen.findByText('No accounts yet')).toBeInTheDocument()
@@ -83,7 +83,7 @@ describe.each([
     await user.click(screen.getByRole('button', { name: 'Review' }))
     expect(await screen.findByText(`Enter zero or a positive ${kind} value`)).toBeInTheDocument()
 
-    const balance = screen.getByLabelText('Balance')
+    const balance = screen.getByLabelText('Value')
     await user.clear(balance)
     await user.type(balance, 'abc')
     await user.click(screen.getByRole('button', { name: 'Review' }))

@@ -62,8 +62,9 @@ public class AccountLifecycleService {
     public Mono<AccountLifecycle> lifecycle(UUID id) {
         return load(id).flatMap(account -> usage.usageOf(id).map(found -> {
             List<String> reasons = blockers(account, found);
-            return new AccountLifecycle(reasons.isEmpty(), reasons);
-        }));
+            return usage.plannedValues(id).map(planned -> new AccountLifecycle(reasons.isEmpty(), reasons,
+                    planned > 0 ? List.of(plannedMessage(account, planned)) : List.of()));
+        }).flatMap(result -> result));
     }
 
     /** The account's changes of state, newest first. */
@@ -150,10 +151,7 @@ public class AccountLifecycleService {
             }
             if (AccountType.isValued(account.type())) {
                 return usage.plannedValues(account.id()).flatMap(planned -> planned > 0
-                        ? Mono.<Void>error(conflict(account.name() + " has " + planned + " planned value"
-                                + (planned == 1 ? "" : "s") + ". Remove " + (planned == 1 ? "it" : "them")
-                                + " first, then close."))
-                        : Mono.<Void>empty());
+                        ? Mono.<Void>error(conflict(plannedMessage(account, planned))) : Mono.<Void>empty());
             }
             return store.countAfter(account.id(), LocalDate.now(clock)).flatMap(later -> later > 0
                     ? Mono.<Void>error(conflict(account.name() + " has " + later + " entr" + (later == 1 ? "y" : "ies")
@@ -217,12 +215,18 @@ public class AccountLifecycleService {
             reasons.add(counted(found.values(), "dated value", "dated values") + " (removed ones count)");
         }
         if (found.revisions() > 0) {
-            reasons.add("a starting-balance correction");
+            reasons.add(AccountType.isValued(account.type()) ? "a start moved earlier"
+                    : "a starting-balance correction");
         }
         if (account.openingAmount().signum() != 0) {
             reasons.add("a starting Balance of " + dollars(account.openingAmount()));
         }
         return reasons;
+    }
+
+    private static String plannedMessage(Account account, long planned) {
+        return account.name() + " has " + planned + " planned value" + (planned == 1 ? "" : "s") + ". Remove "
+                + (planned == 1 ? "it" : "them") + " first, then close.";
     }
 
     private static String counted(long count, String one, String many) {

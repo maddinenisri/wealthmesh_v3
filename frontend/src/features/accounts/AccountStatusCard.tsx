@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import type { Account } from '../../api/accounts'
 import { Badge, Button, Card, CardTitle, FormAlert } from '../../design-system'
@@ -12,6 +12,7 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { stamp } from '../../lib/stamp'
 import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
+import { isValued } from './accountTypes'
 import { balanceText, isCard } from './cardBalance'
 import { memberLabel } from './ownerNames'
 import { STATUS_LABEL } from './statusLabel'
@@ -38,8 +39,14 @@ export function AccountStatusCard({ account }: { account: Account }) {
   const change = useChangeAccountStatus(account.id, member?.id)
   const remove = useDeleteAccount(account.id, member?.id)
   const events = useAccountEvents(account.id)
-  const facts = useAccountLifecycle(account.id, review === 'delete')
+  const facts = useAccountLifecycle(account.id, review === 'delete' || review === 'close')
+  const closeBlocked = review === 'close' ? (facts.data?.closeBlockedBy ?? []) : []
   const navigate = useNavigate()
+  // A refused Confirm leaves its message on the review; focus goes there, not to the page (the button was disabled).
+  const failed = !!change.error || !!remove.error
+  useEffect(() => {
+    if (failed) document.getElementById('status-review-heading')?.focus({ preventScroll: true })
+  }, [failed])
   const figure = balanceText(account.type, account.balance.amount)
   const atZero = Number(account.balance.amount) === 0
 
@@ -102,7 +109,7 @@ export function AccountStatusCard({ account }: { account: Account }) {
             aria-labelledby="status-review-heading"
             className="mt-3 flex max-w-md flex-col gap-3 rounded-control border border-line bg-sunken p-4"
           >
-            <h3 id="status-review-heading" className="font-medium">
+            <h3 id="status-review-heading" tabIndex={-1} className="font-medium outline-none">
               {
                 {
                   archive: `Review archiving ${account.name}`,
@@ -132,10 +139,17 @@ export function AccountStatusCard({ account }: { account: Account }) {
                 complete history.
               </p>
             ) : review === 'close' ? (
-              atZero ? (
+              closeBlocked.length > 0 ? (
+                <p className="text-sm">{closeBlocked.join(' ')}</p>
+              ) : atZero ? (
                 <p className="text-sm">
                   {account.name} will be marked closed with a {figure} Balance and its history kept.
                   It takes no new entries until you reopen it. Wealth does not change.
+                </p>
+              ) : isValued(account.type) ? (
+                <p className="text-sm">
+                  Closing needs a zero Balance. {account.name} has {figure}: record a $0.00 value
+                  first (for example when it is sold), then review closing again.
                 </p>
               ) : (
                 <p className="text-sm">
@@ -203,7 +217,11 @@ export function AccountStatusCard({ account }: { account: Account }) {
                 )
               ) : (
                 <Button
-                  disabled={change.isPending || !member || (review === 'close' && !atZero)}
+                  disabled={
+                    change.isPending ||
+                    !member ||
+                    (review === 'close' && (!atZero || closeBlocked.length > 0))
+                  }
                   onClick={() => confirm(review)}
                 >
                   {change.isPending

@@ -105,4 +105,25 @@ class ValueStateApiTests extends ValuedTestBase {
                 .expectBody().jsonPath("$.value.id").value(String.class, id::set);
         return id.get();
     }
+
+    @Order(4)
+    @Test
+    @DisplayName("V2_PROPERTY_005 the review of Close and Delete is told about a plan and about a moved start before "
+            + "the person confirms (Cowork faults 2 and 9)")
+    void lifecycleReviewExplainsFirst() {
+        String own = property("Review Plan", "0.00", "2026-09-01");
+        webTestClient.get().uri("/api/v1/accounts/{id}/lifecycle", own).exchange().expectBody()
+                .jsonPath("$.closeBlockedBy.length()").isEqualTo(0);
+        planId(own);
+        webTestClient.get().uri("/api/v1/accounts/{id}/lifecycle", own).exchange().expectBody()
+                .jsonPath("$.closeBlockedBy[0]").value(m -> assertThat(String.valueOf(m))
+                        .contains("1 planned value").contains("Remove it first"));
+        String moved = otherAsset("Review Moved", "10.00", "2026-09-01");
+        extendStart(moved, "rm-1", """
+                {"amount": "9.00", "valueOn": "2026-08-01", "reason": "Earlier", "enteredByMemberId": "%s"}"""
+                .formatted(mayaId)).expectStatus().isOk();
+        webTestClient.get().uri("/api/v1/accounts/{id}/lifecycle", moved).exchange().expectBody()
+                .jsonPath("$.deleteBlockedBy[?(@=~/.*starting-balance.*/)]").isEmpty()
+                .jsonPath("$.deleteBlockedBy[?(@=~/.*start moved earlier.*/)]").isNotEmpty();
+    }
 }

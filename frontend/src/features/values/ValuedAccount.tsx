@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
-import type { ValueRow } from '../../api/values'
+import type { ValueEvent, ValueRow } from '../../api/values'
 import { Badge, Button, Card, CardTitle, Table, Td, Th } from '../../design-system'
 import { useToday } from '../../hooks/useAccounts'
 import { useValueHistory } from '../../hooks/useValues'
 import { formatMoney } from '../../lib/money'
+import { stamp } from '../../lib/stamp'
 import { useReturnFocus } from '../activity/useReturnFocus'
 import { ExtendStart } from './ExtendStart'
 import { ValueChange } from './ValueChange'
@@ -41,7 +42,12 @@ export function ValuedAccount({
   const history = useValueHistory(account.id)
   const today = useToday()
   const [panel, setPanel] = useState<Panel | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  // The status line belongs to the account's state when it was written; a change of state (Archive, Close, Restore,
+  // Reopen) makes it stale, so it is not shown.
+  const [saved, setSaved] = useState<{ message: string; status: string } | null>(null)
+  const notice = saved?.status === account.status ? saved.message : null
+  const setNotice = (message: string | null) =>
+    setSaved(message === null ? null : { message, status: account.status })
   const returnFocus = useReturnFocus(panel !== null)
   const ready = !panel && !!today.data && !!members
   // Archived: no new value, history still editable. Closed: nothing changes until it is reopened (slice 12).
@@ -160,7 +166,7 @@ export function ValuedAccount({
             <tbody>
               {history.data.values.map((row) => (
                 <tr key={row.id ?? 'initial'}>
-                  <Td>{row.valueOn}</Td>
+                  <Td className="whitespace-nowrap">{row.valueOn}</Td>
                   <Td>
                     <span className="normal-nums">{formatMoney(Number(row.amount))}</span>{' '}
                     <Badge>{STATUS[row.status]}</Badge>
@@ -170,7 +176,7 @@ export function ValuedAccount({
                       ? 'Initial value'
                       : [
                           row.reason,
-                          row.enteredBy && `Entered by ${row.enteredBy}`,
+                          row.enteredBy && `Entered by ${row.enteredBy} on ${stamp(row.createdAt)}`,
                           row.removedBy && `Removed by ${row.removedBy}`,
                         ]
                           .filter(Boolean)
@@ -184,9 +190,39 @@ export function ValuedAccount({
             </tbody>
           </Table>
         )}
+        {history.data && history.data.events.length > 0 && (
+          <section className="mt-4" aria-labelledby="value-changes-heading">
+            <h3 id="value-changes-heading" className="text-sm font-medium">
+              Changes
+            </h3>
+            <ul aria-label="Changes" className="mt-1 flex flex-col gap-1 text-sm text-ink-muted">
+              {history.data.events.map((event) => (
+                <li key={`${event.at}-${event.action}-${event.valueOn}-${event.amount}`}>
+                  {changeText(event)} · {event.byName}, {stamp(event.at)}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </Card>
     </>
   )
+}
+
+const ACTION_LABEL: Record<string, string> = {
+  saved: 'Saved',
+  planned: 'Planned',
+  removed: 'Removed',
+  restored: 'Restored',
+}
+
+/** One change in words: what was done to which value, or the sentence the server kept (a correction, a new start). */
+function changeText(event: ValueEvent): string {
+  if (event.action === 'start_moved' || event.action === 'corrected')
+    return event.detail ?? event.action
+  const what =
+    event.amount !== null ? ` ${formatMoney(Number(event.amount))} dated ${event.valueOn}` : ''
+  return `${ACTION_LABEL[event.action] ?? event.action}${what}`
 }
 
 function RowActions({

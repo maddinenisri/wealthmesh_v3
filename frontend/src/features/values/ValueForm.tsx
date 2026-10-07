@@ -260,7 +260,9 @@ export function ValueForm({
             }
           />
           <p className="text-sm text-ink-muted">
-            Enter what it was worth on that date. You will review the change before it is saved.
+            {planning
+              ? 'Enter what you expect it to be worth on that date. You will review the plan before it is saved.'
+              : 'Enter what it was worth on that date. You will review the change before it is saved.'}
           </p>
           <div className="flex gap-2">
             <Button type="submit" disabled={review.isPending}>

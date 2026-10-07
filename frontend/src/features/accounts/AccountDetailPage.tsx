@@ -97,12 +97,14 @@ function Details({ account, owners }: { account: Account; owners: string }) {
           </dt>
           <dd>{owners}</dd>
         </div>
-        <div>
-          <dt className="text-caption text-ink-muted">
-            {isCard(account.type) ? 'Issuer' : 'Bank'}
-          </dt>
-          <dd>{account.institution ?? 'Not set'}</dd>
-        </div>
+        {!isValued(account.type) && (
+          <div>
+            <dt className="text-caption text-ink-muted">
+              {isCard(account.type) ? 'Issuer' : 'Bank'}
+            </dt>
+            <dd>{account.institution ?? 'Not set'}</dd>
+          </div>
+        )}
         <div>
           <dt className="text-caption text-ink-muted">Balance</dt>
           <dd>
@@ -120,7 +122,9 @@ function Details({ account, owners }: { account: Account; owners: string }) {
           </dd>
         </div>
         <div>
-          <dt className="text-caption text-ink-muted">Initial Balance</dt>
+          <dt className="text-caption text-ink-muted">
+            {isValued(account.type) ? 'Initial value' : 'Initial Balance'}
+          </dt>
           <dd>
             <BalanceFigure
               type={account.type}

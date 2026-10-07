@@ -12,12 +12,14 @@ import { accountTypeLabel } from '../accounts/accountTypes'
  */
 export function WealthOverTime() {
   const today = useToday()
+  const max = today.data
   const [asOf, setAsOf] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
-  const wealth = useWealth(asOf || undefined)
+  const future = !!asOf && !!max && asOf > max
+  // A date after today is explained, not sent: the server refuses it, and today's figure must not stand in for it.
+  const wealth = useWealth(future ? undefined : asOf || undefined, !future)
   const change = useWealthChange(from, to)
-  const max = today.data
 
   return (
     <Card aria-labelledby="over-time-heading">
@@ -29,19 +31,22 @@ export function WealthOverTime() {
             type="date"
             value={asOf}
             max={max}
-            onChange={(event) =>
-              setAsOf(event.target.value > (max ?? '9999') ? '' : event.target.value)
-            }
+            onChange={(event) => setAsOf(event.target.value)}
             className="rounded-control border border-line bg-surface px-3 py-2"
           />
         </label>
       </div>
-      {wealth.isError && (
+      {future && (
+        <p role="alert" className="mt-3 text-sm">
+          The date cannot be in the future
+        </p>
+      )}
+      {wealth.isError && !future && (
         <p role="alert" className="mt-3 text-sm">
           {wealth.error.message}
         </p>
       )}
-      {wealth.data && (
+      {wealth.data && !future && (
         <div className="mt-3 flex flex-col gap-3" aria-live="polite">
           <p>
             Household wealth on {wealth.data.asOf} <Amount value={Number(wealth.data.netWorth)} />

@@ -27,6 +27,8 @@ type Context = {
   problem: (status: number, message: string) => Response
   /** Save keys seen, with the value each one saved. */
   keys: Map<string, string>
+  /** What was done to values, newest first, as `GET .../values` returns it. */
+  events?: Record<string, unknown>[]
 }
 
 const money = (value: number) => value.toFixed(2)
@@ -49,6 +51,22 @@ export function valueHandlers(ctx: Context) {
   const { accounts, values, today, problem } = ctx
   let tick = 0
   const stamp = () => `2026-10-03T10:00:${String(tick++).padStart(2, '0')}Z`
+  const events = ctx.events ?? []
+  const note = (
+    action: string,
+    memberId: unknown,
+    valueOn: string | null,
+    amount: string | null,
+    detail: string | null,
+  ) =>
+    events.unshift({
+      action,
+      valueOn,
+      amount,
+      detail,
+      byName: ctx.members.find((m) => m.id === memberId)?.name ?? '',
+      at: '2026-10-03T10:00:00Z',
+    })
   const nameOf = (id: string | null) => ctx.members.find((m) => m.id === id)?.name ?? null
   const effective = (accountId: string, excluding?: string) =>
     values
@@ -225,7 +243,7 @@ export function valueHandlers(ctx: Context) {
       }
       return HttpResponse.json({
         values: [...rows, initial].sort((a, b) => b.valueOn.localeCompare(a.valueOn)),
-        events: [],
+        events,
       })
     }),
     http.post('*/api/v1/accounts/:id/values/review', async ({ request, params }) => {
@@ -319,6 +337,13 @@ export function valueHandlers(ctx: Context) {
       }
       values.push(saved)
       ctx.keys.set(key, saved.id)
+      note(
+        saved.planned ? 'planned' : 'saved',
+        saved.enteredBy,
+        saved.valueOn,
+        saved.amount,
+        `${saved.planned ? 'Plan for ' : 'Value for '}${saved.valueOn}: ${saved.amount}`,
+      )
       refresh(account)
       const res = result(account, saved, before)
       return new HttpResponse(res.body, { status: 201, headers: res.headers })
@@ -401,6 +426,13 @@ export function valueHandlers(ctx: Context) {
         removedBy: null,
         createdAt: stamp(),
       })
+      note(
+        'start_moved',
+        body.enteredByMemberId,
+        previous.on,
+        previous.amount,
+        `Start moved from ${previous.on} to ${parsed.valueOn}: ${String(body.reason)}`,
+      )
       account.openingAmount = parsed.amount
       account.openedOn = parsed.valueOn
       ctx.keys.set(key, 'moved')
@@ -434,9 +466,11 @@ export function valueHandlers(ctx: Context) {
           if (target.removedAt) return problem(409, 'This value was already removed.')
           target.removedAt = stamp()
           target.removedBy = body.enteredByMemberId ?? null
+          note('removed', body.enteredByMemberId, target.valueOn, target.amount, null)
         } else {
           target.removedAt = null
           target.removedBy = null
+          note('restored', body.enteredByMemberId, target.valueOn, target.amount, null)
         }
         refresh(account)
         return result(account, target, before)

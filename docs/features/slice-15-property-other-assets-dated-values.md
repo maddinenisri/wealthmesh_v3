@@ -103,8 +103,21 @@ An ID is cited only when its last group is green (a split ID is cited by the gro
 
 Count against 8, 8, 5, 5, 5, 7 and 9.
 
+Owner's pass (2026-10-06), at 710px with real clicks and 1280px by opening and cancelling panels (no save at 1280px): 9 faults (against 8, 8, 5, 5, 5, 7 and 9). Steps 1 to 4 passed; step 5 failed on two points.
+
 | # | Check | Result | Fault seen | Test added |
 | --- | --- | --- | --- | --- |
+| 1 | 3 | fixed | Close on a property with a value said "record a transfer for it" | The review says "record a $0.00 value first"; `ValuesCowork.test.tsx` (red before) |
+| 2 | 1, 3 | fixed | A plan did not block Close until Confirm, then focus fell to the page | `GET /accounts/{id}/lifecycle` returns `closeBlockedBy`; the review names the plan and disables Confirm; a refused Confirm focuses the review; `ValueStateApiTests` (red before), `ValuesCowork.test.tsx`, e2e |
+| 3 | 1 | fixed | Back from the Add account review left focus on the page | `setFocus('name')`; Vitest (red before) and e2e (seen red alone) |
+| 4 | 4 | fixed | The Date column wrapped every date onto two lines | `whitespace-nowrap`; Vitest (red before), e2e `toHaveCSS` |
+| 5 | 8 | fixed | Value rows showed who, not when | "Entered by Maya on 2026-09-30 10:05"; Vitest (red before), e2e |
+| 6 | 8 | fixed | The reason for an earlier start was shown nowhere; Undo left no trace | A "Changes" list from the stored events (who, when, the start move's sentence, Removed and Restored); Vitest (red before), e2e |
+| 7 | 7 | fixed | The Add account form and the property page still spoke of Bank, Opened on, Balance and a joint account | Value, Value date, no Bank, "owns this property or asset", "Initial value"; the edit form drops Bank too; Vitest (red before), e2e (seen red alone) |
+| 8 | 3 | fixed | A wealth date after today was silently replaced by today | "The date cannot be in the future" and no figure; Vitest (red before), e2e (seen red alone) |
+| 9 | wording | fixed | Plan form said "what it was worth"; the delete refusal listed "a starting-balance correction"; a stale status line stayed after a state change | "what you expect it to be worth"; "a start moved earlier" for a valued account (`ValueStateApiTests`); the status line is dropped when the account's state changes; Vitest (red before) |
+
+Run alone against the unfixed code: faults 3, 7 and 8 in e2e (red, then green after the fix). The other e2e lines depend on the account made by an earlier line of the serial run (so they cannot run alone); each of their Vitest tests was red before its fix.
 
 ## How it works
 

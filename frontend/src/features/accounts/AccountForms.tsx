@@ -43,10 +43,13 @@ function OwnerChoices<T extends DetailsValues>({
   members,
   control,
   current = [],
+  valued = false,
 }: {
   members: Member[]
   control: Control<T>
   current?: string[]
+  /** A property or other asset: owners are named, and there is no "joint account" wording. */
+  valued?: boolean
 }) {
   const options = members
     .filter((member) => member.active || current.includes(member.id))
@@ -56,7 +59,11 @@ function OwnerChoices<T extends DetailsValues>({
       control={control as unknown as Control<DetailsValues>}
       name="ownerMemberIds"
       label="Owners"
-      hint="Choose everyone who owns this account. Two or more makes it a joint account."
+      hint={
+        valued
+          ? 'Choose everyone who owns this property or asset.'
+          : 'Choose everyone who owns this account. Two or more makes it a joint account.'
+      }
       options={options}
       rules={ownerRules}
     />
@@ -67,7 +74,7 @@ function OwnerChoices<T extends DetailsValues>({
 export function AccountSetupForm({ members, today }: { members: Member[]; today: string }) {
   const navigate = useNavigate()
   const create = useCreateAccount()
-  const { control, handleSubmit } = useForm<SetupValues>({
+  const { control, handleSubmit, setFocus } = useForm<SetupValues>({
     defaultValues: {
       type: 'checking',
       name: '',
@@ -94,7 +101,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       .mutateAsync({
         type: values.type,
         name: values.name.trim(),
-        institution: values.institution.trim(),
+        institution: valuedNoun(values.type) ? '' : values.institution.trim(),
         ownerMemberIds: values.ownerMemberIds,
         openedOn: values.openedOn,
         openingBalance: values.balance.trim() === '' ? null : parseAmount(values.balance),
@@ -136,7 +143,15 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
             <Button type="button" disabled={create.isPending} onClick={() => void save(review)}>
               {create.isPending ? 'Saving' : 'Confirm'}
             </Button>
-            <Button type="button" variant="secondary" onClick={() => setReview(null)}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setReview(null)
+                // The form is back on the page; its first field takes focus, not the body.
+                requestAnimationFrame(() => setFocus('name'))
+              }}
+            >
               Back
             </Button>
             <Link to="/accounts" className={buttonStyles({ variant: 'ghost' })}>
@@ -159,17 +174,19 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         ))}
       </SelectField>
       <TextField control={control} name="name" label="Account name" rules={nameRules} />
-      <TextField
-        control={control}
-        name="institution"
-        label={card ? 'Issuer' : 'Bank'}
-        rules={bankRules}
-      />
-      <OwnerChoices members={members} control={control} />
+      {!noun && (
+        <TextField
+          control={control}
+          name="institution"
+          label={card ? 'Issuer' : 'Bank'}
+          rules={bankRules}
+        />
+      )}
+      <OwnerChoices members={members} control={control} valued={!!noun} />
       <TextField
         control={control}
         name="openedOn"
-        label="Opened on"
+        label={noun ? 'Value date' : 'Opened on'}
         type="date"
         rules={{
           required: 'Enter an opening date',
@@ -179,10 +196,14 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       <TextField
         control={control}
         name="balance"
-        label="Balance"
+        label={noun ? 'Value' : 'Balance'}
         inputMode="decimal"
         placeholder="0.00"
-        hint="Optional. Leave blank to start at $0.00 on the opening date."
+        hint={
+          noun
+            ? 'Optional. Leave blank to start at $0.00 on the value date.'
+            : 'Optional. Leave blank to start at $0.00 on the opening date.'
+        }
         rules={{
           validate: (value) => {
             if (value.trim() === '') return true
@@ -241,13 +262,20 @@ export function AccountEditForm({ account, members }: { account: Account; member
     <form onSubmit={onSubmit} noValidate className="flex max-w-md flex-col gap-4">
       <FormAlert message={update.error?.message} />
       <TextField control={control} name="name" label="Account name" rules={nameRules} />
-      <TextField
+      {!valuedNoun(account.type) && (
+        <TextField
+          control={control}
+          name="institution"
+          label={isCard(account.type) ? 'Issuer' : 'Bank'}
+          rules={bankRules}
+        />
+      )}
+      <OwnerChoices
+        members={members}
         control={control}
-        name="institution"
-        label={isCard(account.type) ? 'Issuer' : 'Bank'}
-        rules={bankRules}
+        current={account.ownerMemberIds}
+        valued={!!valuedNoun(account.type)}
       />
-      <OwnerChoices members={members} control={control} current={account.ownerMemberIds} />
       <div className="flex gap-2">
         <Button type="submit" disabled={update.isPending}>
           {update.isPending ? 'Saving' : 'Save details'}

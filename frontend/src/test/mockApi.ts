@@ -1528,7 +1528,19 @@ export function mockApi(
       const existing = state.accounts.find((a) => a.id === params.id)
       if (!existing) return problem(404, `Account not found: ${String(params.id)}`)
       const reasons = deleteBlockers(existing)
-      return HttpResponse.json({ canDelete: reasons.length === 0, deleteBlockedBy: reasons })
+      const planned = state.values.filter(
+        (v) => v.accountId === existing.id && v.planned && !v.removedAt,
+      ).length
+      return HttpResponse.json({
+        canDelete: reasons.length === 0,
+        deleteBlockedBy: reasons,
+        closeBlockedBy:
+          planned > 0
+            ? [
+                `${existing.name} has ${planned} planned value${planned === 1 ? '' : 's'}. Remove ${planned === 1 ? 'it' : 'them'} first, then close.`,
+              ]
+            : [],
+      })
     }),
     http.post('*/api/v1/accounts/:id/delete', ({ request, params }) => {
       log(request)

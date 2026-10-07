@@ -123,7 +123,12 @@ export const getAccountEvents = (id: string) =>
   })
 
 /** Why an account can or cannot be deleted right now: the review explains it before Confirm. */
-export type AccountLifecycle = { canDelete: boolean; deleteBlockedBy: string[] }
+export type AccountLifecycle = {
+  canDelete: boolean
+  deleteBlockedBy: string[]
+  /** What stops a close besides the Balance (a plan on a property or other asset). */
+  closeBlockedBy: string[]
+}
 
 export const getAccountLifecycle = (id: string) =>
   request(`/accounts/${id}/lifecycle`, {
@@ -131,6 +136,10 @@ export const getAccountLifecycle = (id: string) =>
       const data = record(value)
       if (typeof data.canDelete !== 'boolean' || !Array.isArray(data.deleteBlockedBy))
         throw new Error('Unexpected response from the server.')
-      return { canDelete: data.canDelete, deleteBlockedBy: data.deleteBlockedBy.map(str) }
+      return {
+        canDelete: data.canDelete,
+        deleteBlockedBy: data.deleteBlockedBy.map(str),
+        closeBlockedBy: Array.isArray(data.closeBlockedBy) ? data.closeBlockedBy.map(str) : [],
+      }
     },
   })
