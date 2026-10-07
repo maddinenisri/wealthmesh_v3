@@ -105,6 +105,9 @@ public class AccountService {
         BigDecimal opening = openingAmount(request.openingBalance());
         AccountType type = AccountType.fromWire(request.type())
                 .orElseThrow(() -> bad("Unsupported account type"));
+        if (request.opening() != null) {
+            throw bad("Cash and holdings apply to an investment account only");
+        }
         opening = signed(type, opening, request.balanceSide());
         if (type.valued() && opening.signum() < 0) {
             throw bad(type == AccountType.PROPERTY ? "Enter zero or a positive property value"
@@ -168,15 +171,22 @@ public class AccountService {
     }
 
     /** The lender of a loan or mortgage or the bank of any other account, at most 120 characters. */
-    static String requireInstitution(String institution, AccountType type) {
+    public static String requireInstitution(String institution, AccountType type) {
         String stripped = institution == null || institution.isBlank() ? null : institution.strip();
         if (stripped != null && stripped.length() > 120) {
-            throw bad((type.kind() == AccountType.Kind.DEBT ? "Lender" : "Bank") + " must be 120 characters or fewer");
+            throw bad(institutionWord(type) + " must be 120 characters or fewer");
         }
         return stripped;
     }
 
-    static String requireName(String name) {
+    private static String institutionWord(AccountType type) {
+        if (type.kind() == AccountType.Kind.DEBT) {
+            return "Lender";
+        }
+        return type.kind() == AccountType.Kind.INVESTMENT ? "Institution" : "Bank";
+    }
+
+    public static String requireName(String name) {
         String stripped = name == null ? "" : name.strip();
         if (stripped.isEmpty()) {
             throw bad("Enter an account name");
@@ -204,7 +214,7 @@ public class AccountService {
      * on an account they already own. The member rows are read FOR SHARE so a deactivate cannot slip in between
      * this check and the save.
      */
-    private Mono<List<UUID>> checkOwners(UUID householdId, List<UUID> requested, List<UUID> current) {
+    public Mono<List<UUID>> checkOwners(UUID householdId, List<UUID> requested, List<UUID> current) {
         if (requested == null || requested.isEmpty()) {
             return Mono.error(bad("Choose an owner"));
         }

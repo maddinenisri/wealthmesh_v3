@@ -4,10 +4,13 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import com.mdstech.wealthmesh.investment.dto.OpeningRequest;
+
 /**
  * Create body. {@code openingBalance} is typed as Object so a JSON number is seen and refused instead of being
  * silently turned into text; only a string (or null) is valid. {@code balanceSide} ("owed" or "credit") says what a
- * card's positive amount means; it is refused for any other type.
+ * card's positive amount means; it is refused for any other type. `opening` carries the cash and holdings of an
+ * investment account (slice 17) and is refused for any other type.
  */
 public record AccountRequest(
         String type,
@@ -16,5 +19,6 @@ public record AccountRequest(
         List<UUID> ownerMemberIds,
         LocalDate openedOn,
         Object openingBalance,
-        String balanceSide) {
+        String balanceSide,
+        OpeningRequest opening) {
 }

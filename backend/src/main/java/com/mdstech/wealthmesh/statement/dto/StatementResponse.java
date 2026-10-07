@@ -4,7 +4,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
-/** One statement version; `latest` is true when nothing replaces it. */
+/**
+ * One statement version; `latest` is true when nothing replaces it. A removed statement stays in the list with who
+ * removed it and when; `usedByOpening` says an investment opening review is linked to it.
+ */
 public record StatementResponse(
         UUID id,
         UUID accountId,
@@ -17,5 +20,9 @@ public record StatementResponse(
         boolean latest,
         UUID enteredByMemberId,
         String enteredByName,
-        Instant createdAt) {
+        Instant createdAt,
+        Instant removedAt,
+        UUID removedByMemberId,
+        String removedByName,
+        boolean usedByOpening) {
 }

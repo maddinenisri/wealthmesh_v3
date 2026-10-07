@@ -6,7 +6,8 @@ import java.util.Optional;
  * Account types the app can set up so far (T1: savings has the checking shape; T2: a card keeps one Balance that is
  * owed or Card credit; T3: property and other assets hold dated values, no activity; T4: a loan, and T5: a mortgage,
  * are debts owed, set
- * up with an amount and changed by payments and reviewed corrections). The table allows every type in the
+ * up with an amount and changed by payments and reviewed corrections; T7: a brokerage is set up from opening cash and
+ * holdings and, until slices 20 to 23, takes no activity). The table allows every type in the
  * foundations; add one per feature. A type's {@link Kind} decides how its Balance is read (foundations 3, 5).
  */
 public enum AccountType {
@@ -16,15 +17,17 @@ public enum AccountType {
     PROPERTY(Kind.VALUED),
     OTHER_ASSET(Kind.VALUED),
     LOAN(Kind.DEBT),
-    MORTGAGE(Kind.DEBT);
+    MORTGAGE(Kind.DEBT),
+    BROKERAGE(Kind.INVESTMENT);
 
     /**
      * How a type's Balance is read: opening plus signed activity (ledger), the latest dated value (valued), or the
      * amount owed (debt: opening plus its payments and corrections, stored negative like a card, D-053). Only a ledger
-     * type takes ordinary money in and out; a debt takes a payment from a ledger account and a reviewed correction.
+     * type takes ordinary money in and out; a debt takes a payment from a ledger account and a reviewed correction. An
+     * investment account (cash plus holdings) is read as its opening amount until prices and activity arrive.
      */
     public enum Kind {
-        LEDGER, VALUED, DEBT
+        LEDGER, VALUED, DEBT, INVESTMENT
     }
 
     private final Kind kind;
@@ -61,6 +64,16 @@ public enum AccountType {
     /** True for a loan or mortgage: a debt with an amount owed, never an asset (see {@link Kind#DEBT}). */
     public static boolean isDebt(String wire) {
         return fromWire(wire).filter(type -> type.kind == Kind.DEBT).isPresent();
+    }
+
+    /** True for an investment account (brokerage, retirement or health savings): set up from cash and holdings. */
+    public static boolean isInvestment(String wire) {
+        return fromWire(wire).filter(type -> type.kind == Kind.INVESTMENT).isPresent();
+    }
+
+    /** True for a type that can carry supporting statements: a ledger account or an investment account. */
+    public static boolean takesStatements(String wire) {
+        return holdsActivity(wire) || isInvestment(wire);
     }
 
     /** True for a credit card: its Balance is owed (negative) or Card credit (positive), and it takes no income. */

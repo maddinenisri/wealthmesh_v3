@@ -77,6 +77,14 @@ public class AccountUsageStore {
                 .all();
     }
 
+    /** True when the account's latest delete was a quick discard of a draft: it has no Undo. */
+    public Mono<Boolean> wasDiscarded(UUID accountId) {
+        return client.sql("SELECT action FROM account_event WHERE account_id = :id AND action IN "
+                        + "('deleted', 'undeleted', 'discarded') ORDER BY at DESC, seq DESC LIMIT 1")
+                .bind("id", accountId).map((row, meta) -> "discarded".equals(row.get("action", String.class)))
+                .one().defaultIfEmpty(false);
+    }
+
     /** Marks the account deleted (rows touched: 1) or clears the mark (Undo). Run under the account lock. */
     public Mono<Long> setDeleted(UUID accountId, Instant at) {
         DatabaseClient.GenericExecuteSpec spec = client.sql(at == null

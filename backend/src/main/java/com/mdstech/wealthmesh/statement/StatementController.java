@@ -11,7 +11,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
+import com.mdstech.wealthmesh.account.dto.LifecycleRequest;
+import com.mdstech.wealthmesh.statement.dto.RemovalReview;
 import com.mdstech.wealthmesh.statement.dto.StatementRequest;
 import com.mdstech.wealthmesh.statement.dto.StatementResponse;
 import com.mdstech.wealthmesh.statement.service.StatementService;
@@ -47,6 +50,22 @@ public class StatementController {
             @PathVariable UUID statementId, @RequestHeader(name = "Idempotency-Key", required = false) String key,
             @RequestBody StatementRequest request) {
         return service.revise(accountId, statementId, key, request).map(StatementController::response);
+    }
+
+    /** The review before a removal: who uses the statement and what stays. */
+    @GetMapping("/{statementId}/removal")
+    public Mono<RemovalReview> removalReview(@PathVariable UUID accountId, @PathVariable UUID statementId) {
+        return service.removalReview(accountId, statementId);
+    }
+
+    /** Removes the statement from active records; money and the opening breakdown are untouched. */
+    @PostMapping("/{statementId}/removal")
+    public Mono<StatementResponse> remove(@PathVariable UUID accountId, @PathVariable UUID statementId,
+            @RequestBody(required = false) LifecycleRequest request) {
+        if (request == null || request.enteredByMemberId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose who entered this");
+        }
+        return service.remove(accountId, statementId, request.enteredByMemberId());
     }
 
     private static ResponseEntity<StatementResponse> response(StatementService.Saved saved) {

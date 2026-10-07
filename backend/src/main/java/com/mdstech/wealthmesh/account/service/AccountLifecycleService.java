@@ -102,7 +102,10 @@ public class AccountLifecycleService {
         Mono<Void> work = store.lockAccount(id)
                 .switchIfEmpty(Mono.error(
                         new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
-                .then(Mono.defer(() -> usage.setDeleted(id, null)))
+                .then(Mono.defer(() -> usage.wasDiscarded(id)))
+                .flatMap(discarded -> discarded
+                        ? Mono.<Long>error(conflict("A discarded draft cannot be brought back."))
+                        : usage.setDeleted(id, null))
                 .flatMap(changed -> changed == 0 ? Mono.<Void>empty()
                         : load(id).flatMap(account -> actor(account, memberId))
                                 .then(Mono.defer(() -> record(id, "undeleted", memberId))));
@@ -149,9 +152,7 @@ public class AccountLifecycleService {
                             + dollars(balance.abs()) + " owed; record a payment first."));
                 }
                 return Mono.error(conflict("Closing " + account.name() + " needs a zero Balance. It has "
-                        + dollars(balance) + (AccountType.isValued(account.type())
-                                ? "; record a $0.00 value first (for example when it is sold)."
-                                : "; move it or pay it first.")));
+                        + dollars(balance) + closeAdvice(account)));
             }
             Mono<Void> noPlan = usage.plannedValues(account.id()).flatMap(planned -> planned > 0
                     ? Mono.<Void>error(conflict(plannedMessage(account, planned))) : Mono.<Void>empty());
@@ -177,6 +178,9 @@ public class AccountLifecycleService {
         Mono<Account> work = store.lockAccount(id).then(Mono.defer(() -> load(id))).flatMap(account -> {
             if (target.equals(account.status())) {
                 return Mono.just(account);
+            }
+            if (AccountState.DRAFT.equals(account.status())) {
+                return Mono.error(conflict("Finish setting up " + account.name() + " or discard it first."));
             }
             if (!from.equals(account.status())) {
                 return Mono.error(conflict(otherwise.apply(account)));
@@ -213,7 +217,7 @@ public class AccountLifecycleService {
             reasons.add(counted(found.reminders(), "reminder", "reminders"));
         }
         if (found.statements() > 0) {
-            reasons.add(counted(found.statements(), "statement", "statements"));
+            reasons.add(counted(found.statements(), "statement", "statements") + " (removed ones count)");
         }
         if (found.schedules() > 0) {
             reasons.add(counted(found.schedules(), "recurring bill", "recurring bills"));
@@ -250,6 +254,15 @@ public class AccountLifecycleService {
     }
 
     /** "$1,000.00" or "-$30.00": the way a person reads an amount in a sentence. */
+    private static String closeAdvice(Account account) {
+        if (AccountType.isValued(account.type())) {
+            return "; record a $0.00 value first (for example when it is sold).";
+        }
+        return AccountType.isInvestment(account.type())
+                ? ". Moving money out of an investment account comes in a later release."
+                : "; move it or pay it first.";
+    }
+
     static String dollars(BigDecimal amount) {
         return (amount.signum() < 0 ? "-" : "") + String.format(Locale.US, "$%,.2f", amount.abs());
     }

@@ -253,7 +253,10 @@ public class OpeningRevisionService {
                 .switchIfEmpty(Mono.error(EntryValidator.bad("Use Update balance")))
                 .filter(account -> !AccountType.isValued(account.type()))
                 .switchIfEmpty(Mono.error(EntryValidator.bad(
-                        "A property or other asset moves its start by recording an earlier value")));
+                        "A property or other asset moves its start by recording an earlier value")))
+                .filter(account -> !AccountType.isInvestment(account.type()))
+                .switchIfEmpty(Mono.error(EntryValidator.bad(
+                        "An investment account's opening cash and holdings are corrected in a later release")));
     }
 
     private static ResponseStatusException conflict(String message) {

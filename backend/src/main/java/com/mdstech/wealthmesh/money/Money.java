@@ -21,6 +21,11 @@ public final class Money {
         return Optional.of(new BigDecimal(text.strip()).setScale(2, RoundingMode.HALF_EVEN));
     }
 
+    /** Formats for a sentence: "$1,234.50", with a leading minus when negative. */
+    public static String dollars(BigDecimal amount) {
+        return (amount.signum() < 0 ? "-" : "") + String.format(java.util.Locale.US, "$%,.2f", amount.abs());
+    }
+
     /** Formats for JSON: always two decimals, no exponent. */
     public static String format(BigDecimal amount) {
         return amount.setScale(2, RoundingMode.HALF_EVEN).toPlainString();

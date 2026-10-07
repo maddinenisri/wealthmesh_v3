@@ -13,6 +13,7 @@ public final class AccountState {
     public static final String ACTIVE = "active";
     public static final String ARCHIVED = "archived";
     public static final String CLOSED = "closed";
+    public static final String DRAFT = "draft";
 
     private AccountState() {
     }
@@ -33,10 +34,19 @@ public final class AccountState {
         return account;
     }
 
+    /** A record about a completed opening (a statement) needs the account to be set up: a draft is not. */
+    public static Account requireNotDraft(Account account) {
+        if (DRAFT.equals(account.status())) {
+            throw refused(account);
+        }
+        return account;
+    }
+
     private static ResponseStatusException refused(Account account) {
         String how = switch (account.status()) {
             case ARCHIVED -> "archived. Restore it first.";
             case CLOSED -> "closed. Reopen it first.";
+            case DRAFT -> "a draft. Finish setting it up first.";
             default -> "not ready for money yet.";
         };
         return new ResponseStatusException(HttpStatus.CONFLICT, account.name() + " is " + how);

@@ -23,6 +23,7 @@ import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.activity.service.EntryValidator;
 import com.mdstech.wealthmesh.money.Money;
 import com.mdstech.wealthmesh.statement.domain.Statement;
+import com.mdstech.wealthmesh.statement.dto.RemovalReview;
 import com.mdstech.wealthmesh.statement.dto.StatementRequest;
 import com.mdstech.wealthmesh.statement.dto.StatementResponse;
 import com.mdstech.wealthmesh.statement.repository.StatementRepository;
@@ -44,7 +45,8 @@ public class StatementService {
     public record Saved(StatementResponse statement, boolean created) {
     }
 
-    private record Parsed(LocalDate statementOn, BigDecimal balance, String note, String reason, UUID memberId) {
+    private record Parsed(LocalDate statementOn, BigDecimal balance, String note, String reason, UUID memberId,
+            boolean supportsOpening) {
     }
 
     private final AccountRepository accounts;
@@ -95,7 +97,9 @@ public class StatementService {
                                                 .findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)))
                                         .flatMap(existing -> replay(existing, accountId, replacesId, parsed))
                                         .switchIfEmpty(Mono.defer(() -> Mono
-                                                .fromCallable(() -> AccountState.requireNotClosed(locked))
+                                                .fromCallable(() -> AccountState.requireNotDraft(
+                                                        AccountState.requireNotClosed(locked)))
+                                                .then(Mono.defer(() -> requireLinkable(locked, replacesId, parsed)))
                                                 .then(Mono.defer(() -> insert(accountId, replacesId, key, parsed,
                                                         now)))))))))
                 .onErrorMap(DuplicateKeyException.class, e -> conflict("This statement was already revised."));
@@ -103,11 +107,36 @@ public class StatementService {
 
     private Mono<Saved> insert(UUID accountId, UUID replacesId, String key, Parsed parsed, Instant now) {
         Mono<Void> original = replacesId == null ? Mono.empty()
-                : statements.findById(replacesId).filter(s -> accountId.equals(s.accountId()))
-                        .switchIfEmpty(Mono.error(notFound("Statement not found: " + replacesId))).then();
+                : store.byId(replacesId).filter(s -> accountId.equals(s.accountId()))
+                        .switchIfEmpty(Mono.error(notFound("Statement not found: " + replacesId)))
+                        .flatMap(s -> s.removedAt() == null ? Mono.<Void>empty()
+                                : Mono.error(conflict("This statement was removed, so it cannot be revised.")));
         return original.then(Mono.defer(() -> statements.save(new Statement(null, accountId, parsed.statementOn(),
                         parsed.balance(), parsed.note(), parsed.reason(), replacesId, parsed.memberId(), key, now))))
-                .flatMap(saved -> store.byId(saved.id())).map(s -> new Saved(s, true));
+                .flatMap(saved -> link(accountId, replacesId, saved.id(), parsed)
+                        .then(Mono.defer(() -> store.byId(saved.id()))))
+                .map(s -> new Saved(s, true));
+    }
+
+    /** A new statement backs the opening review when asked; a revision takes over the link of its original. */
+    private Mono<Void> link(UUID accountId, UUID replacesId, UUID savedId, Parsed parsed) {
+        if (replacesId != null) {
+            return store.relink(replacesId, savedId).then();
+        }
+        return parsed.supportsOpening() ? store.link(accountId, savedId).then() : Mono.empty();
+    }
+
+    /** A statement backs the opening of an investment account only, and an opening uses one statement. */
+    private Mono<Void> requireLinkable(Account account, UUID replacesId, Parsed parsed) {
+        if (replacesId != null || !parsed.supportsOpening()) {
+            return Mono.empty();
+        }
+        if (!AccountType.isInvestment(account.type())) {
+            return Mono.error(EntryValidator.bad("A statement can back the opening of an investment account only"));
+        }
+        return store.openingStatement(account.id()).flatMap(existing -> Mono.<Void>error(
+                conflict(account.name() + "'s opening already uses a statement, even if it was removed. "
+                        + "Revise the active one; bringing a removed one back comes in a later release.")));
     }
 
     private Mono<Saved> replay(Statement existing, UUID accountId, UUID replacesId, Parsed parsed) {
@@ -119,7 +148,14 @@ public class StatementService {
         if (!same) {
             return Mono.error(conflict("This save was already used with different details. Start a new entry."));
         }
-        return store.byId(existing.id()).map(s -> new Saved(s, false));
+        return store.byId(existing.id()).flatMap(s -> differentLink(s, replacesId, parsed)
+                ? Mono.<Saved>error(conflict("This save was already used with different details. Start a new entry."))
+                : Mono.just(new Saved(s, false)));
+    }
+
+    /** A latest original asked to back the opening differently from how it was saved is a different save. */
+    private static boolean differentLink(StatementResponse saved, UUID replacesId, Parsed parsed) {
+        return saved.latest() && replacesId == null && saved.usedByOpening() != parsed.supportsOpening();
     }
 
     private Mono<Parsed> parse(Account account, StatementRequest request, boolean revision) {
@@ -142,7 +178,50 @@ public class StatementService {
             return new Object[] { shown, text(request.note(), 200, "Note"), reason };
         }).flatMap(parts -> validator.member(account, request.enteredByMemberId())
                 .map(memberId -> new Parsed(request.statementOn(), (BigDecimal) parts[0], (String) parts[1],
-                        (String) parts[2], memberId)));
+                        (String) parts[2], memberId, Boolean.TRUE.equals(request.supportsOpening()))));
+    }
+
+    /** What removing a statement does: who uses it, and that the recorded cash, shares, price and Balance stay. */
+    public Mono<RemovalReview> removalReview(UUID accountId, UUID statementId) {
+        return investmentAccount(accountId).flatMap(account -> ownStatement(accountId, statementId)
+                .flatMap(statement -> Mono.zip(store.openingUses(statementId), lock.deltaOf(accountId))
+                        .map(known -> review(account, statement, known.getT1().intValue(),
+                                account.openingAmount().add(known.getT2().amount())))));
+    }
+
+    private static RemovalReview review(Account account, StatementResponse statement, int uses, BigDecimal balance) {
+        String used = uses == 0 ? "No opening breakdown uses this statement."
+                : uses + " opening breakdown" + (uses == 1 ? " uses" : "s use") + " this statement.";
+        String message = used + " Removing it keeps the recorded cash, shares and price, and the Balance stays "
+                + Money.dollars(balance) + ". The removal stays in history.";
+        return new RemovalReview(statement.id(), uses, Money.format(balance), message);
+    }
+
+    /**
+     * Removes a statement from the active records without touching money: the opening breakdown, cash, holdings and
+     * Balance stay, and the removal (who and when) stays in history. A repeat returns the removed statement unchanged.
+     */
+    public Mono<StatementResponse> remove(UUID accountId, UUID statementId, UUID memberId) {
+        return investmentAccount(accountId).then(Mono.defer(() -> transactions.transactional(lock.lockAccount(accountId)
+                .then(Mono.defer(() -> investmentAccount(accountId)))
+                .flatMap(locked -> ownStatement(accountId, statementId)
+                        .flatMap(statement -> statement.removedAt() != null ? Mono.just(statement)
+                                : Mono.fromCallable(() -> AccountState.requireNotClosed(locked))
+                                        .then(Mono.defer(() -> validator.memberLocked(locked, memberId)))
+                                        .flatMap(member -> store.markRemoved(statementId, member, clock.instant()))
+                                        .then(Mono.defer(() -> store.byId(statementId))))))));
+    }
+
+    /** Removing a statement belongs to an investment account's opening (D-059); other types keep theirs. */
+    private Mono<Account> investmentAccount(UUID accountId) {
+        return account(accountId).filter(account -> AccountType.isInvestment(account.type()))
+                .switchIfEmpty(Mono.error(EntryValidator.bad(
+                        "Only an investment account's statement can be removed")));
+    }
+
+    private Mono<StatementResponse> ownStatement(UUID accountId, UUID statementId) {
+        return store.byId(statementId).filter(s -> accountId.equals(s.accountId()))
+                .switchIfEmpty(Mono.error(notFound("Statement not found: " + statementId)));
     }
 
     private static String text(String value, int max, String label) {
@@ -155,9 +234,9 @@ public class StatementService {
 
     private Mono<Account> account(UUID accountId) {
         return accounts.findById(accountId).switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)))
-                .filter(account -> AccountType.holdsActivity(account.type()))
+                .filter(account -> AccountType.takesStatements(account.type()))
                 .switchIfEmpty(Mono.error(EntryValidator.bad(
-                        "Supporting statements belong to an account that holds money activity")));
+                        "Supporting statements belong to an account that holds money or investments")));
     }
 
     private static String requireKey(String key) {
