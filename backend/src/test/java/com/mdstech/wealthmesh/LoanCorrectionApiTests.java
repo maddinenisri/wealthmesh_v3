@@ -317,21 +317,61 @@ class LoanCorrectionApiTests extends DebtTestBase {
 
     @Order(13)
     @Test
-    @DisplayName("V2_LOAN_003 a payment still saves after its interest category is archived: the portion keeps the "
-            + "category, shown as archived")
-    void archivedInterestCategoryStillSaves() {
+    @DisplayName("V2_LOAN_003 the interest categories every loan payment uses cannot be archived or merged away, "
+            + "and a payment keeps saving into them")
+    void interestCategoriesStayAvailable() {
         String bank = account("Archive Checking", "5000.00");
         String own = loan("Archive Loan", "1000.00", "2026-09-01");
         String interest = categoryId("Loan interest");
-        webTestClient.post().uri("/api/v1/categories/{id}/archive", interest)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange().expectStatus().isOk();
+        webTestClient.post().uri("/api/v1/categories/{id}/archive", interest).contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange().expectStatus()
+                .is4xxClientError().expectBody().jsonPath("$.message")
+                .value(String.class, m -> assertThat(m).contains("loan payment"));
+        webTestClient.post().uri("/api/v1/categories/merges").contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"sourceIds": ["%s"], "targetId": "%s", "enteredByMemberId": "%s"}"""
+                        .formatted(interest, categoryId("Groceries"), mayaId))
+                .exchange().expectStatus().is4xxClientError();
         loanPayment("a-1", bank, own, "100.00", "10.00", "2026-09-12");
         webTestClient.get().uri("/api/v1/accounts/{id}/activity", bank).exchange().expectBody()
                 .jsonPath("$[0].portions[0].categoryName").isEqualTo("Loan interest")
-                .jsonPath("$[0].portions[0].categoryArchived").isEqualTo(true);
-        webTestClient.post().uri("/api/v1/categories/{id}/restore", interest)
+                .jsonPath("$[0].portions[0].categoryArchived").isEqualTo(false);
+    }
+
+    @Order(14)
+    @Test
+    @DisplayName("V2_LOAN_006 the review of a new initial amount, and of a correction, refuses up front what would "
+            + "leave a credit, as the payment review does")
+    void reviewsRefuseACreditUpFront() {
+        String bank = account("Review Checking", "5000.00");
+        String own = loan("Review Loan", "1000.00", "2026-09-01");
+        loanPayment("v-1", bank, own, "600.00", "0.00", "2026-09-20");
+        webTestClient.get().uri("/api/v1/accounts/{id}/starting-balance-corrections/preview?openingAmount=500.00"
+                + "&openedOn=2026-09-01", own).exchange().expectStatus().isEqualTo(409).expectBody()
+                .jsonPath("$.message").value(String.class, m -> assertThat(m).contains("credit"));
+        webTestClient.get().uri("/api/v1/accounts/{id}/starting-balance-corrections/preview?openingAmount=700.00"
+                + "&openedOn=2026-09-01", own).exchange().expectStatus().isOk();
+        webTestClient.get().uri("/api/v1/accounts/{id}/balance-corrections/preview?requested=100.00&asOn=2026-09-10",
+                own).exchange().expectStatus().isEqualTo(409).expectBody().jsonPath("$.message")
+                .value(String.class, m -> assertThat(m).contains("credit"));
+        webTestClient.get().uri("/api/v1/accounts/{id}/balance-corrections/preview?requested=900.00&asOn=2026-09-10",
+                own).exchange().expectStatus().isOk();
+    }
+
+    @Order(15)
+    @Test
+    @DisplayName("V2_DATED_VALUE_003 a checking account's Balance correction can be removed and brought back too")
+    void aLedgerCorrectionIsRemovableToo() {
+        String bank = account("Removable Checking", "1000.00");
+        correctOn(bank, "m-1", "900.00", "2026-09-10", "Fee").expectStatus().isCreated();
+        String row = firstCorrection(bank);
+        webTestClient.post().uri("/api/v1/accounts/{a}/activity/{id}/removal", bank, row)
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange();
+                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange().expectStatus().isOk();
+        assertBalance(bank, "1000.00");
+        webTestClient.post().uri("/api/v1/accounts/{a}/activity/{id}/undo", bank, row)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange().expectStatus().isOk();
+        assertBalance(bank, "900.00");
     }
 }

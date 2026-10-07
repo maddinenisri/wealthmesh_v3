@@ -72,7 +72,9 @@ describe('correcting the initial amount owed', () => {
 
     await user.type(within(review).getByLabelText('Reason'), 'Copied the lender amount incorrectly')
     await user.click(within(review).getByRole('button', { name: 'Confirm correction' }))
-    expect(await screen.findByLabelText('Account details')).toHaveTextContent('$19,800.00 owed')
+    expect(await screen.findByLabelText('Account details')).toHaveTextContent(
+      'Balance owed$19,800.00 as of',
+    )
     expect(posts(api.requests)).toEqual([
       `POST /api/v1/accounts/${LOAN}/starting-balance-corrections`,
     ])
@@ -126,7 +128,9 @@ describe('a dated correction of the balance owed', () => {
     expect(row).toHaveTextContent('2026-09-30')
     expect(posts(api.requests)).toEqual([`POST /api/v1/accounts/${LOAN}/balance-corrections`])
     expect(api.accounts[0].balance.amount).toBe('-19800.00')
-    expect(await screen.findByLabelText('Account details')).toHaveTextContent('$19,800.00 owed')
+    expect(await screen.findByLabelText('Account details')).toHaveTextContent(
+      'Balance owed$19,800.00 as of',
+    )
   })
 
   it('V2_DATED_VALUE_003 a negative balance owed is refused in the form', async () => {
@@ -175,7 +179,7 @@ describe('a dated correction of the balance owed', () => {
     expect(api.accounts[0].balance.amount).toBe('-19800.00')
   })
 
-  it('V2_DATED_VALUE_003 a ledger account keeps editing a correction and has no Remove for it', async () => {
+  it('V2_DATED_VALUE_003 the correction of a checking account can be edited and removed too (owner, 2026-10-07)', async () => {
     mockApi({
       household,
       members: [maya],
@@ -193,11 +197,61 @@ describe('a dated correction of the balance owed', () => {
         { ...correction, accountId: '44444444-4444-4444-8444-444444444444', amount: '-100.00' },
       ],
     })
-    renderRoute('/accounts/44444444-4444-4444-8444-444444444444')
+    const { user } = renderRoute('/accounts/44444444-4444-4444-8444-444444444444')
     const row = (await screen.findByText(/Balance correction: Lender statement/)).closest('tr')!
     expect(within(row).getByRole('button', { name: /^Edit correction/ })).toBeInTheDocument()
-    expect(
-      within(row).queryByRole('button', { name: /^Remove correction/ }),
-    ).not.toBeInTheDocument()
+    await user.click(within(row).getByRole('button', { name: /^Remove correction of/ }))
+    const review = await screen.findByRole('region', { name: 'Review removal' })
+    expect(review).toHaveTextContent('Everyday Checking Balance after removal$5,000.00')
+    expect(review).not.toHaveTextContent('Balance owed')
+  })
+
+  it('V2_DATED_VALUE_003 removing and restoring a correction says what changed, and the history button names the correction', async () => {
+    mockApi({
+      household,
+      members: [maya],
+      accounts: [carLoan('19800.00')],
+      activity: [correction],
+    })
+    const { user } = renderRoute(`/accounts/${LOAN}`)
+    await user.click(await screen.findByRole('button', { name: /^Remove correction of/ }))
+    const review = await screen.findByRole('region', { name: 'Review removal' })
+    await user.click(within(review).getByRole('button', { name: 'Confirm removal' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Removed the balance correction.')
+    await user.click(screen.getByRole('button', { name: 'Show history' }))
+    await user.click(await screen.findByRole('button', { name: 'Undo correction of 2026-09-30' }))
+    const undo = await screen.findByRole('region', { name: 'Review Undo' })
+    await user.click(within(undo).getByRole('button', { name: 'Confirm Undo' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Restored the balance correction.')
+    expect(screen.getByRole('status')).not.toHaveTextContent('null')
+  })
+
+  it('V2_LOAN_004 a refused Confirm leaves no stale message on the next review, and Back puts focus in the form', async () => {
+    const api = mockApi({ household, members: [maya], accounts: [carLoan()] })
+    const { user } = renderRoute(`/accounts/${LOAN}`)
+    await user.click(await screen.findByRole('button', { name: 'Update balance owed' }))
+    await user.click(await screen.findByRole('radio', { name: 'Correct the initial amount owed' }))
+    const form = await screen.findByRole('region', { name: 'Correct the initial amount owed' })
+    await user.type(within(form).getByLabelText('Initial amount owed'), '500.00')
+    await user.click(within(form).getByRole('button', { name: 'Review' }))
+    let review = await screen.findByRole('region', {
+      name: 'Review initial amount owed correction',
+    })
+    await user.type(within(review).getByLabelText('Reason'), 'Typo')
+    api.failNextSave = 'This would leave Car Loan with a credit of $220.00 on 2026-09-20.'
+    await user.click(within(review).getByRole('button', { name: 'Confirm correction' }))
+    expect(await within(review).findByText(/with a credit of \$220\.00/)).toBeInTheDocument()
+    await user.click(within(review).getByRole('button', { name: 'Back' }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: 'Correct the initial amount owed' }),
+      ).toHaveFocus(),
+    )
+    const amount = screen.getByLabelText('Initial amount owed')
+    await user.clear(amount)
+    await user.type(amount, '21000.00')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    review = await screen.findByRole('region', { name: 'Review initial amount owed correction' })
+    expect(review).not.toHaveTextContent('credit of')
   })
 })

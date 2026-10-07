@@ -25,7 +25,7 @@ export function LoanPaymentChange({
   account: Account
   entry: TransferTarget
   members: Member[]
-  onDone: (saved?: boolean) => void
+  onDone: (message?: string) => void
 }) {
   const accounts = useAccounts()
   const payment = useLoanPayment(entry.movementId ?? undefined)
@@ -79,7 +79,15 @@ export function LoanPaymentChange({
       <EnteredBy members={members} member={member} setMemberId={setMemberId} />
       <div className="mt-4 flex gap-2">
         <Button
-          onClick={() => member && change.mutate(member.id, { onSuccess: () => onDone(true) })}
+          onClick={() =>
+            member &&
+            change.mutate(member.id, {
+              onSuccess: () =>
+                onDone(
+                  `${mode === 'remove' ? 'Removed' : 'Restored'} the ${formatMoney(Number(paid.amount))} payment from ${paid.from.accountName} to ${paid.to.accountName}.`,
+                ),
+            })
+          }
           disabled={change.isPending || !member}
         >
           {change.isPending ? 'Saving' : mode === 'remove' ? 'Confirm removal' : 'Confirm Undo'}

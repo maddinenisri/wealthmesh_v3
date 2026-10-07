@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
@@ -36,7 +36,7 @@ export function StartingBalanceCorrection({
   initial?: { amount: string; on: string }
   /** Tells the parent whether a review is showing, so the mode choice can be locked. */
   onReviewing?: (reviewing: boolean) => void
-  onDone: () => void
+  onDone: (message?: string) => void
 }) {
   const { member, setMemberId } = useEnteringAs(members)
   const debt = isDebt(account.type)
@@ -55,6 +55,11 @@ export function StartingBalanceCorrection({
   })
   const preview = useOpeningPreview(account.id, reviewing?.amount ?? '', reviewing?.on ?? '')
   useEffect(() => onReviewing?.(reviewing !== null), [reviewing, onReviewing])
+  const wasReviewing = useRef(false)
+  useEffect(() => {
+    if (reviewing) wasReviewing.current = true
+    else if (wasReviewing.current) document.getElementById('starting-heading')?.focus()
+  }, [reviewing])
   useEffect(() => {
     if (reviewing)
       document.getElementById('starting-review-heading')?.focus({ preventScroll: true })
@@ -72,7 +77,14 @@ export function StartingBalanceCorrection({
           enteredByMemberId: member.id,
         },
       },
-      { onSuccess: onDone },
+      {
+        onSuccess: () =>
+          onDone(
+            debt
+              ? 'Saved the initial amount owed correction.'
+              : 'Saved the starting balance correction.',
+          ),
+      },
     )
   })
 
@@ -131,12 +143,15 @@ export function StartingBalanceCorrection({
             </Button>
             <Button
               variant="secondary"
-              onClick={() => setReviewing(null)}
+              onClick={() => {
+                save.reset()
+                setReviewing(null)
+              }}
               disabled={save.isPending}
             >
               Back
             </Button>
-            <Button variant="ghost" onClick={onDone} disabled={save.isPending}>
+            <Button variant="ghost" onClick={() => onDone()} disabled={save.isPending}>
               Cancel
             </Button>
           </div>
@@ -147,7 +162,7 @@ export function StartingBalanceCorrection({
 
   return (
     <Card aria-labelledby="starting-heading">
-      <CardTitle id="starting-heading" className="text-lg">
+      <CardTitle id="starting-heading" tabIndex={-1} className="text-lg outline-none">
         {debt ? 'Correct the initial amount owed' : 'Correct the starting balance'}
       </CardTitle>
       {initial && (
@@ -195,7 +210,7 @@ export function StartingBalanceCorrection({
         </p>
         <div className="flex gap-2">
           <Button type="submit">Review</Button>
-          <Button variant="ghost" onClick={onDone}>
+          <Button variant="ghost" onClick={() => onDone()}>
             Cancel
           </Button>
         </div>

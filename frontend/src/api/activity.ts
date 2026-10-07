@@ -53,6 +53,9 @@ export type Activity = {
   counterAccountName: string | null
   /** The portions of a split expense, in the order entered; empty when it is not split (it has no category then). */
   portions: Portion[]
+  /** On a loan's row of a payment: the whole payment and the interest in it (the row's amount is the principal). */
+  paymentTotal: string | null
+  paymentInterest: string | null
 }
 
 /** The other side of a replacement: what the entry was, where, and who saved it when. */
@@ -226,6 +229,8 @@ export function parseActivity(value: unknown): Activity {
     counterAccountId: strOrNull(data.counterAccountId),
     counterAccountName: strOrNull(data.counterAccountName),
     portions: data.portions == null ? [] : list(data.portions, parsePortion),
+    paymentTotal: strOrNull(data.paymentTotal),
+    paymentInterest: strOrNull(data.paymentInterest),
   }
 }
 

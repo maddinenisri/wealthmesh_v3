@@ -269,10 +269,9 @@ public class EntryChangeService {
         }
     }
 
-    /** Removal and Undo: a loan's Balance correction can be removed and brought back; a ledger one is replaced. */
+    /** Removal and Undo: any entry, and a Balance correction too (owner, 2026-10-07). */
     private Mono<Activity> original(UUID accountId, UUID activityId) {
-        return accounts.findById(accountId).switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)))
-                .flatMap(account -> original(accountId, activityId, AccountType.isDebt(account.type())));
+        return original(accountId, activityId, true);
     }
 
     private Mono<Activity> original(UUID accountId, UUID activityId, boolean allowCorrection) {

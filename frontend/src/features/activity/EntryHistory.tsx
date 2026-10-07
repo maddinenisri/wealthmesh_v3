@@ -170,11 +170,13 @@ export function EntryHistory({
                       variant="ghost"
                       size="sm"
                       aria-label={`Undo ${
-                        entry.movementId
-                          ? movementName(entry)
-                          : (entry.description ??
-                            (entry.portions.length > 0 ? 'split expense' : entry.categoryName) ??
-                            'entry')
+                        entry.kind === 'correction'
+                          ? `correction of ${entry.occurredOn}`
+                          : entry.movementId
+                            ? movementName(entry)
+                            : (entry.description ??
+                              (entry.portions.length > 0 ? 'split expense' : entry.categoryName) ??
+                              'entry')
                       }`}
                       disabled={!onUndo || !!lockedBy?.(entry.counterAccountId)}
                       title={lockedBy?.(entry.counterAccountId)}
@@ -205,7 +207,9 @@ export function EntryHistory({
               <Td className="whitespace-nowrap">{correction.openedOn}</Td>
               <Td>
                 {correction.openedOn === correction.previousOn
-                  ? 'Starting balance correction'
+                  ? opening?.type === 'loan'
+                    ? 'Initial amount correction'
+                    : 'Starting balance correction'
                   : 'Tracking start moved'}
                 {correction.openedOn !== correction.previousOn && (
                   <span className="block text-caption text-ink-muted">

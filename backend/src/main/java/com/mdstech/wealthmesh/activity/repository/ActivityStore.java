@@ -34,7 +34,10 @@ public class ActivityStore {
                    c.id AS category_id, c.name AS category_name,
                    (c.archived_at IS NOT NULL) AS category_archived, a.entered_by_member_id, a.created_at, a.reason,
                    a.movement_id, cp.account_id AS counter_account_id, cpa.name AS counter_account_name,
-                   a.classification
+                   a.classification,
+                   CASE WHEN a.kind = 'loan_payment_in' THEN cp.amount END AS payment_total,
+                   CASE WHEN a.kind = 'loan_payment_in' THEN (SELECT SUM(ip.amount) FROM activity_portion ip
+                        WHERE ip.activity_id = cp.id AND ip.kind = 'category') END AS payment_interest
             FROM activity a JOIN account ac ON ac.id = a.account_id
             LEFT JOIN category oc ON oc.id = a.category_id
             LEFT JOIN category c ON c.id = COALESCE(oc.merged_into_id, oc.id)
@@ -464,6 +467,11 @@ public class ActivityStore {
                 row.get("created_at", java.time.OffsetDateTime.class).toInstant(), row.get("reason", String.class),
                 row.get("movement_id", UUID.class), row.get("counter_account_id", UUID.class),
                 row.get("counter_account_name", String.class), row.get("classification", String.class),
-                Boolean.TRUE.equals(row.get("category_archived", Boolean.class)), List.of());
+                Boolean.TRUE.equals(row.get("category_archived", Boolean.class)), List.of(),
+                row.get("payment_total", BigDecimal.class) == null ? null
+                        : Money.format(row.get("payment_total", BigDecimal.class)),
+                row.get("payment_total", BigDecimal.class) == null ? null
+                        : Money.format(java.util.Objects.requireNonNullElse(
+                                row.get("payment_interest", BigDecimal.class), BigDecimal.ZERO)));
     }
 }

@@ -28,7 +28,7 @@ Owner note: the loan and mortgage wording is left open on purpose. An earlier li
 ```
 
 - 2026-10-06 Checkpoint 1 answer: design, wording list and task list approved. Q1 split: this session is slice 16a (groups 0 to 3; IDs `LOAN_001` to `006` and `DATED_VALUE_003`), 16b (groups 4 to 8; the rest) next session; two rows in `INDEX.md` and `slices.txt`. Q2 yes: `DATED_VALUE_001` on a debt saves a planned value no reader counts; say where a debt's planned rows live and reuse slice 15's exclusion test (16b). Additions: (1) per-leg amounts must not weaken transfers and card payments: a raw-API test that a plain transfer and a card payment still refuse unequal legs, and the existing transfer, card payment and race suites run as regression; (2) one test that loan and mortgage interest spending shows the same figure on Spending, the Month review, budgets and the change explanation; both interest categories get default class Essential. Build in order, one commit per group, local only, no push, no trailer; each new e2e assertion run alone against unfixed code; visual-reviewer after Prove and before Checkpoint 2; Cowork count against 8, 8, 5, 5, 5, 7, 9 and 9.
-- <date> Checkpoint 2 answer:
+- 2026-10-07 Checkpoint 2 answer: 8 faults against 8, 8, 5, 5, 5, 7, 9 and 9 (22 found by the screenshot step before); the slice is right on the numbers. Owner: make ledger Balance corrections removable with Undo (done). Asked: is a dated correction stored as a change, not a figure, the wanted behaviour (answered below, Q-031).
 
 ## Scope
 
@@ -114,6 +114,23 @@ Cells to grep at build: `Counted`, `activity_part`, `SIGNED`, `kind IN (` in eve
 1. **Split.** The owner asked for loans first, then mortgages. Loans and mortgages share every mechanism, so mortgage groups 4 to 7 are mostly tests and a noun. Recommended: one session for groups 0 to 3 (slice 16a: 4 groups, 7 IDs plus the debt mechanism) and a second for groups 4 to 8 (16b), with `INDEX.md` split into two rows. Fallback if you prefer one session: all nine groups and `partial` if a stop rule hits.
 2. **DATED_VALUE_001 for a debt.** A future date on a correction is refused today with no reminder or plan. Options: (a) allow a `planned` `account_value` row on a debt (never effective, listed, removable, as slice 15), (b) refuse with guidance and defer `001` whole (D-016). Recommended: (a).
 3. **Wording** in decision 6: approve or change.
+
+## Cowork findings, owner's pass (2026-10-07)
+
+8 faults, 710px with real clicks, 1280px by opening and cancelling panels. Fixed, each with a Vitest or API test seen red first unless noted:
+
+| # | Fault seen | Fix |
+| --- | --- | --- |
+| 1 | Removing a loan correction said "Removed null."; the history button was "Undo entry" | "Removed the balance correction."; "Undo correction of 2026-09-30" |
+| 2 | A new initial amount that would leave a credit was reviewed with Confirm on, refused only after Confirm | The review refuses it up front (409) for the initial amount and for a dated correction (`LoanCorrectionApiTests` order 14), Confirm stays off |
+| 3 | The refusal stayed on the next review after Back | Back clears the save error (Vitest, `failNextSave`) |
+| 4 | After Confirm payment or Confirm correction focus went to a far button, no status line | A sentence says what was saved and the Activity heading takes focus (Vitest) |
+| 5 | Back from a review, and Confirm removal and Undo, left focus on the page body | Back focuses the form heading (payment, correction, initial amount); removal and Undo announce (Vitest). e2e line for Back on the initial amount |
+| 6 | "Loan interest" could be archived but payments still saved into it | The two interest categories cannot be archived or merged away (409, rename allowed): `LoanCorrectionApiTests` order 13 |
+| 7 | Two payments from one account had identical button names; a row showed only the principal | Names carry the amount and date; the loan row says "Part of a $500.00 payment, $50.00 of it interest" (`paymentTotal`, `paymentInterest`, API and Vitest) |
+| 8 | "Balance owed $20,000.00 owed"; "Starting balance correction" in a loan's history; Edit payment Reason not marked optional | The details figure drops "owed"; "Initial amount correction"; "Reason (optional)". The Accounts list heading was already "Bank or lender" in the build the owner used? No: it was fixed after; the dev stack now serves it |
+
+Owner's two questions: (a) ledger corrections removable with Undo: yes, built (`EntryChangeService`, the Remove button for every correction, `CorrectCorrectionApiTests` guard test rewritten, `aLedgerCorrectionIsRemovableToo`). (b) a dated correction is stored as a signed change plus the requested figure (slice 03, Q-031 open): kept; the form says "Enter what was owed at the end of that day" and the review shows the change; an owner decision on Q-031 is still wanted.
 
 ## Coverage
 

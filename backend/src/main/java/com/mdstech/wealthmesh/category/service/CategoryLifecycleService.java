@@ -77,10 +77,23 @@ public class CategoryLifecycleService {
         });
     }
 
+    /** The categories every loan and mortgage payment's interest counts under (V25): they stay available. */
+    private static final java.util.Set<UUID> IN_USE_BY_PAYMENTS = java.util.Set.of(
+            UUID.fromString("a16a0000-0000-4000-8000-000000000001"),
+            UUID.fromString("a16a0000-0000-4000-8000-000000000002"));
+
+    private static ResponseStatusException usedByPayments(Category category) {
+        return conflict("\"" + category.name() + "\" is where the interest of every loan payment is counted, so it "
+                + "cannot be archived or merged away. You can rename it.");
+    }
+
     public Mono<CategoryResponse> archive(UUID id, CategoryChange change) {
         return write(id, change.enteredByMemberId(), category -> {
             if (category.archived()) {
                 return Mono.just(category);
+            }
+            if (IN_USE_BY_PAYMENTS.contains(id)) {
+                return Mono.error(usedByPayments(category));
             }
             Instant now = clock.instant();
             return store.setArchived(id, now)
@@ -145,6 +158,9 @@ public class CategoryLifecycleService {
     }
 
     private Mono<Void> checkSource(Category source, Category target) {
+        if (IN_USE_BY_PAYMENTS.contains(source.id())) {
+            return Mono.error(usedByPayments(source));
+        }
         if (source.archived()) {
             return Mono.error(conflict("\"" + source.name() + "\" is archived or already merged."));
         }

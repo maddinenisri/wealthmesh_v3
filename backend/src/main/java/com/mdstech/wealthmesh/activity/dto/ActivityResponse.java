@@ -24,11 +24,14 @@ public record ActivityResponse(
         String counterAccountName,
         String classification,
         boolean categoryArchived,
-        List<PortionResponse> portions) {
+        List<PortionResponse> portions,
+        /** On the loan's row of a payment: what the payer gave in all, and how much of it was interest. */
+        String paymentTotal,
+        String paymentInterest) {
 
     public ActivityResponse withPortions(List<PortionResponse> shown) {
         return new ActivityResponse(id, accountId, accountName, kind, amount, occurredOn, description, categoryId,
                 categoryName, enteredByMemberId, createdAt, reason, movementId, counterAccountId, counterAccountName,
-                classification, categoryArchived, shown);
+                classification, categoryArchived, shown, paymentTotal, paymentInterest);
     }
 }

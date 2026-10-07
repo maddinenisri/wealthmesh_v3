@@ -11,11 +11,14 @@ export function BalanceFigure({
   amount,
   className,
   overdraft = true,
+  bare = false,
 }: {
   type: string
   amount: string
   className?: string
   overdraft?: boolean
+  /** Leave out "owed": the label beside the figure already says it ("Balance owed"). */
+  bare?: boolean
 }) {
   const value = Number(amount)
   if (!readsAsOwed(type)) {
@@ -29,7 +32,7 @@ export function BalanceFigure({
   return (
     <span className="whitespace-nowrap">
       <Amount value={Math.abs(value)} className={className} />{' '}
-      <span className="text-sm text-ink-muted">{balanceSide(type, value)}</span>
+      {!bare && <span className="text-sm text-ink-muted">{balanceSide(type, value)}</span>}
     </span>
   )
 }

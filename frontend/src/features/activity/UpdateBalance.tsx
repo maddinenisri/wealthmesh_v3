@@ -22,7 +22,7 @@ export function UpdateBalance({
   members: Member[]
   today: string
   editing?: Activity
-  onDone: () => void
+  onDone: (message?: string) => void
 }) {
   const [mode, setMode] = useState<'date' | 'starting'>('date')
   const [locked, setLocked] = useState(false)

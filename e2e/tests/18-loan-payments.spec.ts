@@ -151,7 +151,7 @@ for (const width of [710, 1280] as const) {
       page,
     }) => {
       await page.goto(`/accounts/${loanId}`)
-      await expect(page.getByLabel('Account details')).toContainText('$19,550.00 owed')
+      await expect(page.getByLabel('Account details')).toContainText('Balance owed$19,550.00')
       const row = page.getByRole('row').filter({ hasText: `Payment from ${bank}` })
       await expect(row).toContainText('$450.00 paid')
       await expect(row).toContainText('Principal')

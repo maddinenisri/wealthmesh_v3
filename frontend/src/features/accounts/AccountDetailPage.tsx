@@ -116,6 +116,7 @@ function Details({ account, owners }: { account: Account; owners: string }) {
               type={account.type}
               amount={account.balance.amount}
               className="font-sans text-2xl normal-nums"
+              bare={isDebt(account.type)}
             />
             <span className="block text-caption text-ink-muted">as of {account.balance.asOf}</span>
             {!isCard(account.type) &&
@@ -141,6 +142,7 @@ function Details({ account, owners }: { account: Account; owners: string }) {
               amount={account.openingAmount}
               overdraft={false}
               className="font-sans text-2xl normal-nums"
+              bare={isDebt(account.type)}
             />
             <span className="block text-caption text-ink-muted">{` on ${account.openedOn}`}</span>
           </dd>
@@ -249,6 +251,11 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
         document.getElementById('activity-heading')?.scrollIntoView?.({ block: 'start' }),
       )
     }
+  }
+  // A loan panel ends with a sentence saying what changed (or nothing, for Cancel), and the Activity heading.
+  const closeLoan = (message?: string) => {
+    setTransfer(null)
+    if (message) announce(message)
   }
   // The row that changed is what the person came for; the opener may be gone, so focus goes to the heading.
   const announce = (message: string) => {
@@ -376,7 +383,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               members={members}
               today={today.data}
               editing={transfer.kind === 'loan-edit' ? transfer.entry : undefined}
-              onDone={closeTransfer}
+              onDone={closeLoan}
             />
           )}
           {(transfer.kind === 'loan-remove' || transfer.kind === 'loan-undo') && (
@@ -385,7 +392,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               account={account}
               entry={transfer.entry}
               members={members}
-              onDone={closeTransfer}
+              onDone={closeLoan}
             />
           )}
         </Panel>
@@ -397,7 +404,10 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             members={members}
             today={today.data}
             editing={correcting.editing}
-            onDone={() => setCorrecting(null)}
+            onDone={(message) => {
+              setCorrecting(null)
+              if (message) announce(message)
+            }}
           />
         </Panel>
       )}

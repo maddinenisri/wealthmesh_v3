@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mockApi, type MockAccount, type MockActivity } from '../../test/mockApi'
 import { renderRoute } from '../../test/render'
@@ -63,6 +63,8 @@ const saved: MockActivity[] = [
     amount: '450.00',
   },
 ]
+/** Fresh copies: the mock changes the rows it is given, and one test must not leave its removal for the next. */
+const savedRows = (): MockActivity[] => saved.map((row) => ({ ...row }))
 const afterPayment = [checking('4500.00'), carLoan('19550.00')]
 
 beforeEach(() => window.localStorage.setItem('wealthmesh.enteringAs', maya.id))
@@ -112,7 +114,7 @@ describe('paying a loan from checking', () => {
     expect(screen.getByRole('heading', { name: 'Review payment' })).toHaveFocus()
 
     await user.click(screen.getByRole('button', { name: 'Confirm payment' }))
-    const row = (await screen.findByText('Payment to', { exact: false })).closest('tr')!
+    const row = await screen.findByRole('row', { name: /Payment to Car Loan/ })
     expect(row).toHaveTextContent('Car Loan')
     expect(row).toHaveTextContent('-$500.00')
     expect(row).toHaveTextContent('Includes interest')
@@ -195,7 +197,7 @@ describe('a loan page', () => {
       household,
       members: [maya],
       accounts: afterPayment,
-      activity: saved,
+      activity: savedRows(),
     })
     const { user } = renderRoute(`/accounts/${LOAN}`)
     const row = (await screen.findByText('Payment from', { exact: false })).closest('tr')!
@@ -236,7 +238,7 @@ describe('a loan page', () => {
       household,
       members: [maya],
       accounts: afterPayment,
-      activity: saved,
+      activity: savedRows(),
     })
     const { user } = renderRoute(`/accounts/${LOAN}`)
     await user.click(await screen.findByRole('button', { name: /^Remove payment from/ }))
@@ -259,7 +261,8 @@ describe('a loan page', () => {
     expect(undo).toHaveTextContent('Car Loan Balance owed after Undo$19,550.00 owed')
     await user.click(within(undo).getByRole('button', { name: 'Confirm Undo' }))
     // The payment is in the list again (and the open history still shows its row).
-    expect(await screen.findAllByText('Payment from', { exact: false })).toHaveLength(2)
+    expect(await screen.findByRole('status')).toHaveTextContent('Restored the $500.00 payment')
+    expect(await screen.findAllByRole('row', { name: /Payment from/ })).toHaveLength(2)
     expect(api.accounts.find((a) => a.id === LOAN)?.balance.amount).toBe('-19550.00')
   })
 
@@ -268,7 +271,7 @@ describe('a loan page', () => {
       household,
       members: [maya],
       accounts: afterPayment,
-      activity: saved,
+      activity: savedRows(),
     })
     const { user } = renderRoute(`/accounts/${CHECKING}`)
     await user.click(await screen.findByRole('button', { name: /^Edit payment to/ }))
@@ -280,7 +283,7 @@ describe('a loan page', () => {
     const interest = within(form).getByLabelText('Interest')
     await user.clear(interest)
     await user.type(interest, '100.00')
-    await user.type(within(form).getByLabelText('Reason'), "Use the lender's breakdown")
+    await user.type(within(form).getByLabelText('Reason (optional)'), "Use the lender's breakdown")
     await user.click(within(form).getByRole('button', { name: 'Review' }))
     const review = await screen.findByRole('region', { name: 'Review change' })
     expect(review).toHaveTextContent('Principal$450.00 changed to $400.00')
@@ -293,5 +296,86 @@ describe('a loan page', () => {
     await screen.findByText('Includes interest')
     expect(posts(api.requests)).toEqual(['POST /api/v1/loan-payments/' + MOVEMENT + '/replacement'])
     expect(api.accounts.find((a) => a.id === LOAN)?.balance.amount).toBe('-19600.00')
+  })
+
+  it('V2_LOAN_003 a loan row names the whole payment and its interest, and two payments from one account have different button names', async () => {
+    const second: MockActivity[] = [
+      {
+        ...base,
+        id: '77777777-7777-4777-8777-777777777773',
+        accountId: CHECKING,
+        kind: 'loan_payment',
+        amount: '300.00',
+        occurredOn: '2026-09-20',
+        movementId: '66666666-6666-4666-8666-666666666667',
+        principal: '300.00',
+        interest: '0.00',
+      },
+      {
+        ...base,
+        id: '77777777-7777-4777-8777-777777777774',
+        accountId: LOAN,
+        kind: 'loan_payment_in',
+        amount: '300.00',
+        occurredOn: '2026-09-20',
+        movementId: '66666666-6666-4666-8666-666666666667',
+      },
+    ]
+    mockApi({
+      household,
+      members: [maya],
+      accounts: afterPayment,
+      activity: [...savedRows(), ...second],
+    })
+    renderRoute(`/accounts/${LOAN}`)
+    const row = (await screen.findAllByText('Payment from', { exact: false }))[1].closest('tr')!
+    expect(row).toHaveTextContent('Part of a $500.00 payment, $50.00 of it interest')
+    const names = (await screen.findAllByRole('button', { name: /^Edit payment from/ })).map(
+      (button) => button.getAttribute('aria-label'),
+    )
+    expect(new Set(names).size).toBe(2)
+    expect(names.join('|')).toContain('$450.00 on 2026-09-15')
+  })
+
+  it('V2_LOAN_003 after Confirm a status line says what was saved and the Activity heading takes focus; Back from the review puts focus in the form', async () => {
+    mockApi({ household, members: [maya], accounts: [checking(), carLoan()] })
+    const { user } = renderRoute(`/accounts/${CHECKING}`)
+    await user.click(await screen.findByRole('button', { name: 'Pay a loan' }))
+    const form = await screen.findByRole('region', { name: 'Record payment' })
+    await user.selectOptions(within(form).getByLabelText('Loan to pay'), 'Car Loan (Loan)')
+    await fill(user, form, '500.00', '450.00', '50.00')
+    await user.click(within(form).getByRole('button', { name: 'Review' }))
+    await screen.findByRole('region', { name: 'Review payment' })
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Record payment' })).toHaveFocus(),
+    )
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    await user.click(await screen.findByRole('button', { name: 'Confirm payment' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Saved the $500.00 payment to Car Loan: $450.00 principal, $50.00 interest.',
+    )
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Activity' })).toHaveFocus())
+  })
+
+  it('V2_LOAN_003 removing and bringing back a payment each leave a status line and focus on the Activity heading', async () => {
+    mockApi({ household, members: [maya], accounts: afterPayment, activity: savedRows() })
+    const { user } = renderRoute(`/accounts/${LOAN}`)
+    await user.click(await screen.findByRole('button', { name: /^Remove payment from/ }))
+    const review = await screen.findByRole('region', { name: 'Review removal' })
+    await within(review).findByText('Principal')
+    await user.click(within(review).getByRole('button', { name: 'Confirm removal' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Removed the $500.00 payment from Everyday Checking to Car Loan.',
+    )
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Activity' })).toHaveFocus())
+    await user.click(screen.getByRole('button', { name: 'Show history' }))
+    await user.click(await screen.findByRole('button', { name: /^Undo payment from/ }))
+    const undo = await screen.findByRole('region', { name: 'Review Undo' })
+    await within(undo).findByText('Principal')
+    await user.click(within(undo).getByRole('button', { name: 'Confirm Undo' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Restored the $500.00 payment from Everyday Checking to Car Loan.',
+    )
   })
 })

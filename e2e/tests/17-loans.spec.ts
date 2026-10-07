@@ -91,7 +91,7 @@ for (const [width, name, owed, shown] of [
       const details = page.getByLabel('Account details')
       await expect(details).toContainText('Balance owed')
       await expect(details).toContainText('Lender')
-      await expect(details).toContainText(`${shown} owed`)
+      await expect(details).toContainText(`Balance owed${shown}`)
       await expect(details).not.toContainText('-$')
       await expect(page.getByRole('button', { name: 'Add money in' })).toHaveCount(0)
       await expectNoSidewaysScroll(page)
@@ -107,7 +107,7 @@ for (const [width, name, owed, shown] of [
       await page.getByLabel('Account name').fill(`Blue ${name}`)
       await page.getByRole('button', { name: 'Save details' }).click()
       await expect(page.getByRole('heading', { name: `Blue ${name}` })).toBeVisible()
-      await expect(page.getByLabel('Account details')).toContainText(`${shown} owed`)
+      await expect(page.getByLabel('Account details')).toContainText(`Balance owed${shown}`)
 
       await page.goto('/')
       const loans = page.getByRole('region', { name: 'Loans' })

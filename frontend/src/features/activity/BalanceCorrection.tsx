@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import type { Account } from '../../api/accounts'
 import type { Activity } from '../../api/activity'
@@ -72,7 +72,7 @@ export function BalanceCorrection({
   onBeforeStart?: (draft: { amount: string; on: string }) => void
   /** Tells the parent whether a review is showing, so the mode choice can be locked. */
   onReviewing?: (reviewing: boolean) => void
-  onDone: () => void
+  onDone: (message?: string) => void
 }) {
   const { member, setMemberId } = useEnteringAs(members)
   const card = isCard(account.type)
@@ -87,6 +87,12 @@ export function BalanceCorrection({
   const money = (value: string | number) => balanceText(account.type, String(value))
   const [key] = useState(newKey)
   useEffect(() => onReviewing?.(reviewing !== null), [reviewing, onReviewing])
+  // Back from the review brings the form back in place: its heading takes focus, not the page body.
+  const wasReviewing = useRef(false)
+  useEffect(() => {
+    if (reviewing) wasReviewing.current = true
+    else if (wasReviewing.current) document.getElementById('balance-heading')?.focus()
+  }, [reviewing])
   // The review replaces the form in place, so its heading takes focus.
   useEffect(() => {
     if (reviewing) document.getElementById('correction-heading')?.focus({ preventScroll: true })
@@ -145,7 +151,7 @@ export function BalanceCorrection({
           ...(reviewing.side ? { balanceSide: reviewing.side } : {}),
         },
       },
-      { onSuccess: onDone },
+      { onSuccess: () => onDone('Saved the balance correction.') },
     )
   }, showReview)
 
@@ -233,12 +239,15 @@ export function BalanceCorrection({
               </Button>
               <Button
                 variant="secondary"
-                onClick={() => setReviewing(null)}
+                onClick={() => {
+                  save.reset()
+                  setReviewing(null)
+                }}
                 disabled={save.isPending}
               >
                 Back
               </Button>
-              <Button variant="ghost" onClick={onDone} disabled={save.isPending}>
+              <Button variant="ghost" onClick={() => onDone()} disabled={save.isPending}>
                 Cancel
               </Button>
             </div>
@@ -250,7 +259,7 @@ export function BalanceCorrection({
 
   return (
     <Card aria-labelledby="balance-heading">
-      <CardTitle id="balance-heading" className="text-lg">
+      <CardTitle id="balance-heading" tabIndex={-1} className="text-lg outline-none">
         {title}
       </CardTitle>
       <form
@@ -303,7 +312,7 @@ export function BalanceCorrection({
         </p>
         <div className="flex gap-2">
           <Button type="submit">Review</Button>
-          <Button variant="ghost" onClick={onDone}>
+          <Button variant="ghost" onClick={() => onDone()}>
             Cancel
           </Button>
         </div>

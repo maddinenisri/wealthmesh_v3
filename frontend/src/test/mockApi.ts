@@ -325,6 +325,8 @@ function decorate(a: MockActivity, accounts: MockAccount[], all: MockActivity[] 
     counterAccountName: counter
       ? (accounts.find((x) => x.id === counter.accountId)?.name ?? null)
       : null,
+    paymentTotal: a.kind === 'loan_payment_in' && counter ? counter.amount : null,
+    paymentInterest: a.kind === 'loan_payment_in' && counter ? (counter.interest ?? '0.00') : null,
   }
 }
 
@@ -392,6 +394,8 @@ export function mockApi(
     keys: [] as string[],
     /** When true the next expense is stored but its response is lost (a slow or dropped answer). */
     loseNextExpenseResponse: false,
+    /** When set, the next correction save (balance or starting amount) is refused with this message. */
+    failNextSave: null as string | null,
     /** "METHOD /path" for every request the UI made, in order. */
     requests: [] as string[],
   }
@@ -1986,6 +1990,11 @@ export function mockApi(
     }),
     http.post('*/api/v1/accounts/:id/balance-corrections', async ({ request, params }) => {
       log(request)
+      if (state.failNextSave) {
+        const message = state.failNextSave
+        state.failNextSave = null
+        return problem(409, message)
+      }
       const key = request.headers.get('Idempotency-Key') ?? ''
       const body = (await request.json()) as {
         requestedBalance: string
@@ -2110,6 +2119,11 @@ export function mockApi(
     }),
     http.post('*/api/v1/accounts/:id/starting-balance-corrections', async ({ request, params }) => {
       log(request)
+      if (state.failNextSave) {
+        const message = state.failNextSave
+        state.failNextSave = null
+        return problem(409, message)
+      }
       const account = state.accounts.find((a) => a.id === params.id)
       if (!account) return problem(404, 'Account not found')
       const key = request.headers.get('Idempotency-Key') ?? ''

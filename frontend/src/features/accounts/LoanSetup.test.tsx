@@ -146,7 +146,7 @@ describe('a loan on its pages', () => {
     expect(within(details).getByText('Maple Credit')).toBeInTheDocument()
     expect(within(details).queryByText('Balance')).not.toBeInTheDocument()
     expect(within(details).queryByText('Bank')).not.toBeInTheDocument()
-    expect(details).toHaveTextContent('$20,000.00 owed')
+    expect(details).toHaveTextContent('Balance owed$20,000.00 as of 2026-09-01')
     expect(details).not.toHaveTextContent('-$20,000.00')
     expect(details).not.toHaveTextContent('Overdrawn')
     for (const action of ['Add money in', 'Add money out', 'Add transfer', 'Update balance']) {

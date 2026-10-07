@@ -106,7 +106,7 @@ for (const width of [710, 1280] as const) {
       await expect(review.getByText('Enter a reason')).toBeVisible()
       await review.getByLabel('Reason').fill('Copied the lender amount incorrectly')
       await review.getByRole('button', { name: 'Confirm correction' }).click()
-      await expect(page.getByLabel('Account details')).toContainText('$19,800.00 owed')
+      await expect(page.getByLabel('Account details')).toContainText('Balance owed$19,800.00')
       expect(await balanceOf(page, loanId)).toBe('-19800.00')
       await page.getByRole('button', { name: 'Show history' }).click()
       const history = page.getByRole('table', { name: 'History' })
@@ -165,6 +165,54 @@ for (const width of [710, 1280] as const) {
       await expect(undo).toHaveCount(0)
       await expect.poll(() => balanceOf(page, loanId)).toBe('-19500.00')
       await expectNoSidewaysScroll(page)
+    })
+
+    test(`V2_LOAN_006 the review of a new initial amount below what was paid refuses it up front, and a refused Confirm leaves no stale message (${width}px)`, async ({
+      page,
+    }) => {
+      const owner = await ownerId(page)
+      const own = await makeLoan(page, owner, `Credit Loan ${width}`, '1000.00')
+      const bank = await page.request.post('/api/v1/accounts', {
+        data: {
+          type: 'checking',
+          name: `Credit Checking ${width}`,
+          ownerMemberIds: [owner],
+          openedOn: '2026-09-01',
+          openingBalance: '5000.00',
+        },
+      })
+      const bankId = ((await bank.json()) as { id: string }).id
+      const paid = await page.request.post('/api/v1/loan-payments', {
+        headers: { 'Idempotency-Key': `e2e-credit-${width}` },
+        data: {
+          fromAccountId: bankId,
+          toAccountId: own,
+          amount: '600.00',
+          principal: '600.00',
+          interest: '0.00',
+          occurredOn: '2026-09-20',
+          enteredByMemberId: owner,
+        },
+      })
+      expect(paid.ok()).toBeTruthy()
+      await page.goto(`/accounts/${own}`)
+      await page.getByRole('button', { name: 'Update balance owed' }).click()
+      await page.getByRole('radio', { name: 'Correct the initial amount owed' }).check()
+      const form = page.getByRole('region', { name: 'Correct the initial amount owed' })
+      await form.getByLabel('Initial amount owed').fill('500.00')
+      await form.getByRole('button', { name: 'Review' }).click()
+      const review = page.getByRole('region', { name: 'Review initial amount owed correction' })
+      await expect(review).toContainText('with a credit of $100.00')
+      await expect(review.getByRole('button', { name: 'Confirm correction' })).toBeDisabled()
+      await review.getByRole('button', { name: 'Back' }).click()
+      await expect(
+        page.getByRole('heading', { name: 'Correct the initial amount owed' }),
+      ).toBeFocused()
+      await form.getByLabel('Initial amount owed').fill('700.00')
+      await form.getByRole('button', { name: 'Review' }).click()
+      const again = page.getByRole('region', { name: 'Review initial amount owed correction' })
+      await expect(again).not.toContainText('credit of')
+      await expect(again.getByRole('button', { name: 'Confirm correction' })).toBeEnabled()
     })
 
     test(`V2_DATED_VALUE_003 a negative balance owed is refused in the form (${width}px)`, async ({

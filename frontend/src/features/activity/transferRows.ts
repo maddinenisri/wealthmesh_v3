@@ -1,4 +1,5 @@
 import type { Activity } from '../../api/activity'
+import { formatMoney } from '../../lib/money'
 
 /** A transfer row, or one side of a payment to a card: both are halves of a linked pair (foundations 7). */
 export const isTransfer = (entry: { kind: string }): boolean =>
@@ -29,6 +30,9 @@ export const movementName = (entry: { kind: string; counterAccountName?: string 
 
 /** What a row's buttons name: a pair is named by the account on the other side. */
 export function rowName(entry: Activity): string {
+  // Two payments from one account must have different button names: the amount and the date say which.
+  if (isLoanPayment(entry))
+    return `${movementName(entry)} of ${formatMoney(Number(entry.amount))} on ${entry.occurredOn}`
   return isMovement(entry)
     ? movementName(entry)
     : (entry.description ??

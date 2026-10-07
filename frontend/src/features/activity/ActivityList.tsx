@@ -3,6 +3,7 @@ import type { Activity, HistoryEntry } from '../../api/activity'
 import type { Member } from '../../api/household'
 import { Link } from 'react-router'
 import { Amount, Button, Table, Td, Th } from '../../design-system'
+import { formatMoney } from '../../lib/money'
 import { useAccountActivity } from '../../hooks/useActivity'
 import { ownerNames } from '../accounts/ownerNames'
 import { EntryHistory } from './EntryHistory'
@@ -158,17 +159,15 @@ export function ActivityList({
                         >
                           Edit
                         </Button>
-                        {accountType === 'loan' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Remove correction of ${entry.occurredOn}`}
-                            disabled={!onRemove}
-                            onClick={() => onRemove?.(entry)}
-                          >
-                            Remove
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Remove correction of ${entry.occurredOn}`}
+                          disabled={!onRemove}
+                          onClick={() => onRemove?.(entry)}
+                        >
+                          Remove
+                        </Button>
                       </>
                     ) : (
                       <>
@@ -233,6 +232,12 @@ function TransferLabel({ entry }: { entry: Activity }) {
         </Link>
       ) : (
         entry.counterAccountName
+      )}
+      {entry.paymentTotal && (
+        <span className="block text-caption text-ink-muted">
+          Part of a {formatMoney(Number(entry.paymentTotal))} payment,{' '}
+          {formatMoney(Number(entry.paymentInterest ?? 0))} of it interest
+        </span>
       )}
       {entry.description ? (
         <span className="block text-caption text-ink-muted">{entry.description}</span>

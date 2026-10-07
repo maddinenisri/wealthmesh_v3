@@ -82,6 +82,9 @@ public class BalanceCorrectionService {
         return load(accountId).flatMap(account -> figures(account, requested, side, asOn, replacesId).map(f -> {
             BigDecimal replaced = f.replaced() == null ? BigDecimal.ZERO : f.replaced().amount();
             BigDecimal after = f.current().subtract(replaced).add(f.difference());
+            if (AccountType.isDebt(account.type()) && after.signum() > 0) {
+                throw DebtRules.credit(account.name(), after, null);
+            }
             return new CorrectionPreview(asOn, Money.format(f.onDate()), Money.format(f.requested()),
                     Money.format(f.difference()), Money.format(f.current()), Money.format(after),
                     after.signum() < 0 && !AccountType.isCard(account.type())

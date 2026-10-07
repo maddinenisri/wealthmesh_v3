@@ -125,8 +125,8 @@ export function ChangeEntry({
       <p className="mt-3 max-w-md text-sm text-ink-muted">
         {correction
           ? mode === 'undo'
-            ? 'The correction returns on its original date. It changes only the Balance owed.'
-            : 'A correction changes only the Balance owed: it is never a payment, income or spending. It stays in history, where Undo restores it.'
+            ? `The correction returns on its original date. It changes only the ${isDebt(account.type) ? 'Balance owed' : 'Balance'}.`
+            : `A correction changes only the ${isDebt(account.type) ? 'Balance owed' : 'Balance'}: it is never ${isDebt(account.type) ? 'a payment, ' : ''}income or spending. It stays in history, where Undo restores it.`
           : mode === 'undo'
             ? 'The entry returns on its original date.'
             : income
@@ -148,7 +148,9 @@ export function ChangeEntry({
             member &&
             change.mutate(member.id, {
               onSuccess: () => {
-                const name = entry.description || (split ? 'split expense' : entry.categoryName)
+                const name = correction
+                  ? 'the balance correction'
+                  : entry.description || (split ? 'split expense' : entry.categoryName)
                 onChanged?.(`${mode === 'remove' ? 'Removed' : 'Restored'} ${name}.`)
                 onDone()
               },

@@ -86,6 +86,9 @@ public class OpeningRevisionService {
     /** Informational: the figures a save would produce now. Nothing is stored. */
     public Mono<OpeningPreview> preview(UUID accountId, Object amount, LocalDate on, PendingEntry entry) {
         return loadEditable(accountId).flatMap(account -> check(account, amount, on, null)
+                .flatMap(parsed -> (AccountType.isDebt(account.type())
+                        ? debt.requireNotCreditWith(account, parsed.amount()) : Mono.<Void>empty())
+                        .then(Mono.defer(() -> Mono.just(parsed))))
                 .flatMap(parsed -> activityStore
                 .deltaOf(account.id()).flatMap(delta -> {
                     BigDecimal current = account.openingAmount().add(delta.amount());

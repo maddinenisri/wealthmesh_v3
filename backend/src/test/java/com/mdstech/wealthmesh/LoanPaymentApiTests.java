@@ -62,6 +62,8 @@ class LoanPaymentApiTests extends DebtTestBase {
         webTestClient.get().uri("/api/v1/accounts/{id}/activity", carLoan).exchange().expectBody()
                 .jsonPath("$.length()").isEqualTo(1).jsonPath("$[0].kind").isEqualTo("loan_payment_in")
                 .jsonPath("$[0].amount").isEqualTo("450.00").jsonPath("$[0].movementId").isEqualTo(payment)
+                .jsonPath("$[0].paymentTotal").isEqualTo("500.00").jsonPath("$[0].paymentInterest")
+                .isEqualTo("50.00")
                 .jsonPath("$[0].counterAccountName").isEqualTo("Checking");
     }
 

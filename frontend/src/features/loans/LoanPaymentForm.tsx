@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import type { Account } from '../../api/accounts'
 import type { Activity } from '../../api/activity'
@@ -49,7 +49,7 @@ export function LoanPaymentForm({
   today: string
   /** A payment row being corrected, from either side. */
   editing?: Activity
-  onDone: (saved?: boolean) => void
+  onDone: (message?: string) => void
 }) {
   const saved = useLoanPayment(editing?.movementId ?? undefined)
   if (editing && saved.isPending) return <p className="text-sm text-ink-muted">Loading payment</p>
@@ -76,7 +76,7 @@ function LoanPaymentFields({
   members: Member[]
   today: string
   editing: Transfer | undefined
-  onDone: (saved?: boolean) => void
+  onDone: (message?: string) => void
 }) {
   const accounts = useAccounts()
   const fromLoan = isDebt(account.type)
@@ -146,9 +146,21 @@ function LoanPaymentFields({
           reason: editing ? reviewing.reason.trim() || undefined : undefined,
         },
       },
-      { onSuccess: () => onDone(true) },
+      {
+        onSuccess: (result) =>
+          onDone(
+            `${editing ? 'Changed' : 'Saved'} the ${formatMoney(Number(result.amount))} payment to ${result.to.accountName}: ${formatMoney(Number(result.principal ?? 0))} principal, ${formatMoney(Number(result.interest ?? 0))} interest.`,
+          ),
+      },
     )
   }
+
+  // Back from the review brings the form back in place; its heading takes focus, not the page body.
+  const wasReviewing = useRef(false)
+  useEffect(() => {
+    if (reviewing) wasReviewing.current = true
+    else if (wasReviewing.current) document.getElementById('loan-payment-heading')?.focus()
+  }, [reviewing])
 
   if (reviewing) {
     const from = byId(reviewing.fromAccountId)
@@ -246,7 +258,7 @@ function LoanPaymentFields({
   const startOf = (id: string) => byId(id)?.openedOn ?? ''
   return (
     <Card aria-labelledby="loan-payment-heading">
-      <CardTitle id="loan-payment-heading" className="text-lg">
+      <CardTitle id="loan-payment-heading" tabIndex={-1} className="text-lg outline-none">
         {editing ? 'Edit payment' : 'Record payment'}
       </CardTitle>
       <form
@@ -372,7 +384,7 @@ function LoanPaymentFields({
           }}
         />
         <TextField control={control} name="description" label="Description" />
-        {editing && <TextField control={control} name="reason" label="Reason" />}
+        {editing && <TextField control={control} name="reason" label="Reason (optional)" />}
         <div className="flex gap-2">
           <Button type="submit">Review</Button>
           <Button variant="ghost" onClick={() => onDone()}>
