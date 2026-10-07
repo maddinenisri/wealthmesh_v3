@@ -301,6 +301,8 @@ All eight steps passed. Faults, each fixed with an e2e assertion in `20-mortgage
 | 4 | Shortfall worded two ways ("still to assign" vs "remains unassigned") | One wording: "$X remains unassigned" |
 | 5 | Plan card put "Entered by" under Reason; a removed plan named nobody | Separate Entered column; "Removed by … on …"; table scrolls inside the card |
 
+Not verified by the owner: focus on the future-date guidance (real click), any save at 1280px, a plan on a loan, the Close order and race tests, a payment from savings, the "Loan interest can be archived" fault for Mortgage interest.
+
 ## Handoff (16b)
 
 - Built: groups 0 to 5, V26, D-055, D-056, Q-031 resolved. Backend suite green (dev stack stopped), frontend 343, e2e 257. Not pushed (ask the owner, D-002).
