@@ -13,9 +13,17 @@ export function useReturnFocus(open: boolean): { (): void; cancel: () => void } 
     if (wasOpen.current && !open && trigger.current?.isConnected) {
       const opener = trigger.current
       opener.focus({ preventScroll: true })
-      // An opener hard against the bottom edge (or off screen) is brought to the middle, so Cancel leaves it visible.
-      const { top, bottom } = opener.getBoundingClientRect()
-      if (top < 0 || bottom > window.innerHeight - 80) opener.scrollIntoView?.({ block: 'center' })
+      // After Cancel nothing else scrolls, so an opener hard against the bottom edge (or off screen) is brought to
+      // the middle. After a save the screen scrolls to the new row itself; that moves the page, so this stands down.
+      const before = window.scrollY
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (window.scrollY !== before || !opener.isConnected) return
+          const { top, bottom } = opener.getBoundingClientRect()
+          if (top < 0 || bottom > window.innerHeight - 80)
+            opener.scrollIntoView?.({ block: 'center' })
+        }),
+      )
     }
     wasOpen.current = open
   }, [open])
