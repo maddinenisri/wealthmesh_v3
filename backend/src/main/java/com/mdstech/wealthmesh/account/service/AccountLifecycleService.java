@@ -153,15 +153,18 @@ public class AccountLifecycleService {
                                 ? "; record a $0.00 value first (for example when it is sold)."
                                 : "; move it or pay it first.")));
             }
+            Mono<Void> noPlan = usage.plannedValues(account.id()).flatMap(planned -> planned > 0
+                    ? Mono.<Void>error(conflict(plannedMessage(account, planned))) : Mono.<Void>empty());
             if (AccountType.isValued(account.type())) {
-                return usage.plannedValues(account.id()).flatMap(planned -> planned > 0
-                        ? Mono.<Void>error(conflict(plannedMessage(account, planned))) : Mono.<Void>empty());
+                return noPlan;
             }
-            return store.countAfter(account.id(), LocalDate.now(clock)).flatMap(later -> later > 0
-                    ? Mono.<Void>error(conflict(account.name() + " has " + later + " entr" + (later == 1 ? "y" : "ies")
-                            + " dated after today. Remove or date " + (later == 1 ? "it" : "them")
-                            + " first, then close."))
+            // A debt also keeps its plans (DATED_VALUE_001): the same rule and message as a property's.
+            Mono<Void> later = store.countAfter(account.id(), LocalDate.now(clock)).flatMap(count -> count > 0
+                    ? Mono.<Void>error(conflict(account.name() + " has " + count + " entr"
+                            + (count == 1 ? "y" : "ies") + " dated after today. Remove or date "
+                            + (count == 1 ? "it" : "them") + " first, then close."))
                     : Mono.<Void>empty());
+            return AccountType.isDebt(account.type()) ? noPlan.then(later) : later;
         });
     }
 

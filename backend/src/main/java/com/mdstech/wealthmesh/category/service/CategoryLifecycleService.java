@@ -82,9 +82,15 @@ public class CategoryLifecycleService {
             com.mdstech.wealthmesh.activity.service.MovementService.MovementKind.LOAN_INTEREST,
             com.mdstech.wealthmesh.activity.service.MovementService.MovementKind.MORTGAGE_INTEREST);
 
+    /** The seeded "Mortgage interest" category's id, named once for the message below. */
+    private static final class MortgageInterest {
+        static final UUID ID = com.mdstech.wealthmesh.activity.service.MovementService.MovementKind.MORTGAGE_INTEREST;
+    }
+
     private static ResponseStatusException usedByPayments(Category category) {
-        return conflict("\"" + category.name() + "\" is where the interest of every loan payment is counted, so it "
-                + "cannot be archived or merged away. You can rename it.");
+        String payments = category.id().equals(MortgageInterest.ID) ? "mortgage" : "loan";
+        return conflict("\"" + category.name() + "\" is where the interest of every " + payments
+                + " payment is counted, so it cannot be archived or merged away. You can rename it.");
     }
 
     public Mono<CategoryResponse> archive(UUID id, CategoryChange change) {

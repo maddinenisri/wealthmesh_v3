@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw'
+import { isDebt } from '../features/accounts/accountTypes'
 import type { MockAccount } from './mockApi'
 
 /** A dated value of a property or other asset, as the server keeps it. */
@@ -80,12 +81,16 @@ export function valueHandlers(ctx: Context) {
       )
       .sort((a, b) => b.valueOn.localeCompare(a.valueOn) || b.createdAt.localeCompare(a.createdAt))
   const point = (account: MockAccount, excluding?: string) => {
+    // A debt reads its payments and corrections, never a dated value: a plan changes nothing.
+    if (isDebt(account.type))
+      return { amount: account.balance.amount, on: today, id: null as string | null }
     const latest = effective(account.id, excluding)[0]
     return latest
       ? { amount: latest.amount, on: latest.valueOn, id: latest.id }
       : { amount: account.openingAmount, on: account.openedOn, id: null as string | null }
   }
   const refresh = (account: MockAccount) => {
+    if (isDebt(account.type)) return
     const now = point(account)
     account.balance = { amount: now.amount, asOf: now.on }
   }
@@ -113,7 +118,8 @@ export function valueHandlers(ctx: Context) {
   })
   const find = (id: unknown) => {
     const account = accounts.find((a) => a.id === id)
-    return account && (account.type === 'property' || account.type === 'other_asset')
+    return account &&
+      (account.type === 'property' || account.type === 'other_asset' || isDebt(account.type))
       ? account
       : null
   }
@@ -124,9 +130,11 @@ export function valueHandlers(ctx: Context) {
       return {
         error: problem(
           400,
-          account.type === 'property'
-            ? 'Enter zero or a positive property value'
-            : 'Enter zero or a positive asset value',
+          isDebt(account.type)
+            ? 'Enter zero or a positive amount owed'
+            : account.type === 'property'
+              ? 'Enter zero or a positive property value'
+              : 'Enter zero or a positive asset value',
         ),
       }
     const valueOn = (body.valueOn as string | undefined) ?? replaced?.valueOn
@@ -143,6 +151,13 @@ export function valueHandlers(ctx: Context) {
           'Future values are not completed account history. Save it as a future plan, or choose a date on or before today.',
         ),
       }
+    if (isDebt(account.type) && !plan)
+      return {
+        error: problem(
+          400,
+          'What is owed changes by a payment or Update balance owed. A future amount can be saved as a plan.',
+        ),
+      }
     if (!plan && valueOn < account.openedOn)
       return {
         error: problem(
@@ -152,7 +167,12 @@ export function valueHandlers(ctx: Context) {
       }
     const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim() : null
     if (replaced && !reason) return { error: problem(400, 'Enter a reason') }
-    return { amount: Number(amount).toFixed(2), valueOn, plan, reason }
+    return {
+      amount: (isDebt(account.type) ? -Number(amount) : Number(amount)).toFixed(2),
+      valueOn,
+      plan,
+      reason,
+    }
   }
   const figures = (
     account: MockAccount,
@@ -242,7 +262,9 @@ export function valueHandlers(ctx: Context) {
         initial: true,
       }
       return HttpResponse.json({
-        values: [...rows, initial].sort((a, b) => b.valueOn.localeCompare(a.valueOn)),
+        values: [...rows, ...(isDebt(account.type) ? [] : [initial])].sort((a, b) =>
+          b.valueOn.localeCompare(a.valueOn),
+        ),
         events,
       })
     }),

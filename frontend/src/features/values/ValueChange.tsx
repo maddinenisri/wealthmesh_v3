@@ -6,6 +6,7 @@ import { Button, Card, CardTitle, FormAlert } from '../../design-system'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useChangeValue, useRemovalReview } from '../../hooks/useValues'
 import { formatMoney } from '../../lib/money'
+import { balanceText } from '../accounts/cardBalance'
 import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
 
@@ -30,7 +31,7 @@ export function ValueChange({
   const { member, setMemberId } = useEnteringAs(members)
   const removal = useRemovalReview(account.id, row.id ?? '', mode === 'remove')
   const change = useChangeValue(account.id, row.id ?? '')
-  const what = `${formatMoney(Number(row.amount))} dated ${row.valueOn}`
+  const what = `${balanceText(account.type, row.amount)} dated ${row.valueOn}`
   const plan = row.planned
 
   return (
@@ -55,7 +56,9 @@ export function ValueChange({
         <p className="mt-2 max-w-md text-sm text-ink-muted">
           {mode === 'remove'
             ? `The ${plan ? 'plan' : 'value'} stays in history, where Undo restores it. No cash or spending changes.`
-            : 'It returns under its original date. The value with the latest date is the one that counts.'}
+            : plan
+              ? 'It returns as a plan. A plan is never counted in the Balance owed, wealth or any past date.'
+              : 'It returns under its original date. The value with the latest date is the one that counts.'}
         </p>
         <EnteredBy members={members} member={member} setMemberId={setMemberId} />
         <div className="mt-4 flex gap-2">
@@ -72,7 +75,9 @@ export function ValueChange({
                         ? plan
                           ? `Removed the plan ${what}.`
                           : `Removed ${what}. ${account.name} value is ${formatMoney(Number(result.balanceAfter))}, dated ${result.balanceAfterOn}.`
-                        : `Restored ${what}. ${account.name} value is ${formatMoney(Number(result.balanceAfter))}, dated ${result.balanceAfterOn}.`,
+                        : plan
+                          ? `Restored the plan ${what}.`
+                          : `Restored ${what}. ${account.name} value is ${formatMoney(Number(result.balanceAfter))}, dated ${result.balanceAfterOn}.`,
                     ),
                 },
               )

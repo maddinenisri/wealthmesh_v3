@@ -144,4 +144,20 @@ class MortgagePaymentApiTests extends DebtTestBase {
                 .isCreated();
         assertBalance(small, "0.00");
     }
+
+    @Order(5)
+    @Test
+    @DisplayName("V2_MORTGAGE_003 Mortgage interest cannot be archived or merged away, and the refusal says mortgage")
+    void mortgageInterestStaysAvailable() {
+        String interest = categoryId("Mortgage interest");
+        webTestClient.post().uri("/api/v1/categories/{id}/archive", interest).contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange().expectStatus()
+                .is4xxClientError().expectBody().jsonPath("$.message")
+                .value(String.class, m -> assertThat(m).contains("every mortgage payment"));
+        webTestClient.post().uri("/api/v1/categories/{id}/archive", categoryId("Loan interest"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(mayaId)).exchange().expectStatus()
+                .is4xxClientError().expectBody().jsonPath("$.message")
+                .value(String.class, m -> assertThat(m).contains("every loan payment"));
+    }
 }

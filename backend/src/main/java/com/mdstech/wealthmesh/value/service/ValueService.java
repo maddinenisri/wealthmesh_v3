@@ -74,7 +74,7 @@ public class ValueService {
 
     /** Every value of the account, the setup value first among equals, and what was done to them. */
     public Mono<ValueHistory> history(UUID accountId) {
-        return loadValued(accountId).flatMap(account -> Mono.zip(values.rowsOf(accountId).collectList(),
+        return loadPlannable(accountId).flatMap(account -> Mono.zip(values.rowsOf(accountId).collectList(),
                 values.eventsOf(accountId).collectList()).map(both -> {
                     List<Row> rows = both.getT1();
                     Row current = rows.stream().filter(Row::effective)
@@ -82,9 +82,11 @@ public class ValueService {
                     boolean initialIsCurrent = current == null || current.valueOn().isBefore(account.openedOn());
                     List<ValueRow> shown = new java.util.ArrayList<>(rows.stream()
                             .map(r -> view(r, current == null ? null : current.id())).toList());
-                    shown.add(new ValueRow(null, account.openedOn(), Money.format(account.openingAmount()),
-                            "Initial value", initialIsCurrent ? "current" : "earlier", null, account.createdAt(),
-                            null, null, null, false, true));
+                    if (!AccountType.isDebt(account.type())) {
+                        shown.add(new ValueRow(null, account.openedOn(), Money.format(account.openingAmount()),
+                                "Initial value", initialIsCurrent ? "current" : "earlier", null, account.createdAt(),
+                                null, null, null, false, true));
+                    }
                     shown.sort(Comparator.comparing(ValueRow::valueOn).reversed()
                             .thenComparing(ValueRow::initial));
                     return new ValueHistory(shown, both.getT2());
@@ -93,7 +95,7 @@ public class ValueService {
 
     /** What saving, or correcting when `replacesId` is given, would do. Nothing is written. */
     public Mono<ValueReview> review(UUID accountId, UUID replacesId, ValueRequest request) {
-        return loadValued(accountId).flatMap(account -> {
+        return loadPlannable(accountId).flatMap(account -> {
             Mono<Row> replaced = replacesId == null ? Mono.empty() : correctable(account, replacesId);
             return replaced.map(java.util.Optional::of).defaultIfEmpty(java.util.Optional.empty())
                     .flatMap(old -> Mono.fromCallable(() -> parse(account, request, old.orElse(null)))
@@ -114,7 +116,7 @@ public class ValueService {
 
     /** What removing a value would do: the Balance returns to the effective value before it. */
     public Mono<ValueResult> reviewRemoval(UUID accountId, UUID valueId) {
-        return loadValued(accountId).flatMap(account -> values.byId(valueId)
+        return loadPlannable(accountId).flatMap(account -> values.byId(valueId)
                 .filter(row -> account.id().equals(row.accountId()))
                 .switchIfEmpty(Mono.error(notFound("Value not found: " + valueId)))
                 .flatMap(row -> Mono.zip(afterWithout(account, row), shown(account.id(), row)).map(both ->
@@ -138,7 +140,7 @@ public class ValueService {
         Instant now = clock.instant();
         Instant cutoff = now.minus(KEY_LIFETIME);
         return Mono.fromCallable(() -> requireKey(key))
-                .then(Mono.defer(() -> transactions.transactional(lockedValued(accountId)
+                .then(Mono.defer(() -> transactions.transactional(lockedPlannable(accountId)
                         // The key is read under the lock, before any state or date rule: a retry is judged on what
                         // was saved (D-049), never on the account as it is now.
                         .flatMap(account -> values.expireKey(key, cutoff)
@@ -185,7 +187,7 @@ public class ValueService {
         }
         boolean same = account.id().equals(existing.accountId()) && Objects.equals(existing.replacesId(), replacesId)
                 && existing.fingerprint() != null
-                && existing.fingerprint().equals(replayFingerprint(existing, request));
+                && existing.fingerprint().equals(replayFingerprint(account, existing, request));
         return same ? Mono.zip(currentBalance(account, null), shown(account.id(), existing)).map(both ->
                 new Saved(new ValueResult(both.getT2(), Money.format(both.getT1().amount()),
                         Money.format(both.getT1().amount()), both.getT1().on()), false))
@@ -210,7 +212,7 @@ public class ValueService {
 
     private Mono<ValueResult> change(UUID accountId, UUID valueId, ValueWho who, boolean removing) {
         Instant now = clock.instant();
-        return transactions.transactional(lockedValued(accountId)
+        return transactions.transactional(lockedPlannable(accountId)
                 .map(AccountState::requireNotClosed)
                 .flatMap(account -> values.byId(valueId).filter(row -> account.id().equals(row.accountId()))
                         .switchIfEmpty(Mono.error(notFound("Value not found: " + valueId)))
@@ -368,6 +370,10 @@ public class ValueService {
             throw EntryValidator.bad("A plan is changed by removing it and saving a new one");
         }
         checkDate(account, valueOn, plan);
+        if (AccountType.isDebt(account.type()) && !plan) {
+            throw EntryValidator.bad("What is owed changes by a payment or Update balance owed. A future amount can "
+                    + "be saved as a plan.");
+        }
         return new Parsed(amount, valueOn, reasonOf(request, replaced != null), plan);
     }
 
@@ -388,6 +394,13 @@ public class ValueService {
             throw EntryValidator.bad("Enter a valid amount");
         }
         BigDecimal amount = Money.parse(text).orElseThrow();
+        if (AccountType.isDebt(account.type())) {
+            // A debt's figure is typed as an amount owed and kept with the debt's sign, like its Balance (D-053).
+            if (amount.signum() < 0) {
+                throw EntryValidator.bad("Enter zero or a positive amount owed");
+            }
+            return amount.negate();
+        }
         if (amount.signum() < 0) {
             throw EntryValidator.bad(AccountType.PROPERTY.wire().equals(account.type())
                     ? "Enter zero or a positive property value" : "Enter zero or a positive asset value");
@@ -446,6 +459,11 @@ public class ValueService {
 
     /** The account's one Balance: its latest effective value, or the setup value when none. */
     private Mono<Point> currentBalance(Account account, UUID excluding) {
+        if (AccountType.isDebt(account.type())) {
+            // A debt reads its payments and corrections, never a dated value: a plan changes nothing (D-053).
+            return activity.deltaOf(account.id()).map(delta -> new Point(account.openingAmount().add(delta.amount()),
+                    LocalDate.now(clock)));
+        }
         return values.effectiveOn(account.id(), FAR, excluding)
                 .switchIfEmpty(Mono.fromSupplier(() -> new Point(account.openingAmount(), account.openedOn())));
     }
@@ -492,7 +510,7 @@ public class ValueService {
     }
 
     /** The fingerprint the request would have had, as sent (the date of a correction may be left out). */
-    private String replayFingerprint(Row existing, ValueRequest request) {
+    private String replayFingerprint(Account account, Row existing, ValueRequest request) {
         Parsed parsed;
         try {
             if (!(request.amount() instanceof String text) || Money.parse(text).isEmpty()) {
@@ -504,7 +522,10 @@ public class ValueService {
                 throw EntryValidator.bad("Enter a date");
             }
             String reason = request.reason() == null || request.reason().isBlank() ? null : request.reason().strip();
-            parsed = new Parsed(Money.parse(text).orElseThrow(), on, reason, Boolean.TRUE.equals(request.plan()));
+            BigDecimal typed = Money.parse(text).orElseThrow();
+            // A debt's figure is kept with the debt's sign (see amountOf).
+            parsed = new Parsed(AccountType.isDebt(account.type()) ? typed.negate() : typed, on, reason,
+                    Boolean.TRUE.equals(request.plan()));
         } catch (ResponseStatusException e) {
             return "";
         }
@@ -515,6 +536,20 @@ public class ValueService {
         return activity.lockAccount(accountId)
                 .switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)))
                 .then(Mono.defer(() -> loadValued(accountId)));
+    }
+
+    /** A valued account, or a debt (which takes plans only). */
+    private Mono<Account> lockedPlannable(UUID accountId) {
+        return activity.lockAccount(accountId)
+                .switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)))
+                .then(Mono.defer(() -> loadPlannable(accountId)));
+    }
+
+    private Mono<Account> loadPlannable(UUID id) {
+        return accounts.findById(id).switchIfEmpty(Mono.error(notFound("Account not found: " + id)))
+                .flatMap(account -> AccountType.isValued(account.type()) || AccountType.isDebt(account.type())
+                        ? Mono.just(account)
+                        : Mono.error(EntryValidator.bad("Only a property or other asset has dated values")));
     }
 
     private Mono<Account> loadValued(UUID id) {

@@ -292,4 +292,36 @@ class WealthAsOfApiTests extends DebtTestBase {
         assertThat(new BigDecimal(field(change("2026-10-02", "2026-10-03"), "$.spending")))
                 .isEqualByComparingTo("0.00");
     }
+
+    @Order(10)
+    @Test
+    @DisplayName("V2_DATED_VALUE_001 a plan on a loan or a mortgage is never counted in wealth, an as-of figure or "
+            + "the change, before or after its date (the twin of the property plan test)")
+    void debtPlanIsNeverCounted() {
+        String bank = account("Plan Checking", "1000.00");
+        String loanId = loan("Plan Loan", "5000.00", "2026-09-01");
+        String mortgageId = mortgage("Plan Mortgage", "100000.00", "2026-09-01");
+        loanPayment("dp-0", bank, loanId, "100.00", "0.00", "2026-09-10");
+        String before = json(wealth(null));
+        String beforeAsOf = json(wealth("2026-09-20"));
+        String beforeChange = json(change("2026-09-01", "2026-10-03"));
+        for (String debt : List.of(loanId, mortgageId)) {
+            saveValue(debt, "dp-" + debt, valueBody(mayaId, "1.00", "2026-12-31", "Refinance", true)).expectStatus()
+                    .isCreated().expectBody().jsonPath("$.value.status").isEqualTo("planned");
+        }
+        assertThat(json(wealth(null))).isEqualTo(before);
+        assertThat(json(wealth("2026-09-20"))).isEqualTo(beforeAsOf);
+        assertThat(json(change("2026-09-01", "2026-10-03"))).isEqualTo(beforeChange);
+        assertBalance(loanId, "-4900.00");
+        assertBalance(mortgageId, "-100000.00");
+        // Once the plan's date has passed it is still only a plan.
+        clock.setToday(java.time.LocalDate.of(2027, 1, 5));
+        try {
+            assertBalance(loanId, "-4900.00");
+            assertBalance(mortgageId, "-100000.00");
+            assertThat(json(wealth("2026-09-20"))).isEqualTo(beforeAsOf);
+        } finally {
+            clock.setToday(java.time.LocalDate.of(2026, 10, 3));
+        }
+    }
 }

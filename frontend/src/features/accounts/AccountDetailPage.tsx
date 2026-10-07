@@ -1,3 +1,4 @@
+import type { ValueRow } from '../../api/values'
 import { useState } from 'react'
 import { useBalanceAsOf } from '../../hooks/useActivity'
 import { Link, useParams } from 'react-router'
@@ -18,12 +19,15 @@ import { RemindersCard } from '../activity/RemindersCard'
 import { StatementsCard } from '../statements/StatementsCard'
 import { ChangeEntry, type ChangeTarget } from '../activity/ChangeEntry'
 import { isLoanPayment, isMovement } from '../activity/transferRows'
+import { DebtPlanForm } from '../loans/DebtPlanForm'
+import { DebtPlans } from '../loans/DebtPlans'
 import { LoanPaymentChange } from '../loans/LoanPaymentChange'
 import { LoanPaymentForm } from '../loans/LoanPaymentForm'
 import { ChangeToTransfer } from '../transfers/ChangeToTransfer'
 import { TransferChange, type TransferTarget } from '../transfers/TransferChange'
 import { usableAccounts } from '../transfers/accountChoice'
 import { TransferForm } from '../transfers/TransferForm'
+import { ValueChange } from '../values/ValueChange'
 import { ValuedAccount } from '../values/ValuedAccount'
 import { accountTypeLabel, debtNounOf, isDebt, isValued } from './accountTypes'
 import { AccountStatusCard } from './AccountStatusCard'
@@ -218,6 +222,11 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
   )
   const [transfer, setTransfer] = useState<TransferPanel | null>(null)
   const [batching, setBatching] = useState(false)
+  // A debt's future amount: the plan form (with what was typed on the way), or a plan being removed or restored.
+  const [planning, setPlanning] = useState<{ amount: string; on: string } | null>(null)
+  const [planChange, setPlanChange] = useState<{ mode: 'remove' | 'undo'; row: ValueRow } | null>(
+    null,
+  )
   // What was just saved or changed, shown under the Activity heading, which takes focus.
   const [notice, setNotice] = useState<string | null>(null)
   // A new split expense, or a split payment being corrected (SPLITS_001, SPLITS_002).
@@ -240,6 +249,8 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
     !transfer &&
     !batching &&
     !splitting &&
+    !planning &&
+    !planChange &&
     !!today.data &&
     !!members
   // Archived: no new money, history still editable. Closed: nothing changes until it is reopened (slice 12).
@@ -270,7 +281,15 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
     })
   }
   const returnFocus = useReturnFocus(
-    !!adding || !!editing || !!correcting || !!changing || !!transfer || batching || !!splitting,
+    !!adding ||
+      !!editing ||
+      !!correcting ||
+      !!changing ||
+      !!transfer ||
+      batching ||
+      !!splitting ||
+      !!planning ||
+      !!planChange,
   )
   // Opening any panel clears the last message.
   const remember = Object.assign(
@@ -406,12 +425,54 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             members={members}
             today={today.data}
             editing={correcting.editing}
+            onPlan={
+              debt
+                ? (draft) => {
+                    setCorrecting(null)
+                    setPlanning(draft)
+                  }
+                : undefined
+            }
             onDone={(message) => {
               setCorrecting(null)
               if (message) announce(message)
             }}
           />
         </Panel>
+      )}
+      {planning && today.data && members && (
+        <DebtPlanForm
+          account={account}
+          members={members}
+          today={today.data}
+          initial={planning}
+          onDone={(message) => {
+            setPlanning(null)
+            if (message) announce(message)
+          }}
+        />
+      )}
+      {planChange && members && (
+        <ValueChange
+          mode={planChange.mode}
+          account={account}
+          row={planChange.row}
+          members={members}
+          onDone={(message) => {
+            setPlanChange(null)
+            if (message) announce(message)
+          }}
+        />
+      )}
+      {debt && (
+        <DebtPlans
+          account={account}
+          disabled={!ready}
+          onChange={(mode, row) => {
+            remember()
+            setPlanChange({ mode, row })
+          }}
+        />
       )}
       {changing && members && (
         <Panel key={`${changing.mode}-${changing.entry.id}`}>

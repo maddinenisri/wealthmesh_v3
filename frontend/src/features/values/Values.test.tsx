@@ -171,6 +171,30 @@ describe('recording a value', () => {
     expect(screen.getByText('$300,000.00').closest('tr')).toHaveTextContent('Current')
   })
 
+  it.each([
+    ['Family Home', home, '$300,000.00'],
+    ['Family Car', car, '$30,000.00'],
+  ])(
+    'V2_DATED_VALUE_001 %s: a value dated December 31 is guided to a plan and the Balance stays %s',
+    async (_name, make, shown) => {
+      const api = mockApi(seed(make()))
+      const { user } = renderRoute(ACCOUNT)
+
+      await fillValue(user, '1,000.00', '2026-12-31')
+      const alert = await screen.findByRole('alert')
+      expect(alert).toHaveTextContent(
+        'Save it as a future plan, or choose a date on or before today.',
+      )
+      expect(post(api)).toHaveLength(0)
+      await user.click(within(alert).getByRole('button', { name: 'Save as a future plan' }))
+      await screen.findByRole('region', { name: 'Review plan' })
+      await user.click(screen.getByRole('button', { name: 'Confirm plan' }))
+      await screen.findByRole('status')
+      expect(screen.getByText(shown).closest('tr')).toHaveTextContent('Current')
+      expect(api.accounts[0].balance.amount).toBe(make().balance.amount)
+    },
+  )
+
   it('V2_PROPERTY_006 "Choose another date" returns focus to the date', async () => {
     mockApi(seed(home()))
     const { user } = renderRoute(ACCOUNT)

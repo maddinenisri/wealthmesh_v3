@@ -40,6 +40,10 @@ const requestedRules = {
   validate: (value: string) => parseAmount(value) !== null || 'Enter a valid amount',
 }
 
+/** Said when a debt is given a date after today: the same words as a property's (PROPERTY_006). */
+const FUTURE =
+  'Future values are not completed account history. Save it as a future plan, or choose a date on or before today.'
+
 /** A loan's amount owed is typed as zero or more; there is no side (it is always owed). */
 const debtRules = {
   validate: (value: string) => {
@@ -60,6 +64,7 @@ export function BalanceCorrection({
   today,
   editing,
   onBeforeStart,
+  onPlan,
   onReviewing,
   onDone,
 }: {
@@ -70,6 +75,8 @@ export function BalanceCorrection({
   editing?: Activity
   /** A date before tracking began is a tracking-start review, not a dated correction. */
   onBeforeStart?: (draft: { amount: string; on: string }) => void
+  /** A debt's future date is guided to a plan (DATED_VALUE_001): called with the amount owed and the date typed. */
+  onPlan?: (draft: { amount: string; on: string }) => void
   /** Tells the parent whether a review is showing, so the mode choice can be locked. */
   onReviewing?: (reviewing: boolean) => void
   onDone: (message?: string) => void
@@ -84,6 +91,8 @@ export function BalanceCorrection({
     asOn: string
     side?: 'owed' | 'credit'
   } | null>(null)
+  // A debt's date after today is offered a plan, not refused outright.
+  const [future, setFuture] = useState(false)
   const money = (value: string | number) => balanceText(account.type, String(value))
   const [key] = useState(newKey)
   useEffect(() => onReviewing?.(reviewing !== null), [reviewing, onReviewing])
@@ -98,14 +107,15 @@ export function BalanceCorrection({
     if (reviewing) document.getElementById('correction-heading')?.focus({ preventScroll: true })
   }, [reviewing])
   const save = useSaveCorrection(account.id)
-  const { control, handleSubmit, setValue, getFieldState, formState } = useForm<Values>({
-    defaultValues: {
-      requested: '',
-      asOn: editing?.occurredOn ?? today,
-      reason: '',
-      balanceSide: 'owed',
-    },
-  })
+  const { control, handleSubmit, setValue, setFocus, getValues, getFieldState, formState } =
+    useForm<Values>({
+      defaultValues: {
+        requested: '',
+        asOn: editing?.occurredOn ?? today,
+        reason: '',
+        balanceSide: 'owed',
+      },
+    })
   const preview = useCorrectionPreview(
     account.id,
     reviewing?.requested ?? '',
@@ -265,15 +275,20 @@ export function BalanceCorrection({
       <form
         noValidate
         className="mt-3 flex max-w-md flex-col gap-4"
-        onSubmit={handleSubmit((values) =>
-          onBeforeStart && values.asOn < account.openedOn
-            ? onBeforeStart({ amount: parseAmount(values.requested)!, on: values.asOn })
-            : setReviewing({
-                requested: parseAmount(values.requested)!,
-                asOn: values.asOn,
-                ...(card ? { side: values.balanceSide } : {}),
-              }),
-        )}
+        onSubmit={handleSubmit((values) => {
+          setFuture(false)
+          if (onBeforeStart && values.asOn < account.openedOn) {
+            onBeforeStart({ amount: parseAmount(values.requested)!, on: values.asOn })
+          } else if (debt && onPlan && values.asOn > today) {
+            setFuture(true)
+          } else {
+            setReviewing({
+              requested: parseAmount(values.requested)!,
+              asOn: values.asOn,
+              ...(card ? { side: values.balanceSide } : {}),
+            })
+          }
+        })}
       >
         <TextField
           control={control}
@@ -298,12 +313,41 @@ export function BalanceCorrection({
             required: 'Enter a date',
             validate: (value) =>
               value > today
-                ? 'A correction cannot be dated in the future'
+                ? debt && onPlan
+                  ? true
+                  : 'A correction cannot be dated in the future'
                 : value >= account.openedOn ||
                   !!onBeforeStart ||
                   "This date is before the account's opening date",
           }}
         />
+        {future && (
+          <div role="alert" className="rounded-control border border-line p-3 text-sm">
+            <p>{FUTURE}</p>
+            <div className="mt-2 flex gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  const values = getValues()
+                  onPlan?.({ amount: parseAmount(values.requested)!, on: values.asOn })
+                }}
+              >
+                Save as a future plan
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setFuture(false)
+                  setFocus('asOn')
+                }}
+              >
+                Choose another date
+              </Button>
+            </div>
+          </div>
+        )}
         <p className="text-sm text-ink-muted">
           {debt
             ? 'Enter what was owed at the end of that day.'

@@ -16,12 +16,15 @@ export function UpdateBalance({
   members,
   today,
   editing,
+  onPlan,
   onDone,
 }: {
   account: Account
   members: Member[]
   today: string
   editing?: Activity
+  /** A debt's date after today becomes a plan: the amount owed and the date typed. */
+  onPlan?: (draft: { amount: string; on: string }) => void
   onDone: (message?: string) => void
 }) {
   const [mode, setMode] = useState<'date' | 'starting'>('date')
@@ -75,6 +78,7 @@ export function UpdateBalance({
           today={today}
           editing={editing}
           onReviewing={setLocked}
+          onPlan={onPlan}
           onBeforeStart={
             editing || isCard(account.type)
               ? undefined
