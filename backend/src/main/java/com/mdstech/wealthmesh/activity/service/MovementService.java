@@ -52,7 +52,7 @@ public class MovementService {
             BiFunction<Account, Account, String> refusal, UUID interestCategory) {
         /** The seeded "Loan interest" category (V25), found by id so a rename does not lose it. */
         public static final UUID LOAN_INTEREST = UUID.fromString("a16a0000-0000-4000-8000-000000000001");
-        /** The seeded "Mortgage interest" category (V25), used by mortgage payments in slice 16b. */
+        /** The seeded "Mortgage interest" category (V25), used by a payment to a mortgage (slice 16b). */
         public static final UUID MORTGAGE_INTEREST = UUID.fromString("a16a0000-0000-4000-8000-000000000002");
 
         public static final MovementKind TRANSFER = new MovementKind("transfer_out", "transfer_in", "transfer",
@@ -64,8 +64,17 @@ public class MovementService {
                         : !AccountType.isCard(to.type()) ? "Choose a card to pay" : null, null);
         /** A payment from checking or savings to a loan: the whole amount out, the principal in (LOAN_003). */
         public static final MovementKind LOAN_PAYMENT = new MovementKind("loan_payment", "loan_payment_in", "payment",
-                (from, to) -> !AccountType.paysCards(from.type()) ? "Pay a loan from a checking or savings account"
-                        : !AccountType.isDebt(to.type()) ? "Choose a loan to pay" : null, LOAN_INTEREST);
+                (from, to) -> !AccountType.paysCards(from.type())
+                        ? "Pay a loan or mortgage from a checking or savings account"
+                        : !AccountType.isDebt(to.type()) ? "Choose a loan or mortgage to pay" : null, LOAN_INTEREST);
+
+        /**
+         * The category the interest of a payment to this debt is counted under. The debt's type decides it (a
+         * mortgage: "Mortgage interest"), never the request.
+         */
+        UUID interestFor(Account debt) {
+            return AccountType.MORTGAGE.wire().equals(debt.type()) ? MORTGAGE_INTEREST : interestCategory;
+        }
 
         /** True for a kind whose paying row is split into principal and interest. */
         boolean splits() {
@@ -312,7 +321,7 @@ public class MovementService {
                         parsed.description(), parsed.memberId(), key, now, parsed.reason(), replacesOut)
                 .flatMap(outId -> parsed.split() == null ? Mono.<Void>empty()
                         : portions.insertLoan(outId, parsed.split().principal(), parsed.split().interest(),
-                                kind.interestCategory()))
+                                kind.interestFor(pair.to())))
                 .then(Mono.defer(() -> movements.insertLeg(movement, pair.to().id(), kind.inKind(),
                         parsed.inAmount(), parsed.on(), parsed.description(), parsed.memberId(), null, now,
                         parsed.reason(), replacesIn)))

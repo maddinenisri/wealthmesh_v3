@@ -167,7 +167,7 @@ public class AccountService {
         return requireName(request.name());
     }
 
-    /** The lender of a loan or the bank of any other account, at most 120 characters. */
+    /** The lender of a loan or mortgage or the bank of any other account, at most 120 characters. */
     static String requireInstitution(String institution, AccountType type) {
         String stripped = institution == null || institution.isBlank() ? null : institution.strip();
         if (stripped != null && stripped.length() > 120) {

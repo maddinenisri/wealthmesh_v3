@@ -10,6 +10,7 @@ import { EntryHistory } from './EntryHistory'
 import { PortionList } from './PortionList'
 import { useRecurringPayments } from '../../hooks/useRecurring'
 import { classText } from './classes'
+import { isDebt } from '../accounts/accountTypes'
 import { loanChangeText } from '../loans/loanWords'
 import { shownAmount } from './signedAmount'
 import { givesMoney, isMovement, movementWord, rowName } from './transferRows'
@@ -50,7 +51,7 @@ export function ActivityList({
     <>
       {activity.data.length === 0 ? (
         <p className="mb-4 mt-1 text-sm text-ink-muted">
-          {accountType === 'loan'
+          {isDebt(accountType ?? '')
             ? 'No payments have been recorded yet.'
             : 'No money activity has been recorded yet.'}
         </p>
@@ -138,7 +139,7 @@ export function ActivityList({
                     {entry.enteredByMemberId ? ownerNames([entry.enteredByMemberId], members) : ''}
                   </Td>
                   <Td className="text-right whitespace-nowrap">
-                    {accountType === 'loan' ? (
+                    {isDebt(accountType ?? '') ? (
                       loanChangeText(entry)
                     ) : (
                       <Amount value={shownAmount(entry, accountType)} />

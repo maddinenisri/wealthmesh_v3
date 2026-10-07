@@ -19,8 +19,8 @@ export type NotTracked = { accountId: string; name: string; type: string; opened
 export type WealthGroup = { total: string; accounts: WealthLine[] }
 
 /**
- * Money strings. Debts is a positive amount owed. `bankMoney`, `cards` and `loans` are the groups, with every account
- * (archived and closed too, by status); `debtLines` is what makes up debts: owed cards, loans and overdrawn bank accounts.
+ * Money strings. Debts is a positive amount owed. `bankMoney`, `cards`, `loans` and `mortgages` are the groups, with every account
+ * (archived and closed too, by status); `debtLines` is what makes up debts: owed cards, loans, mortgages and overdrawn bank accounts.
  */
 export type Wealth = {
   asOf: string
@@ -30,6 +30,7 @@ export type Wealth = {
   bankMoney: WealthGroup
   cards: WealthGroup
   loans: WealthGroup
+  mortgages: WealthGroup
   propertyAndOther: WealthGroup
   debtLines: WealthLine[]
   notTracked: NotTracked[]
@@ -125,6 +126,7 @@ function parseWealth(value: unknown): Wealth {
     bankMoney: parseGroup(data.bankMoney),
     cards: parseGroup(data.cards),
     loans: parseGroup(data.loans),
+    mortgages: parseGroup(data.mortgages),
     propertyAndOther: parseGroup(data.propertyAndOther),
     debtLines: parseLines(data.debtLines),
     notTracked: data.notTracked.map((item) => {

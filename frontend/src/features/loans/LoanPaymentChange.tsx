@@ -1,3 +1,4 @@
+import { capitalNoun, debtNoun } from '../accounts/accountTypes'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
 import { Button, Card, CardTitle, FormAlert } from '../../design-system'
@@ -55,7 +56,7 @@ export function LoanPaymentChange({
       <FormAlert message={change.error?.message} />
       <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
         <Item label="Paid from">{paid.from.accountName}</Item>
-        <Item label="Loan">{paid.to.accountName}</Item>
+        <Item label={capitalNoun(debtNoun(loan?.type ?? ''))}>{paid.to.accountName}</Item>
         <Item label="Date">{paid.occurredOn}</Item>
         <Item label="Payment">{formatMoney(Number(paid.amount))}</Item>
         <Item label="Principal">{formatMoney(Number(paid.principal ?? 0))}</Item>

@@ -25,7 +25,7 @@ import { TransferChange, type TransferTarget } from '../transfers/TransferChange
 import { usableAccounts } from '../transfers/accountChoice'
 import { TransferForm } from '../transfers/TransferForm'
 import { ValuedAccount } from '../values/ValuedAccount'
-import { accountTypeLabel, isDebt, isValued } from './accountTypes'
+import { accountTypeLabel, debtNounOf, isDebt, isValued } from './accountTypes'
 import { AccountStatusCard } from './AccountStatusCard'
 import { STATUS_LABEL } from './statusLabel'
 import { BalanceFigure } from './BalanceFigure'
@@ -225,9 +225,11 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
   const accounts = useAccounts()
   // "Pay a card" needs a card to pay (Q-034); "Pay a loan" needs a loan.
   const hasCard = usableAccounts(accounts.data).some((candidate) => isCard(candidate.type))
-  const hasLoan = (accounts.data ?? []).some(
+  const payable = (accounts.data ?? []).filter(
     (candidate) => isDebt(candidate.type) && candidate.status === 'active',
   )
+  const hasLoan = payable.length > 0
+  const debtNoun = debtNounOf(payable.map((candidate) => candidate.type))
   const debt = isDebt(account.type)
   const today = useToday()
   const ready =
@@ -671,13 +673,13 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 setTransfer({ kind: 'loan-new' })
               }}
               disabled={!canAdd || !hasLoan}
-              title={hasLoan ? undefined : 'Add a loan to pay it from here'}
+              title={hasLoan ? undefined : `Add a ${debtNoun} to pay it from here`}
             >
-              Pay a loan
+              Pay a {debtNoun}
             </Button>
             {!hasLoan && (
               <span className="self-center text-caption text-ink-muted">
-                Add a loan to pay it from here.
+                Add a {debtNoun} to pay it from here.
               </span>
             )}
           </div>

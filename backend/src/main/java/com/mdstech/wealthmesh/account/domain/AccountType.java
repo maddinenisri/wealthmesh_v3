@@ -4,7 +4,8 @@ import java.util.Optional;
 
 /**
  * Account types the app can set up so far (T1: savings has the checking shape; T2: a card keeps one Balance that is
- * owed or Card credit; T3: property and other assets hold dated values, no activity; T4: a loan is a debt owed, set
+ * owed or Card credit; T3: property and other assets hold dated values, no activity; T4: a loan, and T5: a mortgage,
+ * are debts owed, set
  * up with an amount and changed by payments and reviewed corrections). The table allows every type in the
  * foundations; add one per feature. A type's {@link Kind} decides how its Balance is read (foundations 3, 5).
  */
@@ -14,7 +15,8 @@ public enum AccountType {
     CREDIT_CARD(Kind.LEDGER),
     PROPERTY(Kind.VALUED),
     OTHER_ASSET(Kind.VALUED),
-    LOAN(Kind.DEBT);
+    LOAN(Kind.DEBT),
+    MORTGAGE(Kind.DEBT);
 
     /**
      * How a type's Balance is read: opening plus signed activity (ledger), the latest dated value (valued), or the
@@ -56,7 +58,7 @@ public enum AccountType {
         return fromWire(wire).filter(type -> type.kind == Kind.VALUED).isPresent();
     }
 
-    /** True for a loan: a debt with an amount owed, never an asset (see {@link Kind#DEBT}). */
+    /** True for a loan or mortgage: a debt with an amount owed, never an asset (see {@link Kind#DEBT}). */
     public static boolean isDebt(String wire) {
         return fromWire(wire).filter(type -> type.kind == Kind.DEBT).isPresent();
     }

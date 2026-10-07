@@ -10,16 +10,34 @@ abstract class DebtTestBase extends ValuedTestBase {
 
     /** The create body of a loan owned by Maya and Sam; `owed` null leaves the amount blank. */
     protected String loanBody(String name, String lender, String owed, String openedOn) {
+        return debtBody("loan", name, lender, owed, openedOn);
+    }
+
+    /** The create body of a debt of `type` ("loan" or "mortgage") owned by Maya and Sam. */
+    protected String debtBody(String type, String name, String lender, String owed, String openedOn) {
         String amount = owed == null ? "" : ", \"openingBalance\": \"" + owed + "\"";
         String lenderField = lender == null ? "" : ", \"institution\": \"" + lender + "\"";
         return """
-                {"type": "loan", "name": "%s", "ownerMemberIds": ["%s", "%s"], "openedOn": "%s"%s%s}"""
-                .formatted(name, mayaId, samId, openedOn, lenderField, amount);
+                {"type": "%s", "name": "%s", "ownerMemberIds": ["%s", "%s"], "openedOn": "%s"%s%s}"""
+                .formatted(type, name, mayaId, samId, openedOn, lenderField, amount);
     }
 
     protected WebTestClient.ResponseSpec createLoan(String name, String lender, String owed, String openedOn) {
         return webTestClient.post().uri("/api/v1/accounts").contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(loanBody(name, lender, owed, openedOn)).exchange();
+    }
+
+    protected WebTestClient.ResponseSpec createMortgage(String name, String lender, String owed, String openedOn) {
+        return webTestClient.post().uri("/api/v1/accounts").contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(debtBody("mortgage", name, lender, owed, openedOn)).exchange();
+    }
+
+    /** Saves a mortgage lent by Maple Bank (expects 201) and returns its id. */
+    protected String mortgage(String name, String owed, String openedOn) {
+        AtomicReference<String> id = new AtomicReference<>();
+        createMortgage(name, "Maple Bank", owed, openedOn).expectStatus().isCreated().expectBody().jsonPath("$.id")
+                .value(String.class, id::set);
+        return id.get();
     }
 
     /** Saves a loan (expects 201) and returns its id. */

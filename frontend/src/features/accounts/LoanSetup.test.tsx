@@ -125,12 +125,11 @@ describe('adding a loan', () => {
     expect(api.requests.some((r) => r.startsWith('POST'))).toBe(false)
   })
 
-  it('V2_LOAN_001 the type list offers Loan as ready and Mortgage still as coming soon', async () => {
+  it('V2_LOAN_001 the type list offers Loan as ready', async () => {
     mockApi(seed)
     renderRoute('/accounts/new')
     const type = await screen.findByLabelText('Account type')
     expect(within(type).getByRole('option', { name: 'Loan' })).toBeEnabled()
-    expect(within(type).getByRole('option', { name: 'Mortgage (coming soon)' })).toBeDisabled()
   })
 })
 

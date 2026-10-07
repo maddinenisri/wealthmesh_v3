@@ -42,7 +42,7 @@ export function Entries({
               <Td>
                 <Button variant="ghost" size="sm" onClick={() => setOpenId(entry.id)}>
                   {entry.kind === 'loan_payment'
-                    ? `Interest on payment to ${entry.counterAccountName ?? 'a loan'}`
+                    ? `Interest on payment to ${entry.counterAccountName ?? 'the lender'}`
                     : (entry.description ??
                       (entry.portions.length > 0 ? 'Split expense' : entry.categoryName) ??
                       words.column)}
@@ -80,11 +80,11 @@ export function Entries({
             {open.kind === 'refund' && ' (refund)'}
           </Detail>
           {open.kind === 'loan_payment' && (
-            <Detail label="Payment">Loan payment to {open.counterAccountName}</Detail>
+            <Detail label="Payment">Payment to {open.counterAccountName}</Detail>
           )}
           <Detail label="Category">
             {open.kind === 'loan_payment' ? (
-              <>{open.portions[0]?.categoryName ?? 'Loan interest'}</>
+              <>{open.portions[0]?.categoryName ?? 'Interest'}</>
             ) : open.portions.length > 0 ? (
               <>
                 Split

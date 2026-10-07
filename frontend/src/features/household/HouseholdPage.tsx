@@ -159,7 +159,16 @@ function AccountsAndWealth() {
             card
             owed
             total={wealth.data?.loans.total}
-            accounts={accounts.data.filter((account) => isDebt(account.type))}
+            accounts={accounts.data.filter((account) => account.type === 'loan')}
+            members={members}
+          />
+          <AccountGroup
+            id="mortgages-heading"
+            title="Mortgages"
+            card
+            owed
+            total={wealth.data?.mortgages.total}
+            accounts={accounts.data.filter((account) => account.type === 'mortgage')}
             members={members}
           />
           <AccountGroup

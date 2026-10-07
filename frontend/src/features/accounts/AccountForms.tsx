@@ -64,7 +64,7 @@ function OwnerChoices<T extends DetailsValues>({
       label="Owners"
       hint={
         debt
-          ? 'Choose everyone who owes this loan.'
+          ? 'Choose everyone who owes this debt.'
           : valued
             ? 'Choose everyone who owns this property or asset.'
             : 'Choose everyone who owns this account. Two or more makes it a joint account.'

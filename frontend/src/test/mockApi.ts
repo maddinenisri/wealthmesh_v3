@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import { valueHandlers, valuedPoint, type MockValue } from './mockValues'
 import { server } from './server'
+import { isDebt as isDebtType } from '../features/accounts/accountTypes'
 
 type MockHousehold = { id: string; name: string }
 type MockMember = {
@@ -706,7 +707,7 @@ export function mockApi(
   /** A card's typed amount is positive with a side and is held with the asset sign; others take no side. */
   const signedFor = (account: MockAccount, amount: string, side: string | null | undefined) => {
     const value = Number(amount)
-    if (account.type === 'loan') {
+    if (isDebtType(account.type)) {
       if (side) return problem(400, 'Owed or Card credit applies to a card only')
       if (Number.isNaN(value)) return problem(400, 'Enter a valid amount')
       return value < 0 ? problem(400, 'Enter zero or a positive amount owed') : -value || 0
@@ -726,10 +727,10 @@ export function mockApi(
     if (!from || !to) return problem(404, 'Account not found')
     if (path === 'loan-payments') {
       if (from.type !== 'checking' && from.type !== 'savings')
-        return problem(400, 'Pay a loan from a checking or savings account')
-      return to.type === 'loan' ? null : problem(400, 'Choose a loan to pay')
+        return problem(400, 'Pay a loan or mortgage from a checking or savings account')
+      return isDebtType(to.type) ? null : problem(400, 'Choose a loan or mortgage to pay')
     }
-    if (from.type === 'loan' || to.type === 'loan')
+    if (isDebtType(from.type) || isDebtType(to.type))
       return problem(400, 'Money cannot be moved to or from this type of account yet')
     if (path === 'transfers') {
       return from.type === 'credit_card' || to.type === 'credit_card'
@@ -1985,7 +1986,7 @@ export function mockApi(
         difference: (requested - onDate).toFixed(2),
         currentBalance: current.toFixed(2),
         currentBalanceAfter: after.toFixed(2),
-        overdraft: after < 0 && account.type !== 'credit_card' && account.type !== 'loan',
+        overdraft: after < 0 && account.type !== 'credit_card' && !isDebtType(account.type),
       })
     }),
     http.post('*/api/v1/accounts/:id/balance-corrections', async ({ request, params }) => {
@@ -2052,7 +2053,7 @@ export function mockApi(
         const typed = signedFor(account, query.get('openingAmount') ?? '', null)
         if (typeof typed !== 'number') return typed
         // A loan's amount is typed as an amount owed; the figures below carry the stored (negative) sign.
-        const amount = account.type === 'loan' ? typed : Number(query.get('openingAmount'))
+        const amount = isDebtType(account.type) ? typed : Number(query.get('openingAmount'))
         const current = currentBalance(account)
         return HttpResponse.json({
           originalAmount: Number(account.openingAmount).toFixed(2),
@@ -2062,7 +2063,7 @@ export function mockApi(
           currentBalance: current.toFixed(2),
           currentBalanceAfter: (current - Number(account.openingAmount) + amount).toFixed(2),
           overdraft:
-            account.type !== 'loan' && current - Number(account.openingAmount) + amount < 0,
+            !isDebtType(account.type) && current - Number(account.openingAmount) + amount < 0,
           ...(query.get('entryAmount') ? previewEntry(account, amount, query) : {}),
         })
       },
@@ -2145,7 +2146,7 @@ export function mockApi(
       if (!body.reason?.trim()) return problem(400, 'Enter a reason')
       const typed = signedFor(account, body.openingAmount, null)
       if (typeof typed !== 'number') return typed
-      if (account.type === 'loan') body = { ...body, openingAmount: typed.toFixed(2) }
+      if (isDebtType(account.type)) body = { ...body, openingAmount: typed.toFixed(2) }
       const revision: MockOpeningRevision = {
         id: newId(),
         accountId: account.id,
@@ -2634,10 +2635,11 @@ export function mockApi(
           l.type !== 'credit_card' &&
           l.type !== 'property' &&
           l.type !== 'other_asset' &&
-          l.type !== 'loan',
+          !isDebtType(l.type),
       )
       const cards = lines.filter((l) => l.type === 'credit_card')
       const loans = lines.filter((l) => l.type === 'loan')
+      const mortgages = lines.filter((l) => l.type === 'mortgage')
       const debtLines = lines.filter((l) => Number(l.balance) < 0)
       const assets = lines.map((l) => Number(l.balance)).filter((b) => b > 0)
       const financialAssets = assets.reduce((x, y) => x + y, 0)
@@ -2651,6 +2653,7 @@ export function mockApi(
         bankMoney: { total: sum(bank).toFixed(2), accounts: bank },
         cards: { total: sum(cards).toFixed(2), accounts: cards },
         loans: { total: sum(loans).toFixed(2), accounts: loans },
+        mortgages: { total: sum(mortgages).toFixed(2), accounts: mortgages },
         propertyAndOther: { total: sum(valuedLines).toFixed(2), accounts: valuedLines },
         debtLines,
         notTracked: state.accounts
@@ -2709,7 +2712,7 @@ export function mockApi(
       // A card is entered as a positive figure with a side and stored with the asset sign (owed negative).
       const entered = amountOrZero(body.openingBalance) as string
       const owed =
-        (body.type === 'credit_card' && body.balanceSide === 'owed') || body.type === 'loan'
+        (body.type === 'credit_card' && body.balanceSide === 'owed') || isDebtType(body.type)
       const opening = owed && Number(entered) !== 0 ? (-Number(entered)).toFixed(2) : entered
       const account: MockAccount = {
         id: newId(),
@@ -2797,7 +2800,7 @@ function validateAccount(name: string, owners: string[]) {
 
 /** A card amount needs Owed or Card credit and is never negative; any other type takes no side. */
 function validateSide(body: NewAccountBody) {
-  if (body.type === 'loan') {
+  if (isDebtType(body.type)) {
     if (body.balanceSide) return problem(400, 'Owed or Card credit applies to a card only')
     return Number(amountOrZero(body.openingBalance)) < 0
       ? problem(400, 'Enter zero or a positive amount owed')

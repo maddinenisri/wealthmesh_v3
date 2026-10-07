@@ -9,7 +9,13 @@ import { useAccounts } from '../../hooks/useAccounts'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useLoanPayment, useSaveTransfer, useTransferPreview } from '../../hooks/useTransfers'
 import { formatMoney, parseAmount } from '../../lib/money'
-import { isDebt } from '../accounts/accountTypes'
+import {
+  capitalNoun,
+  debtNoun,
+  debtNounOf,
+  interestCategoryName,
+  isDebt,
+} from '../accounts/accountTypes'
 import { balanceText, isCard } from '../accounts/cardBalance'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { EnteredBy } from '../activity/EnteredBy'
@@ -90,6 +96,10 @@ function LoanPaymentFields({
       isDebt(candidate.type) && (candidate.status === 'active' || kept.includes(candidate.id)),
   )
   const byId = (id: string) => accounts.data?.find((candidate) => candidate.id === id)
+  // What this payment calls the debt: the fixed account's own noun, else what the choice offers.
+  const noun = fromLoan
+    ? debtNoun(account.type)
+    : debtNounOf(loans.map((candidate) => candidate.type))
   const save = useSaveTransfer(editing?.movementId, 'loan-payments')
   const { member, setMemberId } = useEnteringAs(members)
   const [reviewing, setReviewing] = useState<Values | null>(null)
@@ -187,7 +197,9 @@ function LoanPaymentFields({
         )}
         <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
           <Item label="Paid from">{was(editing?.from.accountName, from?.name ?? '')}</Item>
-          <Item label="Loan">{was(editing?.to.accountName, to?.name ?? '')}</Item>
+          <Item label={capitalNoun(debtNoun(to?.type ?? ''))}>
+            {was(editing?.to.accountName, to?.name ?? '')}
+          </Item>
           <Item label="Date">{was(editing?.occurredOn, reviewing.occurredOn)}</Item>
           <Item label="Payment">
             {editing && Number(editing.amount) !== total
@@ -205,7 +217,9 @@ function LoanPaymentFields({
               ? `${formatMoney(Number(editing.interest))} changed to ${formatMoney(rest)}`
               : formatMoney(rest)}
             <span className="block text-caption text-ink-muted">
-              {rest > 0 ? 'Counts as spending: Loan interest' : 'No interest in this payment'}
+              {rest > 0
+                ? `Counts as spending: ${interestCategoryName(to?.type ?? '')}`
+                : 'No interest in this payment'}
             </span>
           </Item>
           {reviewing.description.trim() && <Item label="Description">{reviewing.description}</Item>}
@@ -276,7 +290,7 @@ function LoanPaymentFields({
             control={control}
             name="fromAccountId"
             label="Paid from"
-            rules={{ required: 'Choose the account that paid the loan' }}
+            rules={{ required: `Choose the account that paid the ${noun}` }}
           >
             <option value="">Choose an account</option>
             {payers.map((candidate) => (
@@ -288,17 +302,17 @@ function LoanPaymentFields({
         )}
         {fromLoan && !editing ? (
           <div>
-            <p className="text-sm font-medium">Loan</p>
+            <p className="text-sm font-medium">{capitalNoun(noun)}</p>
             <p className="mt-1">{account.name}</p>
           </div>
         ) : (
           <SelectField
             control={control}
             name="toAccountId"
-            label="Loan to pay"
-            rules={{ required: 'Choose the loan to pay' }}
+            label={`${capitalNoun(noun)} to pay`}
+            rules={{ required: `Choose the ${noun} to pay` }}
           >
-            <option value="">Choose a loan</option>
+            <option value="">Choose a {noun}</option>
             {loans.map((candidate) => (
               <option key={candidate.id} value={candidate.id}>
                 {accountChoice(candidate)}

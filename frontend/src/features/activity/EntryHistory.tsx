@@ -8,6 +8,7 @@ import { Stamped } from '../values/Dated'
 import { stamp } from '../../lib/stamp'
 import { BalanceFigure } from '../accounts/BalanceFigure'
 import { PortionList } from './PortionList'
+import { isDebt } from '../accounts/accountTypes'
 import { loanChangeText } from '../loans/loanWords'
 import { shownAmount } from './signedAmount'
 import { isMovement, movementName } from './transferRows'
@@ -79,7 +80,7 @@ export function EntryHistory({
             <Fragment key={entry.id}>
               <tr>
                 <Td className="whitespace-nowrap">{entry.occurredOn}</Td>
-                <Td className={opening?.type === 'loan' ? 'min-w-32' : undefined}>
+                <Td className={isDebt(opening?.type ?? '') ? 'min-w-32' : undefined}>
                   {entry.kind === 'correction'
                     ? 'Balance correction'
                     : isMovement(entry)
@@ -113,7 +114,7 @@ export function EntryHistory({
                   )}
                 </Td>
                 <Td className="text-right whitespace-nowrap">
-                  {opening?.type === 'loan' ? (
+                  {isDebt(opening?.type ?? '') ? (
                     loanChangeText(entry)
                   ) : (
                     <Amount value={shownAmount(entry, opening?.type)} />
@@ -207,7 +208,7 @@ export function EntryHistory({
               <Td className="whitespace-nowrap">{correction.openedOn}</Td>
               <Td>
                 {correction.openedOn === correction.previousOn
-                  ? opening?.type === 'loan'
+                  ? isDebt(opening?.type ?? '')
                     ? 'Initial amount correction'
                     : 'Starting balance correction'
                   : 'Tracking start moved'}
@@ -219,8 +220,12 @@ export function EntryHistory({
               </Td>
               <Td className="hidden lg:table-cell" />
               <Td className="text-right whitespace-nowrap">
-                {opening?.type === 'loan' ? (
-                  <BalanceFigure type="loan" amount={correction.openingAmount} overdraft={false} />
+                {isDebt(opening?.type ?? '') ? (
+                  <BalanceFigure
+                    type={opening?.type ?? 'loan'}
+                    amount={correction.openingAmount}
+                    overdraft={false}
+                  />
                 ) : (
                   <Amount value={Number(correction.openingAmount)} />
                 )}
@@ -247,7 +252,7 @@ export function EntryHistory({
           {original && (
             <tr>
               <Td className="whitespace-nowrap">{original.on}</Td>
-              <Td>{opening?.type === 'loan' ? 'Initial amount owed' : 'Initial Balance'}</Td>
+              <Td>{isDebt(opening?.type ?? '') ? 'Initial amount owed' : 'Initial Balance'}</Td>
               <Td className="hidden lg:table-cell" />
               <Td className="text-right whitespace-nowrap">
                 <BalanceFigure

@@ -179,13 +179,13 @@ class LoanPaymentApiTests extends DebtTestBase {
                 .isCreated();
         postLoanPayment("w-2", cardId, own, "10.00", "10.00", "0.00", "2026-09-15", mayaId).expectStatus()
                 .isBadRequest().expectBody().jsonPath("$.message")
-                .isEqualTo("Pay a loan from a checking or savings account");
+                .isEqualTo("Pay a loan or mortgage from a checking or savings account");
         postLoanPayment("w-3", other, own, "10.00", "10.00", "0.00", "2026-09-15", mayaId).expectStatus()
                 .isBadRequest();
         postLoanPayment("w-4", bank, bank, "10.00", "10.00", "0.00", "2026-09-15", mayaId).expectStatus()
                 .isBadRequest().expectBody().jsonPath("$.message").isEqualTo("Choose a different account");
         postLoanPayment("w-5", bank, saver, "10.00", "10.00", "0.00", "2026-09-15", mayaId).expectStatus()
-                .isBadRequest().expectBody().jsonPath("$.message").isEqualTo("Choose a loan to pay");
+                .isBadRequest().expectBody().jsonPath("$.message").isEqualTo("Choose a loan or mortgage to pay");
         postLoanPayment("w-6", bank, house, "10.00", "10.00", "0.00", "2026-09-15", mayaId).expectStatus()
                 .isBadRequest();
         postLoanPayment("w-7", bank, cardId, "10.00", "10.00", "0.00", "2026-09-15", mayaId).expectStatus()

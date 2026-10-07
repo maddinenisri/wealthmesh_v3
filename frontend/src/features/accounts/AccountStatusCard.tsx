@@ -12,7 +12,7 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { stamp } from '../../lib/stamp'
 import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
-import { isDebt, isValued } from './accountTypes'
+import { debtNoun, isDebt, isValued } from './accountTypes'
 import { balanceText, isCard } from './cardBalance'
 import { memberLabel } from './ownerNames'
 import { STATUS_LABEL } from './statusLabel'
@@ -143,7 +143,7 @@ export function AccountStatusCard({ account }: { account: Account }) {
                   {isValued(account.type)
                     ? `${account.name} leaves the active account list and takes no new values until you restore it. This changes the household list only.`
                     : debt
-                      ? `${account.name} leaves the active account list and every choice for new payments. This changes the household list. It does not close the loan at its lender.`
+                      ? `${account.name} leaves the active account list and every choice for new payments. This changes the household list. It does not close the ${debtNoun(account.type)} at its lender.`
                       : `${account.name} leaves the active account list and every choice for new entries, transfers and payments. This changes the household list. It does not close an account at its bank.`}
                 </p>
               </>

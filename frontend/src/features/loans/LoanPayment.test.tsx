@@ -182,12 +182,12 @@ describe('paying a loan from checking', () => {
     expect(api.accounts.find((a) => a.id === LOAN)?.balance.amount).toBe('-100.00')
   })
 
-  it('V2_LOAN_003 Pay a loan is off with a reason while there is no loan to pay', async () => {
+  it('V2_LOAN_003 Pay a loan or mortgage is off with a reason while there is nothing to pay', async () => {
     mockApi({ household, members: [maya], accounts: [checking()] })
     renderRoute(`/accounts/${CHECKING}`)
-    const button = await screen.findByRole('button', { name: 'Pay a loan' })
+    const button = await screen.findByRole('button', { name: 'Pay a loan or mortgage' })
     expect(button).toBeDisabled()
-    expect(screen.getByText('Add a loan to pay it from here.')).toBeInTheDocument()
+    expect(screen.getByText('Add a loan or mortgage to pay it from here.')).toBeInTheDocument()
   })
 })
 
