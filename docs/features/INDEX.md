@@ -10,6 +10,15 @@ Check a session with `npm run coverage -- --require --slice NN`; a file is compl
 
 **Size** follows the scenario count (S up to 5, M 6 to 8, L 9 or more).
 
+## Where we are (2026-10-06)
+
+- **Done:** slices 00a to 15 (Milestones A and B complete, plus property and other assets with dated values). `npm run coverage`: 126 of 262 scenarios covered, 3 deferred, 133 missing.
+- **Next:** slice 16 (loans and mortgages, 16 IDs), then 17 and 18 (Milestone C), then 19 to 25 (investments, Milestone D).
+- **Tests on `main`:** backend 571, frontend 286, e2e 221, all green; the pre-push hooks pass.
+- **Open for the owner:** reviews of a property still say "Balance now/after" (decisions use Balance across the app); Q-004 (TypeScript 7, msw 3, Gradle 9.8) deferred; a process review is scheduled for the start of Milestone D (the Cowork fault count has been 8, 8, 5, 5, 5, 7, 9, 9, and slice 15 added a `visual-reviewer` screenshot step to lower it).
+- **Open in the code:** the removable "Value when tracking began" row; slice 14's untested inventory cells and the shorter-batch retry; three unexplained backend flakes (`scripts/flake-check.sh`, pitfall 33).
+- **Slice 16 must:** extend `WealthStore.flowsBetween` and the wealth change identity test with principal and interest kinds.
+
 ## Starting a session
 
 ```text
