@@ -308,7 +308,8 @@ export function BalanceCorrection({
           {debt
             ? 'Enter what was owed at the end of that day.'
             : 'Enter what the Balance was at the end of that day.'}{' '}
-          You will review the change before it is saved.
+          A later change to an earlier amount moves this figure. You will review the change before
+          it is saved.
         </p>
         <div className="flex gap-2">
           <Button type="submit">Review</Button>

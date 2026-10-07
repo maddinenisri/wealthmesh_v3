@@ -104,6 +104,9 @@ describe('a dated correction of the balance owed', () => {
     await user.click(await screen.findByRole('button', { name: 'Update balance owed' }))
     const form = await screen.findByRole('region', { name: 'Update balance owed' })
     expect(within(form).getByLabelText('Balance owed')).toBeInTheDocument()
+    expect(
+      within(form).getByText(/A later change to an earlier amount moves this figure/),
+    ).toBeInTheDocument()
     expect(within(form).queryByLabelText('Balance')).not.toBeInTheDocument()
     expect(within(form).queryByLabelText('Balance means')).not.toBeInTheDocument()
     await user.type(within(form).getByLabelText('Balance owed'), '19800.00')
