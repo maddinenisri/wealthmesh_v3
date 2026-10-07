@@ -206,7 +206,7 @@ for (const [width, name, first, second] of [
       await expectFocusInside(review)
       await review.getByRole('button', { name: 'Confirm correction' }).click()
       await expect(page.getByRole('status')).toContainText('Corrected to')
-      await expect(page.getByRole('table')).toContainText('Replaced by a correction')
+      await expect(page.getByRole('table')).toContainText('Replaced')
       await expect(page.getByRole('table')).toContainText('$300,000.00')
       await expectNoSidewaysScroll(page)
       expect(await balanceOf(page, id)).toBe(second.replace(',', ''))
@@ -481,6 +481,47 @@ for (const [width, name] of [
       await card.getByLabel('Show wealth on').fill('2027-01-05')
       await expect(card.getByText('The date cannot be in the future')).toBeVisible()
       await expect(card).not.toContainText('Household wealth on')
+    })
+  })
+}
+
+// Faults the screenshot step (visual-reviewer) found on slice 15 after the owner's pass.
+for (const [width, name] of [
+  [710, 'Visual Home 710'],
+  [1280, 'Visual Home 1280'],
+] as const) {
+  test.describe.serial(`Screenshot findings at ${width}px`, () => {
+    test.use({ viewport: { width, height: 900 } })
+
+    test(`V2_PROPERTY_002 a property says value everywhere on its pages and keeps dates whole (${width}px)`, async ({
+      page,
+    }) => {
+      await page.goto('/accounts/new')
+      await page.getByLabel('Account type').selectOption({ label: 'Property' })
+      await expect(page.getByRole('main')).not.toContainText('Balance')
+
+      const id = await makeAsset(page, 'property', name, '50000.00')
+      const owner = await ownerId(page)
+      const saved = await page.request.post(`/api/v1/accounts/${id}/values`, {
+        headers: { 'Idempotency-Key': `visual-${width}` },
+        data: { amount: '60000.00', valueOn: '2026-09-30', enteredByMemberId: owner },
+      })
+      expect(saved.ok()).toBeTruthy()
+      await page.goto(`/accounts/${id}`)
+      const row = page.getByRole('row').filter({ hasText: '$60,000.00' })
+      const stamp = row.locator('.whitespace-nowrap', { hasText: /\d{2}:\d{2}$/ })
+      await expect(stamp).toBeVisible()
+      const box = await stamp.boundingBox()
+      expect(box!.height).toBeLessThan(30)
+      await expect(page.getByLabel('Account details')).not.toContainText('Balance')
+
+      await page.getByRole('button', { name: 'Archive account' }).click()
+      const review = page.getByRole('region', { name: /Review archiving/ })
+      await expect(review).not.toContainText('transfers')
+      await review.getByRole('button', { name: 'Cancel' }).click()
+
+      await page.goto(`/accounts/${id}/edit`)
+      await expect(page.getByRole('main')).not.toContainText(/bank|Update balance/i)
     })
   })
 }

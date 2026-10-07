@@ -102,11 +102,12 @@ describe('wealth on a date', () => {
     fireEvent.change(await within(card).findByLabelText('Show wealth on'), {
       target: { value: '2026-08-15' },
     })
-    expect(
-      await within(card).findByText(
-        /Not tracking yet on 2026-08-15, so not counted: Family Home \(from 2026-09-01\)/,
-      ),
-    ).toBeInTheDocument()
+    expect(await within(card).findByText(/Not tracking yet on/)).toHaveTextContent(
+      'Not tracking yet on 2026-08-15, so not counted:',
+    )
+    expect(within(card).getByRole('list', { name: 'Not tracking yet' })).toHaveTextContent(
+      'Family Home (from 2026-09-01)',
+    )
     expect(within(card).getByText(/Household wealth on 2026-08-15/)).toHaveTextContent('$0.00')
   })
 })
@@ -181,5 +182,27 @@ describe('what changed', () => {
     expect(await within(card).findByText('The date cannot be in the future')).toBeInTheDocument()
     expect(within(card).queryByText(/Household wealth on/)).not.toBeInTheDocument()
     expect(within(card).getByLabelText('Show wealth on')).toHaveValue('2026-12-01')
+  })
+
+  it('V2_PROPERTY_003 accounts not yet tracking are a list, and no date in the sentences breaks (screenshot step)', async () => {
+    mockApi(seed(home('300000.00', '2026-09-01'), []))
+    renderRoute('/')
+
+    const card = await overTime()
+    fireEvent.change(await within(card).findByLabelText('Show wealth on'), {
+      target: { value: '2026-08-15' },
+    })
+    const list = await within(card).findByRole('list', { name: 'Not tracking yet' })
+    const item = within(list)
+      .getByText(/Family Home/)
+      .closest('li')!
+    expect(item).toHaveTextContent('from 2026-09-01')
+    expect(item.querySelector('.whitespace-nowrap')).not.toBeNull()
+
+    fireEvent.change(within(card).getByLabelText('From'), { target: { value: '2026-09-01' } })
+    fireEvent.change(within(card).getByLabelText('To'), { target: { value: '2026-09-30' } })
+    const change = await within(card).findByRole('region', { name: 'Wealth change' })
+    const dated = within(change).getAllByText('2026-09-30')[0]
+    expect(dated.closest('.whitespace-nowrap')).not.toBeNull()
   })
 })

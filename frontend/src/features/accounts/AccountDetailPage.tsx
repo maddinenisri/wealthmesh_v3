@@ -106,7 +106,9 @@ function Details({ account, owners }: { account: Account; owners: string }) {
           </div>
         )}
         <div>
-          <dt className="text-caption text-ink-muted">Balance</dt>
+          <dt className="text-caption text-ink-muted">
+            {isValued(account.type) ? 'Value' : 'Balance'}
+          </dt>
           <dd>
             <BalanceFigure
               type={account.type}

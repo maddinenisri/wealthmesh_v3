@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
 import type { ValueEvent, ValueRow } from '../../api/values'
@@ -6,11 +6,12 @@ import { Badge, Button, Card, CardTitle, Table, Td, Th } from '../../design-syst
 import { useToday } from '../../hooks/useAccounts'
 import { useValueHistory } from '../../hooks/useValues'
 import { formatMoney } from '../../lib/money'
-import { stamp } from '../../lib/stamp'
 import { useReturnFocus } from '../activity/useReturnFocus'
+import { Stamped } from './Dated'
 import { ExtendStart } from './ExtendStart'
 import { ValueChange } from './ValueChange'
 import { ValueForm } from './ValueForm'
+import { withDates } from './withDates'
 
 type Draft = { amount: string; valueOn: string; reason: string }
 
@@ -23,7 +24,7 @@ type Panel =
 const STATUS: Record<ValueRow['status'], string> = {
   current: 'Current',
   earlier: 'Earlier value',
-  replaced: 'Replaced by a correction',
+  replaced: 'Replaced',
   removed: 'Removed',
   planned: 'Plan',
 }
@@ -172,15 +173,12 @@ export function ValuedAccount({
                     <Badge>{STATUS[row.status]}</Badge>
                   </Td>
                   <Td className="text-sm text-ink-muted">
-                    {row.initial
-                      ? 'Initial value'
-                      : [
-                          row.reason,
-                          row.enteredBy && `Entered by ${row.enteredBy} on ${stamp(row.createdAt)}`,
-                          row.removedBy && `Removed by ${row.removedBy}`,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
+                    {row.initial || row.reason === SYSTEM_ROW ? (
+                      // The system row is dated as old as the account: its who and when are in the Changes list.
+                      (row.reason ?? 'Initial value')
+                    ) : (
+                      <Details row={row} />
+                    )}
                   </Td>
                   <Td>
                     <RowActions row={row} disabled={!canChange} onOpen={open} />
@@ -198,7 +196,7 @@ export function ValuedAccount({
             <ul aria-label="Changes" className="mt-1 flex flex-col gap-1 text-sm text-ink-muted">
               {history.data.events.map((event) => (
                 <li key={`${event.at}-${event.action}-${event.valueOn}-${event.amount}`}>
-                  {changeText(event)} · {event.byName}, {stamp(event.at)}
+                  {changeText(event)} · {event.byName}, <Stamped at={event.at} />
                 </li>
               ))}
             </ul>
@@ -217,12 +215,38 @@ const ACTION_LABEL: Record<string, string> = {
 }
 
 /** One change in words: what was done to which value, or the sentence the server kept (a correction, a new start). */
-function changeText(event: ValueEvent): string {
+function changeText(event: ValueEvent): ReactNode {
   if (event.action === 'start_moved' || event.action === 'corrected')
-    return event.detail ?? event.action
+    return withDates(event.detail ?? event.action)
   const what =
     event.amount !== null ? ` ${formatMoney(Number(event.amount))} dated ${event.valueOn}` : ''
-  return `${ACTION_LABEL[event.action] ?? event.action}${what}`
+  return withDates(`${ACTION_LABEL[event.action] ?? event.action}${what}`)
+}
+
+/** The reason of the value the system writes when a start moves earlier. */
+const SYSTEM_ROW = 'Value when tracking began'
+
+/** Reason, who and when, and who removed it, with the time kept whole. */
+function Details({ row }: { row: ValueRow }) {
+  const parts = [
+    row.reason,
+    row.enteredBy && (
+      <>
+        Entered by {row.enteredBy} on <Stamped at={row.createdAt} />
+      </>
+    ),
+    row.removedBy && `Removed by ${row.removedBy}`,
+  ].filter(Boolean)
+  return (
+    <>
+      {parts.map((part, index) => (
+        <Fragment key={index}>
+          {index > 0 && ' · '}
+          {part}
+        </Fragment>
+      ))}
+    </>
+  )
 }
 
 function RowActions({

@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router'
 import { Card, EmptyState, PageHeader, buttonStyles } from '../../design-system'
 import { useAccount, useToday } from '../../hooks/useAccounts'
+import { isValued } from './accountTypes'
 import { AccountEditForm, AccountSetupForm } from './AccountForms'
 import { useAccountContext } from './useAccountContext'
 
@@ -20,7 +21,7 @@ export function NewAccountPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Add account"
-        description="Balance is optional. Leave it blank to start at $0.00 on the opening date."
+        description="The starting amount is optional. Leave it blank to start at $0.00 on the first date."
       />
       {(context.isPending || today.isPending) && !context.error && !today.error && (
         <p className="text-ink-muted">Loading</p>
@@ -63,7 +64,13 @@ export function EditAccountPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Edit account"
-        description="Change the name, owner or bank. Money is not changed here; use Update balance on the account."
+        description={
+          !account.data
+            ? 'Change the name or owner.'
+            : isValued(account.data.type)
+              ? 'Change the name or owner. Values are not changed here; record a new value on the account.'
+              : 'Change the name, owner or bank. Money is not changed here; use Update balance on the account.'
+        }
       />
       {(account.isPending || context.isPending) && <p className="text-ink-muted">Loading</p>}
       {account.isError && (

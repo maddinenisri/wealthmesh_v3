@@ -135,7 +135,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
           </p>
           {review.balance.trim() === '' && (
             <p className="text-sm text-ink-muted">
-              The Balance was left blank, so it starts at $0.00. Saving completes the setup.
+              The value was left blank, so it starts at $0.00. Saving completes the setup.
             </p>
           )}
           <p className="text-sm text-ink-muted">Owners: {owners(review.ownerMemberIds)}.</p>

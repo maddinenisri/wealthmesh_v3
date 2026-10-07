@@ -475,9 +475,14 @@ public class ValueService {
 
     private static String detail(Parsed parsed, Row old) {
         return old == null ? (parsed.plan() ? "Plan for " : "Value for ") + parsed.valueOn() + ": "
-                + Money.format(parsed.amount())
-                : "Replaces " + Money.format(old.amount()) + " dated " + old.valueOn() + " with "
-                + Money.format(parsed.amount()) + " dated " + parsed.valueOn();
+                + dollars(parsed.amount())
+                : "Replaces " + dollars(old.amount()) + " dated " + old.valueOn() + " with "
+                + dollars(parsed.amount()) + " dated " + parsed.valueOn();
+    }
+
+    /** "$320,000.00": the way a person reads an amount in a sentence. */
+    private static String dollars(BigDecimal amount) {
+        return String.format(java.util.Locale.US, "$%,.2f", amount);
     }
 
     private static String fingerprint(Parsed parsed, UUID member, UUID replaces) {

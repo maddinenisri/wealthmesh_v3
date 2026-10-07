@@ -110,7 +110,7 @@ describe('recording a value', () => {
     await fillValue(user, '28,000.00', '2026-09-30', 'Updated resale estimate')
     const review = await screen.findByRole('region', { name: 'Review value' })
     expect(review).toHaveTextContent('Change$2,000.00 asset value decrease')
-    expect(review).toHaveTextContent('Value on 2026-09-30 before this$30,000.00')
+    expect(review).toHaveTextContent('Value on that date before this$30,000.00')
     expect(review).toHaveTextContent('Reason')
     expect(review).toHaveTextContent('Entered by: Maya')
     await user.click(screen.getByRole('button', { name: 'Confirm value' }))
@@ -222,9 +222,7 @@ describe('correcting, removing and restoring a value', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Corrected to $315,000.00')
     const table = screen.getByRole('table')
     expect(within(table).getByText('$315,000.00').closest('tr')).toHaveTextContent('Current')
-    expect(within(table).getByText('$320,000.00').closest('tr')).toHaveTextContent(
-      'Replaced by a correction',
-    )
+    expect(within(table).getByText('$320,000.00').closest('tr')).toHaveTextContent('Replaced')
     expect(post(api).filter((r) => r.endsWith('/correction'))).toHaveLength(1)
   })
 

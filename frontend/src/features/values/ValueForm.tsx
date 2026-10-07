@@ -10,6 +10,7 @@ import { formatMoney, parseAmount } from '../../lib/money'
 import { valuedNoun } from '../accounts/accountTypes'
 import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
+import { Dated } from './Dated'
 
 type Values = { amount: string; valueOn: string; reason: string }
 
@@ -117,7 +118,12 @@ export function ValueForm({
 
   if (draft && review.data) {
     const figures = review.data
-    const down = Number(figures.change) < 0
+    // A correction is judged against the value it replaces; a new value against the value in force on its date.
+    const change = figures.replacesAmount
+      ? Number(figures.amount) - Number(figures.replacesAmount)
+      : figures.change === null
+        ? null
+        : Number(figures.change)
     return (
       <Panel key="review">
         <Card aria-labelledby="value-review-heading">
@@ -126,31 +132,38 @@ export function ValueForm({
           </CardTitle>
           <FormAlert message={save.error?.message} />
           <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
-            <Item label={planning ? 'Planned for' : 'Date'}>{figures.valueOn}</Item>
-            <Item label="Value">{formatMoney(Number(figures.amount))}</Item>
+            <Item label={planning ? 'Planned for' : 'Date'}>
+              <Dated on={figures.valueOn} />
+            </Item>
+            <Item label={planning ? 'Planned value' : 'Value'}>
+              {formatMoney(Number(figures.amount))}
+            </Item>
             {figures.replacesAmount && (
               <Item label="Replaces">
-                {formatMoney(Number(figures.replacesAmount))} dated {figures.replacesOn}
+                {formatMoney(Number(figures.replacesAmount))} dated{' '}
+                <Dated on={figures.replacesOn ?? ''} />
               </Item>
             )}
             {figures.reason && <Item label="Reason">{figures.reason}</Item>}
-            {!planning && figures.earlierAmount !== null && (
-              <Item label={`Value on ${figures.valueOn} before this`}>
+            {!planning && !figures.replacesAmount && figures.earlierAmount !== null && (
+              <Item label="Value on that date before this">
                 {formatMoney(Number(figures.earlierAmount))}
               </Item>
             )}
-            {!planning && figures.change !== null && (
-              <Item label="Change">
-                {Number(figures.change) === 0
+            {!planning && change !== null && (
+              <Item label={figures.replacesAmount ? 'Change from the value it replaces' : 'Change'}>
+                {change === 0
                   ? formatMoney(0)
-                  : `${formatMoney(Math.abs(Number(figures.change)))} asset value ${down ? 'decrease' : 'increase'}`}
+                  : `${formatMoney(Math.abs(change))} asset value ${change < 0 ? 'decrease' : 'increase'}`}
               </Item>
             )}
             <Item label={`${account.name} Balance now`}>
-              {formatMoney(Number(figures.balanceBefore))}, dated {figures.balanceBeforeOn}
+              {formatMoney(Number(figures.balanceBefore))}, dated{' '}
+              <Dated on={figures.balanceBeforeOn} />
             </Item>
             <Item label={`${account.name} Balance after`}>
-              {formatMoney(Number(figures.balanceAfter))}, dated {figures.balanceAfterOn}
+              {formatMoney(Number(figures.balanceAfter))}, dated{' '}
+              <Dated on={figures.balanceAfterOn} />
             </Item>
           </dl>
           <p className="mt-3 max-w-md text-sm text-ink-muted">
@@ -189,6 +202,35 @@ export function ValueForm({
         </CardTitle>
         <form noValidate className="mt-3 flex max-w-md flex-col gap-4" onSubmit={submit}>
           <FormAlert message={review.error?.message} />
+          <TextField
+            control={control}
+            name="amount"
+            label="Value"
+            inputMode="decimal"
+            placeholder="0.00"
+            rules={{
+              validate: (value) => {
+                const amount = parseAmount(value)
+                if (amount === null) return 'Enter a valid amount'
+                return !amount.startsWith('-') || `Enter zero or a positive ${noun} value`
+              },
+            }}
+          />
+          <TextField
+            control={control}
+            name="valueOn"
+            label={planning ? 'Planned for' : 'Date'}
+            type="date"
+            rules={{
+              required: 'Enter a date',
+              validate: (value) =>
+                planning
+                  ? value > today || 'A plan is dated after today'
+                  : value >= account.openedOn ||
+                    !!onBeforeStart ||
+                    `This date is before the account's start (${account.openedOn})`,
+            }}
+          />
           {future && (
             <div role="alert" className="rounded-control border border-line p-3 text-sm">
               <p>{FUTURE}</p>
@@ -220,35 +262,6 @@ export function ValueForm({
               </div>
             </div>
           )}
-          <TextField
-            control={control}
-            name="amount"
-            label="Value"
-            inputMode="decimal"
-            placeholder="0.00"
-            rules={{
-              validate: (value) => {
-                const amount = parseAmount(value)
-                if (amount === null) return 'Enter a valid amount'
-                return !amount.startsWith('-') || `Enter zero or a positive ${noun} value`
-              },
-            }}
-          />
-          <TextField
-            control={control}
-            name="valueOn"
-            label={planning ? 'Planned for' : 'Date'}
-            type="date"
-            rules={{
-              required: 'Enter a date',
-              validate: (value) =>
-                planning
-                  ? value > today || 'A plan is dated after today'
-                  : value >= account.openedOn ||
-                    !!onBeforeStart ||
-                    `This date is before the account's start (${account.openedOn})`,
-            }}
-          />
           <TextField
             control={control}
             name="reason"

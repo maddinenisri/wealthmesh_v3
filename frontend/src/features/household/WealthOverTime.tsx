@@ -4,6 +4,7 @@ import { useToday } from '../../hooks/useAccounts'
 import { useWealth, useWealthChange } from '../../hooks/useWealth'
 import { formatMoney } from '../../lib/money'
 import { accountTypeLabel } from '../accounts/accountTypes'
+import { Dated } from '../values/Dated'
 
 /**
  * Wealth on an earlier date (W4) and what changed between two dates (W5). A manually valued account shows the date of
@@ -75,13 +76,18 @@ export function WealthOverTime() {
             </section>
           )}
           {wealth.data.notTracked.length > 0 && (
-            <p className="text-sm text-ink-muted">
-              Not tracking yet on {wealth.data.asOf}, so not counted:{' '}
-              {wealth.data.notTracked
-                .map((item) => `${item.name} (from ${item.openedOn})`)
-                .join(', ')}
-              .
-            </p>
+            <div className="text-sm text-ink-muted">
+              <p>
+                Not tracking yet on <Dated on={wealth.data.asOf} />, so not counted:
+              </p>
+              <ul aria-label="Not tracking yet" className="mt-1 list-disc pl-5">
+                {wealth.data.notTracked.map((item) => (
+                  <li key={item.accountId}>
+                    {item.name} (from <Dated on={item.openedOn} />)
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}
@@ -159,8 +165,8 @@ function Explanation({
   return (
     <div className="mt-3 flex flex-col gap-3" role="region" aria-label="Wealth change">
       <p>
-        Wealth went from {formatMoney(Number(change.startWealth))} on {change.from} to{' '}
-        {formatMoney(Number(change.endWealth))} on {change.to}: a change of{' '}
+        Wealth went from {formatMoney(Number(change.startWealth))} on <Dated on={change.from} /> to{' '}
+        {formatMoney(Number(change.endWealth))} on <Dated on={change.to} />: a change of{' '}
         <Amount value={Number(change.change)} />.
       </p>
       <ul className="divide-y divide-line border-y border-line">

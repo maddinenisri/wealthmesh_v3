@@ -77,6 +77,9 @@ class ValueApiTests extends ValuedTestBase {
         assertThat(field(home, "current", "amount")).containsExactly("315000.00");
         assertThat(field(home, "earlier", "amount")).containsExactly("300000.00");
         assertThat(historyCount(home)).isEqualTo(3);
+        valueHistory(home).expectBody().jsonPath("$.events[?(@.action=='corrected')].detail")
+                .value(List.class, details -> assertThat(String.valueOf(details.getFirst()))
+                        .contains("Replaces $320,000.00 dated 2026-09-30 with $315,000.00 dated 2026-09-30"));
         // The replaced value cannot be corrected or removed again, and a second correction is refused.
         correctValue(home, estimate, "p-3", """
                 {"amount": "1.00", "reason": "Again", "enteredByMemberId": "%s"}""".formatted(mayaId))

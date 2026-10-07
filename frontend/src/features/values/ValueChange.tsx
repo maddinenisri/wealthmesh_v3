@@ -52,7 +52,7 @@ export function ValueChange({
         )}
         <p className="mt-2 max-w-md text-sm text-ink-muted">
           {mode === 'remove'
-            ? 'The value stays in history, where Undo restores it. No cash or spending changes.'
+            ? `The ${plan ? 'plan' : 'value'} stays in history, where Undo restores it. No cash or spending changes.`
             : 'It returns under its original date. The Balance is the latest value.'}
         </p>
         <EnteredBy members={members} member={member} setMemberId={setMemberId} />

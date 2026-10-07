@@ -95,6 +95,13 @@ describe('Add account for a property (faults 3 and 7)', () => {
     expect(screen.queryByText(/joint account/)).not.toBeInTheDocument()
   })
 
+  it('V2_PROPERTY_002 nothing on the page for a property still says Balance (found by the screenshot step)', async () => {
+    mockApi(seed(home()))
+    const { user } = renderRoute('/accounts/new')
+    await user.selectOptions(await screen.findByLabelText('Account type'), 'property')
+    expect(screen.getByRole('main')).not.toHaveTextContent('Balance')
+  })
+
   it('V2_PROPERTY_002 Back from the review puts focus in the form', async () => {
     mockApi({ ...seed(home()), accounts: [] })
     const { user } = renderRoute('/accounts/new')

@@ -94,13 +94,16 @@ export function AccountStatusCard({ account }: { account: Account }) {
       )}
       {account.status === 'closed' && !message && (
         <p className="mt-2 max-w-prose text-sm text-ink-muted">
-          Closed: it takes no new entries and no changes until you reopen it. Its history stays.
+          Closed: it takes no new {isValued(account.type) ? 'values' : 'entries'} and no changes
+          until you reopen it. Its history stays.
         </p>
       )}
       {account.status === 'archived' && !message && (
         <p className="mt-2 max-w-prose text-sm text-ink-muted">
-          Archived: hidden from the active list and from new entries, transfers and payments. Its{' '}
-          {figure} still counts in wealth.
+          {isValued(account.type)
+            ? 'Archived: hidden from the active list and from new values.'
+            : 'Archived: hidden from the active list and from new entries, transfers and payments.'}{' '}
+          Its {figure} still counts in wealth.
         </p>
       )}
       {review && (
@@ -128,9 +131,9 @@ export function AccountStatusCard({ account }: { account: Account }) {
                   with a visible archived label.
                 </p>
                 <p className="text-sm">
-                  {account.name} leaves the active account list and every choice for new entries,
-                  transfers and payments. This changes the household list. It does not close an
-                  account at its bank.
+                  {isValued(account.type)
+                    ? `${account.name} leaves the active account list and takes no new values until you restore it. This changes the household list only.`
+                    : `${account.name} leaves the active account list and every choice for new entries, transfers and payments. This changes the household list. It does not close an account at its bank.`}
                 </p>
               </>
             ) : review === 'restore' ? (
@@ -144,7 +147,8 @@ export function AccountStatusCard({ account }: { account: Account }) {
               ) : atZero ? (
                 <p className="text-sm">
                   {account.name} will be marked closed with a {figure} Balance and its history kept.
-                  It takes no new entries until you reopen it. Wealth does not change.
+                  It takes no new {isValued(account.type) ? 'values' : 'entries'} until you reopen
+                  it. Wealth does not change.
                 </p>
               ) : isValued(account.type) ? (
                 <p className="text-sm">
