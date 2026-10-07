@@ -50,6 +50,12 @@ public class TransferPreviewService {
 
     public Mono<TransferPreview> preview(MovementKind kind, UUID fromId, UUID toId, Object amount, LocalDate on,
             UUID movementId, UUID activityId) {
+        return preview(kind, fromId, toId, amount, null, null, on, movementId, activityId);
+    }
+
+    /** The same with the portions of a loan payment: principal and interest must make up the amount. */
+    public Mono<TransferPreview> preview(MovementKind kind, UUID fromId, UUID toId, Object amount, Object principal,
+            Object interest, LocalDate on, UUID movementId, UUID activityId) {
         if (fromId == null || toId == null) {
             return Mono.error(EntryValidator.bad("Choose both accounts"));
         }
@@ -63,7 +69,9 @@ public class TransferPreviewService {
                     }
                     BigDecimal newAmount = original.map(Activity::amount)
                             .orElseGet(() -> EntryValidator.amount(amount));
-                    return figures(kind, fromId, toId, newAmount, movementId, original.orElse(null));
+                    MovementService.Split split = MovementService.split(kind, newAmount, principal, interest);
+                    return figures(kind, fromId, toId, newAmount, split == null ? newAmount : split.principal(),
+                            split, movementId, original.orElse(null));
                 });
     }
 
@@ -76,7 +84,7 @@ public class TransferPreviewService {
     }
 
     private Mono<TransferPreview> figures(MovementKind kind, UUID fromId, UUID toId, BigDecimal amount,
-            UUID movementId, Activity expense) {
+            BigDecimal inAmount, MovementService.Split split, UUID movementId, Activity expense) {
         // What leaves each account before the new rows are added: the old pair, or the expense.
         Map<UUID, BigDecimal> adjust = new LinkedHashMap<>();
         if (expense != null) {
@@ -84,9 +92,10 @@ public class TransferPreviewService {
         }
         return accountOf(fromId).zipWith(accountOf(toId)).flatMap(pair -> refuse(kind, pair.getT1(), pair.getT2())
                 .then(Mono.defer(() -> oldRows(kind, movementId, adjust)))
+                .then(Mono.defer(() -> overpaid(split, pair.getT2(), adjust)))
                 .then(Mono.defer(() -> {
                     adjust.merge(pair.getT1().id(), amount.negate(), BigDecimal::add);
-                    adjust.merge(pair.getT2().id(), amount, BigDecimal::add);
+                    adjust.merge(pair.getT2().id(), inAmount, BigDecimal::add);
                     return Flux.fromIterable(adjust.keySet()).concatMap(this::accountOf)
                             .concatMap(account -> balance(account).map(now -> new AccountFigure(account.id(),
                                     account.name(), Money.format(now.add(adjust.get(account.id()))))))
@@ -121,9 +130,22 @@ public class TransferPreviewService {
                         Money.format(before), Money.format(before.subtract(amount)))));
     }
 
+    /** A loan payment may not take the debt below zero: the same rule the save applies under the locks. */
+    private Mono<Void> overpaid(MovementService.Split split, Account loan, Map<UUID, BigDecimal> adjust) {
+        if (split == null) {
+            return Mono.empty();
+        }
+        return balance(loan).flatMap(now -> {
+            BigDecimal owed = now.add(adjust.getOrDefault(loan.id(), BigDecimal.ZERO)).negate();
+            return split.principal().compareTo(owed) > 0
+                    ? Mono.<Void>error(EntryValidator.bad(MovementService.overpayment(split.principal(), owed)))
+                    : Mono.<Void>empty();
+        });
+    }
+
     private Mono<Account> accountOf(UUID id) {
         return accounts.findById(id).switchIfEmpty(Mono.error(notFound("Account not found: " + id)))
-                .filter(account -> AccountType.holdsActivity(account.type()))
+                .filter(account -> AccountType.holdsActivity(account.type()) || AccountType.isDebt(account.type()))
                 .switchIfEmpty(Mono.error(EntryValidator.bad(MovementService.WRONG_TYPE)));
     }
 

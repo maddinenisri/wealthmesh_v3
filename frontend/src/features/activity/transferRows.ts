@@ -7,17 +7,21 @@ export const isTransfer = (entry: { kind: string }): boolean =>
 export const isPayment = (entry: { kind: string }): boolean =>
   entry.kind === 'card_payment' || entry.kind === 'card_payment_in'
 
-/** Either kind of pair: the rows that are never edited or removed on their own. */
-export const isMovement = (entry: { kind: string }): boolean =>
-  isTransfer(entry) || isPayment(entry)
+/** One side of a payment to a loan: the paying row (the whole payment) or the loan's row (the principal). */
+export const isLoanPayment = (entry: { kind: string }): boolean =>
+  entry.kind === 'loan_payment' || entry.kind === 'loan_payment_in'
 
-/** True for the side that gives money: the transfer's source, or the bank that paid the card. */
+/** Any kind of pair: the rows that are never edited or removed on their own. */
+export const isMovement = (entry: { kind: string }): boolean =>
+  isTransfer(entry) || isPayment(entry) || isLoanPayment(entry)
+
+/** True for the side that gives money: the transfer's source, or the bank that paid a card or a loan. */
 export const givesMoney = (entry: { kind: string }): boolean =>
-  entry.kind === 'transfer_out' || entry.kind === 'card_payment'
+  entry.kind === 'transfer_out' || entry.kind === 'card_payment' || entry.kind === 'loan_payment'
 
 /** "transfer" or "payment", as the person calls the pair. */
 export const movementWord = (entry: { kind: string }): 'transfer' | 'payment' =>
-  isPayment(entry) ? 'payment' : 'transfer'
+  isPayment(entry) || isLoanPayment(entry) ? 'payment' : 'transfer'
 
 /** "transfer to Emergency Savings" or "payment from Everyday Checking": named by the account on the other side. */
 export const movementName = (entry: { kind: string; counterAccountName?: string | null }): string =>

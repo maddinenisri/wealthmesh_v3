@@ -16,7 +16,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
  * old (W4), and the explanation of the change between two dates (W5). The identity test compares the change
  * components with the difference of two as-of figures.
  */
-class WealthAsOfApiTests extends ValuedTestBase {
+class WealthAsOfApiTests extends DebtTestBase {
 
     private static String home;
     private static String car;
@@ -251,5 +251,45 @@ class WealthAsOfApiTests extends ValuedTestBase {
         assertThat(new BigDecimal(at(september, "$.income"))).isEqualByComparingTo("2000.00");
         assertThat(new BigDecimal(at(september, "$.spending"))).isEqualByComparingTo("460.00");
         assertThat(new BigDecimal(at(september, "$.corrections"))).isNotEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Order(9)
+    @Test
+    @DisplayName("V2_LOAN_003 the change components still add up with loans: a payment's interest is spending, its "
+            + "principal and the debt it pays cancel as a transfer, and a loan added in the period is an account added")
+    void componentsEqualTheDifferenceWithLoanPayments() {
+        BigDecimal addedBefore = new BigDecimal(field(change("2026-09-01", "2026-09-30"), "$.accountsAdded"));
+        String carLoan = loan("Wealth Car Loan", "20000.00", "2026-09-01");
+        loanPayment("l-1", checking, carLoan, "450.00", "50.00", "2026-09-16");
+        String lateLoan = loan("Wealth Late Loan", "10000.00", "2026-09-10");
+        loanPayment("l-2", checking, lateLoan, "1000.00", "100.00", "2026-09-20");
+        loanPayment("l-3", checking, carLoan, "200.00", "0.00", "2026-10-02");
+
+        for (String period : List.of("2026-09-01 2026-09-30", "2026-09-12 2026-09-26", "2026-08-01 2026-10-03",
+                "2026-09-30 2026-10-03", "2026-09-15 2026-09-16")) {
+            String[] dates = period.split(" ");
+            BigDecimal start = new BigDecimal(field(wealth(dates[0]), "$.netWorth"));
+            BigDecimal end = new BigDecimal(field(wealth(dates[1]), "$.netWorth"));
+            String spec = json(change(dates[0], dates[1]));
+            BigDecimal explained = new BigDecimal(at(spec, "$.income")).subtract(new BigDecimal(at(spec, "$.spending")))
+                    .add(new BigDecimal(at(spec, "$.valueChange"))).add(new BigDecimal(at(spec, "$.corrections")))
+                    .add(new BigDecimal(at(spec, "$.accountsAdded"))).add(new BigDecimal(at(spec, "$.transfers")))
+                    .add(new BigDecimal(at(spec, "$.other")));
+            assertThat(explained).as("components for " + period).isEqualByComparingTo(end.subtract(start));
+            assertThat(new BigDecimal(at(spec, "$.other"))).as("nothing unexplained " + period)
+                    .isEqualByComparingTo(BigDecimal.ZERO);
+            assertThat(new BigDecimal(at(spec, "$.transfers"))).as("principal cancels " + period)
+                    .isEqualByComparingTo(BigDecimal.ZERO);
+        }
+        // Only the interest is spending: 50 on September 16 and 100 on September 20, on top of the earlier 460.
+        assertThat(new BigDecimal(field(change("2026-09-15", "2026-09-16"), "$.spending")))
+                .isEqualByComparingTo("50.00");
+        assertThat(new BigDecimal(field(change("2026-09-01", "2026-09-30"), "$.spending")))
+                .isEqualByComparingTo("610.00");
+        // The late loan's $10,000.00 opening is an account added, a debt, in a period that starts before it.
+        assertThat(new BigDecimal(field(change("2026-09-01", "2026-09-30"), "$.accountsAdded")).subtract(addedBefore))
+                .isEqualByComparingTo("-10000.00");
+        assertThat(new BigDecimal(field(change("2026-10-02", "2026-10-03"), "$.spending")))
+                .isEqualByComparingTo("0.00");
     }
 }

@@ -19,7 +19,8 @@ public class MovementStore {
     /** One row of a movement with the names the person sees. */
     public record Leg(UUID id, UUID movementId, UUID accountId, String accountName, String kind, BigDecimal amount,
             LocalDate occurredOn, String description, UUID memberId, String memberName, Instant createdAt,
-            String reason, Instant removedAt, UUID replacesId, UUID replacedById) {
+            String reason, Instant removedAt, UUID replacesId, UUID replacedById, BigDecimal principal,
+            BigDecimal interest) {
     }
 
     private final DatabaseClient client;
@@ -40,7 +41,11 @@ public class MovementStore {
         return client.sql("""
                 SELECT a.id, a.movement_id, a.account_id, ac.name AS account_name, a.kind, a.amount, a.occurred_on,
                        a.description, a.entered_by_member_id, m.name AS member_name, a.created_at, a.reason,
-                       a.removed_at, a.replaces_id, r.id AS replaced_by_id
+                       a.removed_at, a.replaces_id, r.id AS replaced_by_id,
+                       (SELECT SUM(p.amount) FROM activity_portion p
+                        WHERE p.activity_id = a.id AND p.kind = 'principal') AS principal,
+                       (SELECT SUM(p.amount) FROM activity_portion p
+                        WHERE p.activity_id = a.id AND p.kind = 'category') AS interest
                 FROM activity a JOIN account ac ON ac.id = a.account_id
                 LEFT JOIN household_member m ON m.id = a.entered_by_member_id
                 LEFT JOIN activity r ON r.replaces_id = a.id
@@ -53,7 +58,8 @@ public class MovementStore {
                         row.get("entered_by_member_id", UUID.class), row.get("member_name", String.class),
                         instant(row.get("created_at", java.time.OffsetDateTime.class)), row.get("reason", String.class),
                         instant(row.get("removed_at", java.time.OffsetDateTime.class)),
-                        row.get("replaces_id", UUID.class), row.get("replaced_by_id", UUID.class)))
+                        row.get("replaces_id", UUID.class), row.get("replaced_by_id", UUID.class),
+                        row.get("principal", BigDecimal.class), row.get("interest", BigDecimal.class)))
                 .all();
     }
 

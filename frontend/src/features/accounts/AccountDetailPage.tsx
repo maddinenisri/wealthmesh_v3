@@ -17,7 +17,9 @@ import { useReturnFocus } from '../activity/useReturnFocus'
 import { RemindersCard } from '../activity/RemindersCard'
 import { StatementsCard } from '../statements/StatementsCard'
 import { ChangeEntry, type ChangeTarget } from '../activity/ChangeEntry'
-import { isMovement } from '../activity/transferRows'
+import { isLoanPayment, isMovement } from '../activity/transferRows'
+import { LoanPaymentChange } from '../loans/LoanPaymentChange'
+import { LoanPaymentForm } from '../loans/LoanPaymentForm'
 import { ChangeToTransfer } from '../transfers/ChangeToTransfer'
 import { TransferChange, type TransferTarget } from '../transfers/TransferChange'
 import { usableAccounts } from '../transfers/accountChoice'
@@ -78,7 +80,7 @@ export function AccountDetailPage() {
           <AccountStatusCard account={account.data} />
           {isValued(account.data.type) ? (
             <ValuedAccount account={account.data} members={members} />
-          ) : isDebt(account.data.type) ? null : (
+          ) : (
             <Activity account={account.data} members={members} />
           )}
         </>
@@ -193,6 +195,9 @@ type TransferPanel =
   | { kind: 'edit'; entry: ActivityEntry }
   | { kind: 'remove' | 'undo'; entry: TransferTarget }
   | { kind: 'convert'; entry: ActivityEntry }
+  | { kind: 'loan-new' }
+  | { kind: 'loan-edit'; entry: ActivityEntry }
+  | { kind: 'loan-remove' | 'loan-undo'; entry: TransferTarget }
 
 /** A new panel for a different transfer: the key changes with the panel's kind and the row it works on. */
 function transferKey(panel: TransferPanel): string {
@@ -216,8 +221,12 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
   // A new split expense, or a split payment being corrected (SPLITS_001, SPLITS_002).
   const [splitting, setSplitting] = useState<{ editing?: ActivityEntry } | null>(null)
   const accounts = useAccounts()
-  // "Pay a card" needs a card to pay (Q-034).
+  // "Pay a card" needs a card to pay (Q-034); "Pay a loan" needs a loan.
   const hasCard = usableAccounts(accounts.data).some((candidate) => isCard(candidate.type))
+  const hasLoan = (accounts.data ?? []).some(
+    (candidate) => isDebt(candidate.type) && candidate.status === 'active',
+  )
+  const debt = isDebt(account.type)
   const today = useToday()
   const ready =
     !adding &&
@@ -361,6 +370,24 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
               onDone={closeTransfer}
             />
           )}
+          {(transfer.kind === 'loan-new' || transfer.kind === 'loan-edit') && (
+            <LoanPaymentForm
+              account={account}
+              members={members}
+              today={today.data}
+              editing={transfer.kind === 'loan-edit' ? transfer.entry : undefined}
+              onDone={closeTransfer}
+            />
+          )}
+          {(transfer.kind === 'loan-remove' || transfer.kind === 'loan-undo') && (
+            <LoanPaymentChange
+              mode={transfer.kind === 'loan-remove' ? 'remove' : 'undo'}
+              account={account}
+              entry={transfer.entry}
+              members={members}
+              onDone={closeTransfer}
+            />
+          )}
         </Panel>
       )}
       {correcting && today.data && members && (
@@ -410,7 +437,8 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             canChange
               ? (entry) => {
                   remember()
-                  if (isMovement(entry)) setTransfer({ kind: 'edit', entry })
+                  if (isLoanPayment(entry)) setTransfer({ kind: 'loan-edit', entry })
+                  else if (isMovement(entry)) setTransfer({ kind: 'edit', entry })
                   else if (entry.portions.length > 0) setSplitting({ editing: entry })
                   else setEditing(entry)
                 }
@@ -428,7 +456,8 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             canChange
               ? (entry) => {
                   remember()
-                  if (isMovement(entry)) setTransfer({ kind: 'remove', entry })
+                  if (isLoanPayment(entry)) setTransfer({ kind: 'loan-remove', entry })
+                  else if (isMovement(entry)) setTransfer({ kind: 'remove', entry })
                   else setChanging({ mode: 'remove', entry })
                 }
               : undefined
@@ -437,13 +466,29 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             canChange
               ? (entry) => {
                   remember()
-                  if (entry.movementId) setTransfer({ kind: 'undo', entry })
+                  if (entry.movementId && isLoanPayment(entry))
+                    setTransfer({ kind: 'loan-undo', entry })
+                  else if (entry.movementId) setTransfer({ kind: 'undo', entry })
                   else setChanging({ mode: 'undo', entry })
                 }
               : undefined
           }
         />
-        {isCard(account.type) ? (
+        {debt ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setTransfer({ kind: 'loan-new' })
+              }}
+              disabled={!canAdd}
+            >
+              Record payment
+            </Button>
+          </div>
+        ) : isCard(account.type) ? (
           <div className="flex flex-wrap gap-2">
             <Button
               variant="secondary"
@@ -597,18 +642,39 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
                 Add a credit card to pay it from here.
               </span>
             )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setTransfer({ kind: 'loan-new' })
+              }}
+              disabled={!canAdd || !hasLoan}
+              title={hasLoan ? undefined : 'Add a loan to pay it from here'}
+            >
+              Pay a loan
+            </Button>
+            {!hasLoan && (
+              <span className="self-center text-caption text-ink-muted">
+                Add a loan to pay it from here.
+              </span>
+            )}
           </div>
         )}
       </Card>
-      {today.data && <BalanceOnDate account={account} today={today.data} />}
-      <RemindersCard accountId={account.id} />
-      <StatementsCard
-        accountId={account.id}
-        accountType={account.type}
-        balance={account.balance.amount}
-        members={members}
-        today={today.data}
-      />
+      {!debt && (
+        <>
+          {today.data && <BalanceOnDate account={account} today={today.data} />}
+          <RemindersCard accountId={account.id} />
+          <StatementsCard
+            accountId={account.id}
+            accountType={account.type}
+            balance={account.balance.amount}
+            members={members}
+            today={today.data}
+          />
+        </>
+      )}
     </>
   )
 }

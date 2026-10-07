@@ -76,11 +76,20 @@ public class WealthStore {
     public Mono<Flows> flowsBetween(LocalDate from, LocalDate to) {
         return client.sql("""
                         SELECT COALESCE(SUM(CASE WHEN x.kind = 'income' THEN x.amount END), 0) AS income,
-                               COALESCE(SUM(CASE WHEN x.kind = 'expense' THEN x.amount
-                                                 WHEN x.kind = 'refund' THEN -x.amount END), 0) AS spending,
+                               COALESCE((SELECT SUM(CASE WHEN p.kind = 'refund' THEN -p.amount ELSE p.amount END)
+                                         FROM activity_part p
+                                         JOIN account pa ON pa.id = p.account_id AND pa.deleted_at IS NULL
+                                              AND pa.status <> 'draft'
+                                         WHERE p.removed_at IS NULL AND p.occurred_on > :from
+                                           AND p.occurred_on <= :to
+                                           AND p.kind IN ('expense', 'refund', 'loan_payment')), 0) AS spending,
                                COALESCE(SUM(CASE WHEN x.kind = 'correction' THEN x.amount END), 0) AS corrections,
-                               COALESCE(SUM(CASE WHEN x.kind IN ('transfer_in', 'transfer_out', 'card_payment',
-                                                                 'card_payment_in') THEN %s END), 0) AS transfers
+                               COALESCE(SUM(CASE WHEN x.kind = 'loan_payment' THEN -(SELECT COALESCE(SUM(pp.amount), 0)
+                                                    FROM activity_portion pp
+                                                    WHERE pp.activity_id = x.id AND pp.kind = 'principal')
+                                                 WHEN x.kind IN ('transfer_in', 'transfer_out', 'card_payment',
+                                                                 'card_payment_in', 'loan_payment_in')
+                                                 THEN %s END), 0) AS transfers
                         FROM (SELECT * FROM activity WHERE removed_at IS NULL AND occurred_on > :from
                               AND occurred_on <= :to) x
                         JOIN account ac ON ac.id = x.account_id AND ac.deleted_at IS NULL AND ac.status <> 'draft'"""

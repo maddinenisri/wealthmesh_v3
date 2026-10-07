@@ -14,6 +14,9 @@ export type Transfer = {
   enteredByName: string | null
   reason: string | null
   status: 'effective' | 'replaced' | 'removed'
+  /** A loan payment only: `amount` is the whole payment, split into what reduces the debt and what is interest. */
+  principal: string | null
+  interest: string | null
 }
 
 /** The Balances a transfer would leave, and for an expense that becomes a transfer the month's spending. */
@@ -31,10 +34,13 @@ export type NewTransfer = {
   enteredByMemberId: string
   /** Optional on a correction; shown in history. */
   reason?: string
+  /** A loan payment only: both are refused on a transfer or a card payment. Interest may be left out (none). */
+  principal?: string
+  interest?: string
 }
 
-/** A transfer and a payment to a card are the same pair on the server, under two routes (D-036). */
-export type MovementPath = 'transfers' | 'card-payments'
+/** A transfer, a payment to a card and a payment to a loan are the same pair on the server, under three routes. */
+export type MovementPath = 'transfers' | 'card-payments' | 'loan-payments'
 
 const bad = () => new Error('Unexpected response from the server.')
 
@@ -75,6 +81,8 @@ function parseTransfer(value: unknown): Transfer {
     enteredByName: strOrNull(data.enteredByName),
     reason: strOrNull(data.reason),
     status,
+    principal: strOrNull(data.principal),
+    interest: strOrNull(data.interest),
   }
 }
 
@@ -144,6 +152,10 @@ export const changeTransfer = (
     parse: parseTransfer,
   })
 
+/** One loan payment with its portions, for correcting or removing it from either account's list. */
+export const getLoanPayment = (movementId: string) =>
+  request(`/loan-payments/${movementId}`, { parse: parseTransfer })
+
 /** An expense that was really a transfer into `toAccountId`. A reason is required. */
 export const convertToTransfer = (
   accountId: string,
@@ -164,6 +176,8 @@ export const previewTransfer = (
     fromAccountId: string
     toAccountId: string
     amount?: string
+    principal?: string
+    interest?: string
     occurredOn?: string
     movementId?: string
     activityId?: string

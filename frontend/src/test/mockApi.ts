@@ -44,6 +44,9 @@ export type MockActivity = {
   replacesId?: string | null
   /** The two rows of a transfer share one movement id. */
   movementId?: string
+  /** The paying row of a loan payment: the principal it carries, and the interest (spending). */
+  principal?: string
+  interest?: string
   /** Set when the entry was removed or replaced; such rows never count. */
   removedAt?: string | null
   events?: { action: string; byName: string; at: string }[]
@@ -242,6 +245,18 @@ const SEEDED: MockCategory[] = [
     kind: 'spending',
     defaultClass: 'essential',
   },
+  {
+    id: 'a16a0000-0000-4000-8000-000000000001',
+    name: 'Loan interest',
+    kind: 'spending',
+    defaultClass: 'essential',
+  },
+  {
+    id: 'a16a0000-0000-4000-8000-000000000002',
+    name: 'Mortgage interest',
+    kind: 'spending',
+    defaultClass: 'essential',
+  },
 ]
 
 /** The live list: `mockApi()` resets it to the seeded categories, and a created category is added to it. */
@@ -292,7 +307,19 @@ function decorate(a: MockActivity, accounts: MockAccount[], all: MockActivity[] 
     categoryName: CATEGORIES.find((c) => c.id === effectiveId(a.categoryId))?.name ?? null,
     categoryArchived: CATEGORIES.find((c) => c.id === effectiveId(a.categoryId))?.archived ?? false,
     classification: a.classification ?? null,
-    portions: shownPortions(a),
+    portions:
+      a.kind === 'loan_payment' && Number(a.interest ?? 0) > 0
+        ? shownPortions({
+            ...a,
+            portions: [
+              {
+                categoryId: 'a16a0000-0000-4000-8000-000000000001',
+                classification: 'essential',
+                amount: Number(a.interest).toFixed(2),
+              },
+            ],
+          })
+        : shownPortions(a),
     movementId: a.movementId ?? null,
     counterAccountId: counter?.accountId ?? null,
     counterAccountName: counter
@@ -422,7 +449,10 @@ export function mockApi(
     state.members.find((m) => m.id === id)?.name ?? ''
   const live = () => state.activity.filter((a) => !a.removedAt)
   const signed = (a: MockActivity) =>
-    a.kind === 'expense' || a.kind === 'transfer_out' || a.kind === 'card_payment'
+    a.kind === 'expense' ||
+    a.kind === 'transfer_out' ||
+    a.kind === 'card_payment' ||
+    a.kind === 'loan_payment'
       ? -Number(a.amount)
       : Number(a.amount)
   /** Opening amount plus live activity up to a date, leaving out one row. */
@@ -583,8 +613,13 @@ export function mockApi(
   const rowsOf = (movementId: string) => state.activity.filter((a) => a.movementId === movementId)
   const transferView = (movementId: string) => {
     const rows = rowsOf(movementId)
-    const out = rows.find((a) => a.kind === 'transfer_out' || a.kind === 'card_payment')!
-    const into = rows.find((a) => a.kind === 'transfer_in' || a.kind === 'card_payment_in')!
+    const out = rows.find(
+      (a) => a.kind === 'transfer_out' || a.kind === 'card_payment' || a.kind === 'loan_payment',
+    )!
+    const into = rows.find(
+      (a) =>
+        a.kind === 'transfer_in' || a.kind === 'card_payment_in' || a.kind === 'loan_payment_in',
+    )!
     const name = (a: MockActivity) => state.accounts.find((x) => x.id === a.accountId)?.name ?? ''
     const replaced = rows.some((a) => state.activity.some((r) => r.replacesId === a.id))
     return {
@@ -597,6 +632,8 @@ export function mockApi(
       enteredByName: nameOf(out.enteredByMemberId),
       reason: out.reason ?? null,
       status: replaced ? 'replaced' : out.removedAt ? 'removed' : 'effective',
+      principal: out.principal ?? null,
+      interest: out.principal ? (out.interest ?? '0.00') : null,
     }
   }
   const writePair = (
@@ -608,12 +645,16 @@ export function mockApi(
       description?: string
       enteredByMemberId: string
       reason?: string
+      principal?: string
+      interest?: string
     },
     key: string,
     replaces?: { out: MockActivity; into?: MockActivity },
     kinds: readonly [string, string] = ['transfer_out', 'transfer_in'],
   ) => {
     const movementId = newId()
+    // A loan payment: the paying row holds the whole payment, the loan's row the principal.
+    const inAmount = body.principal ? Number(body.principal) : Number(body.amount)
     const base = {
       kind: '',
       amount: Number(body.amount).toFixed(2),
@@ -633,6 +674,9 @@ export function mockApi(
         kind: kinds[0],
         key,
         replacesId: replaces?.out.id,
+        ...(body.principal
+          ? { principal: body.principal, interest: Number(body.interest ?? 0).toFixed(2) }
+          : {}),
       },
       {
         ...base,
@@ -640,6 +684,7 @@ export function mockApi(
         accountId: body.toAccountId,
         kind: kinds[1],
         replacesId: replaces?.into?.id,
+        amount: inAmount.toFixed(2),
       },
     )
     adjust(
@@ -648,7 +693,7 @@ export function mockApi(
     )
     adjust(
       state.accounts.find((a) => a.id === body.toAccountId)!,
-      Number(body.amount),
+      inAmount,
     )
     return movementId
   }
@@ -668,6 +713,13 @@ export function mockApi(
     const from = state.accounts.find((a) => a.id === fromId)
     const to = state.accounts.find((a) => a.id === toId)
     if (!from || !to) return problem(404, 'Account not found')
+    if (path === 'loan-payments') {
+      if (from.type !== 'checking' && from.type !== 'savings')
+        return problem(400, 'Pay a loan from a checking or savings account')
+      return to.type === 'loan' ? null : problem(400, 'Choose a loan to pay')
+    }
+    if (from.type === 'loan' || to.type === 'loan')
+      return problem(400, 'Money cannot be moved to or from this type of account yet')
     if (path === 'transfers') {
       return from.type === 'credit_card' || to.type === 'credit_card'
         ? problem(400, 'Use Record payment to pay a card')
@@ -677,6 +729,29 @@ export function mockApi(
       return problem(400, 'Pay a card from a checking or savings account')
     return to.type === 'credit_card' ? null : problem(400, 'Choose a card to pay')
   }
+  const dollars = (value: number) =>
+    `$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  /** The server's rules for the portions of a loan payment, in its words. */
+  const loanProblem = (body: { amount: string; principal?: string; interest?: string }) => {
+    if (body.principal == null || body.principal === '') return problem(400, 'Enter the principal')
+    const part = Number(body.principal)
+    if (!(part > 0)) return problem(400, 'Enter a principal above $0.00')
+    const rest = body.interest ? Number(body.interest) : 0
+    if (rest < 0) return problem(400, 'Enter zero or a positive interest')
+    const left = Math.round((Number(body.amount) - part - rest) * 100) / 100
+    if (left > 0) return problem(400, `${dollars(left)} remains unassigned`)
+    if (left < 0)
+      return problem(400, `Principal and interest are ${dollars(left)} more than the payment`)
+    return null
+  }
+  /** A payment may not take the debt below zero: `owed` is what the loan owes before this payment. */
+  const overpaidProblem = (principal: number, owed: number) =>
+    principal > owed + 0.005
+      ? problem(
+          400,
+          `Principal ${dollars(principal)} is ${dollars(principal - owed)} more than the ${dollars(owed)} owed. Correct the principal, or record an actual lender refund or other asset separately.`,
+        )
+      : null
   const retire = (rows: MockActivity[], sign: 1 | -1, action: string, memberId: string) => {
     rows.forEach((row) => {
       row.removedAt = sign === 1 ? '2026-10-03T09:10:00Z' : null
@@ -692,7 +767,7 @@ export function mockApi(
   }
   /** The movement routes for one kind of pair: transfers, or card payments (bank pays card). */
   const movementHandlers = (
-    path: 'transfers' | 'card-payments',
+    path: 'transfers' | 'card-payments' | 'loan-payments',
     kinds: readonly [string, string],
     noun: string,
   ) => [
@@ -709,6 +784,15 @@ export function mockApi(
         return problem(400, 'Future activity is not saved as completed history yet')
       const existing = state.activity.find((a) => a.key === key && a.movementId)
       if (existing) return HttpResponse.json(transferView(existing.movementId!), { status: 200 })
+      if (path === 'loan-payments') {
+        const split = loanProblem(body)
+        if (split) return split
+        const loan = state.accounts.find((a) => a.id === body.toAccountId)!
+        const over = overpaidProblem(Number(body.principal), -Number(loan.balance.amount))
+        if (over) return over
+      } else if (body.principal != null || body.interest != null) {
+        return problem(400, 'Principal and interest apply to a loan payment only')
+      }
       return HttpResponse.json(transferView(writePair(body, key, undefined, kinds)), {
         status: 201,
       })
@@ -730,8 +814,21 @@ export function mockApi(
         ;[...rows].reverse().forEach((row) => add(row.accountId, -signed(row)))
       }
       if (expense) add(expense.accountId, Number(expense.amount))
+      let inAmount = amount
+      if (path === 'loan-payments') {
+        const split = loanProblem({
+          amount: String(amount),
+          principal: query.get('principal') ?? undefined,
+          interest: query.get('interest') ?? undefined,
+        })
+        if (split) return split
+        inAmount = Number(query.get('principal'))
+        const owed = -(Number(to.balance.amount) + (delta.get(to.id) ?? 0))
+        const over = overpaidProblem(inAmount, owed)
+        if (over) return over
+      }
       add(from.id, -amount)
-      add(to.id, amount)
+      add(to.id, inAmount)
       const month = expense?.occurredOn.slice(0, 7)
       const before = month
         ? live()
@@ -770,6 +867,16 @@ export function mockApi(
       if (existing) return HttpResponse.json(transferView(existing.movementId!), { status: 200 })
       if (rows.some((row) => row.removedAt))
         return problem(409, `This ${noun} was already changed or removed.`)
+      if (path === 'loan-payments') {
+        const split = loanProblem(body)
+        if (split) return split
+        const loan = state.accounts.find((a) => a.id === body.toAccountId)!
+        const before = Number(rows.find((r) => r.kind === kinds[1])?.amount ?? 0)
+        const over = overpaidProblem(Number(body.principal), -Number(loan.balance.amount) + before)
+        if (over) return over
+      } else if (body.principal != null || body.interest != null) {
+        return problem(400, 'Principal and interest apply to a loan payment only')
+      }
       retire(rows, 1, 'replaced', body.enteredByMemberId)
       const out = rows.find((a) => a.kind === kinds[0])!
       const into = rows.find((a) => a.kind === kinds[1])!
@@ -796,10 +903,21 @@ export function mockApi(
         return HttpResponse.json(transferView(String(params.id)))
       }),
     ),
+    ...(path === 'loan-payments'
+      ? [
+          http.get('*/api/v1/loan-payments/:id', ({ request, params }) => {
+            log(request)
+            return rowsOf(String(params.id)).length === 2
+              ? HttpResponse.json(transferView(String(params.id)))
+              : problem(404, 'Payment not found')
+          }),
+        ]
+      : []),
   ]
   const transferHandlers = () => [
     ...movementHandlers('transfers', ['transfer_out', 'transfer_in'], 'transfer'),
     ...movementHandlers('card-payments', ['card_payment', 'card_payment_in'], 'payment'),
+    ...movementHandlers('loan-payments', ['loan_payment', 'loan_payment_in'], 'payment'),
     http.post(
       '*/api/v1/accounts/:id/activity/:activityId/transfer',
       async ({ request, params }) => {

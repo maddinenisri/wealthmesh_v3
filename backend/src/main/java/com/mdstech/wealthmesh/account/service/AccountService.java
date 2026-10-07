@@ -123,13 +123,7 @@ public class AccountService {
      */
     public static BigDecimal signed(AccountType type, BigDecimal amount, String side) {
         if (type.kind() == AccountType.Kind.DEBT) {
-            if (side != null) {
-                throw bad("Owed or Card credit applies to a card only");
-            }
-            if (amount.signum() < 0) {
-                throw bad("Enter zero or a positive amount owed");
-            }
-            return amount.negate();
+            return owed(amount, side);
         }
         if (type != AccountType.CREDIT_CARD) {
             if (side != null) {
@@ -148,6 +142,17 @@ public class AccountService {
             case "credit" -> amount;
             default -> throw bad("Choose Owed or Card credit");
         };
+    }
+
+    /** A debt is typed as a positive amount owed with no side, and stored negative like a card that is owed. */
+    private static BigDecimal owed(BigDecimal amount, String side) {
+        if (side != null) {
+            throw bad("Owed or Card credit applies to a card only");
+        }
+        if (amount.signum() < 0) {
+            throw bad("Enter zero or a positive amount owed");
+        }
+        return amount.negate();
     }
 
     /** The same rule for an account read from the database: its type is the wire name. */

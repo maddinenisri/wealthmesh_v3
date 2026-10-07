@@ -33,4 +33,64 @@ abstract class DebtTestBase extends ValuedTestBase {
     protected void assertOwed(String account, String stored) {
         assertBalance(account, stored);
     }
+
+    /** A loan payment body: `amount` leaves the paying account, `principal` lowers the debt, `interest` is spent. */
+    protected String paymentBody(String from, String to, String amount, String principal, String interest,
+            String date, String member, String reason) {
+        return """
+                {"fromAccountId": "%s", "toAccountId": "%s", "amount": "%s", "principal": %s, "interest": %s,
+                 "occurredOn": "%s", "enteredByMemberId": "%s"%s}""".formatted(from, to, amount,
+                quoted(principal), quoted(interest), date, member,
+                reason == null ? "" : ", \"reason\": \"" + reason + "\"");
+    }
+
+    private static String quoted(String value) {
+        return value == null ? "null" : "\"" + value + "\"";
+    }
+
+    protected WebTestClient.ResponseSpec postLoanPayment(String key, String from, String to, String amount,
+            String principal, String interest, String date, String member) {
+        return webTestClient.post().uri("/api/v1/loan-payments").contentType(MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", key)
+                .bodyValue(paymentBody(from, to, amount, principal, interest, date, member, null)).exchange();
+    }
+
+    /** Saves a payment by Maya (expects 201) and returns its movement id. */
+    protected String loanPayment(String key, String from, String to, String principal, String interest, String date) {
+        AtomicReference<String> id = new AtomicReference<>();
+        String amount = new java.math.BigDecimal(principal).add(new java.math.BigDecimal(interest)).toPlainString();
+        postLoanPayment(key, from, to, amount, principal, interest, date, mayaId).expectStatus().isCreated()
+                .expectBody().jsonPath("$.movementId").value(String.class, id::set);
+        return id.get();
+    }
+
+    protected WebTestClient.ResponseSpec previewLoanPayment(String query) {
+        return webTestClient.get().uri("/api/v1/loan-payments/preview?" + query).exchange();
+    }
+
+    protected WebTestClient.ResponseSpec replaceLoanPayment(String movement, String key, String body) {
+        return webTestClient.post().uri("/api/v1/loan-payments/{id}/replacement", movement)
+                .contentType(MediaType.APPLICATION_JSON).header("Idempotency-Key", key).bodyValue(body).exchange();
+    }
+
+    protected WebTestClient.ResponseSpec removeLoanPayment(String movement, String member) {
+        return webTestClient.post().uri("/api/v1/loan-payments/{id}/removal", movement)
+                .contentType(MediaType.APPLICATION_JSON).bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(member))
+                .exchange();
+    }
+
+    protected WebTestClient.ResponseSpec undoLoanPayment(String movement, String member) {
+        return webTestClient.post().uri("/api/v1/loan-payments/{id}/undo", movement)
+                .contentType(MediaType.APPLICATION_JSON).bodyValue("{\"enteredByMemberId\": \"%s\"}".formatted(member))
+                .exchange();
+    }
+
+    /** The id of a seeded category by its name. */
+    protected String categoryId(String name) {
+        AtomicReference<String> id = new AtomicReference<>();
+        webTestClient.get().uri("/api/v1/categories").exchange().expectStatus().isOk().expectBody()
+                .jsonPath("$[?(@.name == '" + name + "')].id")
+                .value(java.util.List.class, ids -> id.set((String) ids.get(0)));
+        return id.get();
+    }
 }

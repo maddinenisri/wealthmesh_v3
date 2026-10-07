@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   changeTransfer,
   convertToTransfer,
+  getLoanPayment,
   previewTransfer,
   replaceTransfer,
   saveTransfer,
@@ -72,6 +73,8 @@ export function useTransferPreview(
     fromAccountId: string
     toAccountId: string
     amount?: string
+    principal?: string
+    interest?: string
     occurredOn?: string
     movementId?: string
     activityId?: string
@@ -87,6 +90,16 @@ export function useTransferPreview(
     queryKey: ['transfer-preview', path, query],
     queryFn: () => previewTransfer(query, path),
     enabled: ready,
+    gcTime: 0,
+  })
+}
+
+/** A loan payment as saved: the whole payment and its principal and interest. Waits for an id. */
+export function useLoanPayment(movementId: string | undefined) {
+  return useQuery({
+    queryKey: ['loan-payment', movementId],
+    queryFn: () => getLoanPayment(movementId!),
+    enabled: !!movementId,
     gcTime: 0,
   })
 }

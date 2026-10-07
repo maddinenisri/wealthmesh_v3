@@ -27,6 +27,7 @@ import com.mdstech.wealthmesh.activity.repository.ActivityRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.activity.repository.MovementStore;
 import com.mdstech.wealthmesh.activity.repository.MovementStore.Leg;
+import com.mdstech.wealthmesh.activity.repository.PortionStore;
 import com.mdstech.wealthmesh.money.Money;
 
 import reactor.core.publisher.Mono;
@@ -35,22 +36,43 @@ import reactor.core.publisher.Mono;
  * Linked movements (foundations 7): a transfer is two ledger rows sharing one movement id, created, replaced,
  * removed and restored together in one transaction. Every writer locks every account it touches, lowest id first,
  * then judges the rows, the dates and the person again under those locks (D-034, D-035). A replayed save key returns
- * the stored movement (D-024). Card payments (slice 08) add a {@link MovementKind} and reuse all of it.
+ * the stored movement (D-024). Card payments (slice 08) add a {@link MovementKind} and reuse all of it. A loan
+ * payment (slice 16, D-054) is the same pair with two amounts: the paying row holds the whole payment with its portions
+ * (the principal, and the interest as spending) and the loan row holds the principal.
  */
 public class MovementService {
 
     /**
      * The two row kinds of a movement: the side that gives money and the side that receives it, what the person calls
-     * it, and the rule for which two accounts it may join (an error message, or null when the pair is allowed).
+     * it, the rule for which two accounts it may join (an error message, or null when the pair is allowed), and the
+     * category its interest counts under (null for a kind that has no portions: both rows then hold one amount).
      */
     public record MovementKind(String outKind, String inKind, String noun,
-            BiFunction<Account, Account, String> refusal) {
+            BiFunction<Account, Account, String> refusal, UUID interestCategory) {
+        /** The seeded "Loan interest" category (V25), found by id so a rename does not lose it. */
+        public static final UUID LOAN_INTEREST = UUID.fromString("a16a0000-0000-4000-8000-000000000001");
+
         public static final MovementKind TRANSFER = new MovementKind("transfer_out", "transfer_in", "transfer",
-                (from, to) -> AccountType.isCard(from.type()) || AccountType.isCard(to.type()) ? CARD_TYPE : null);
+                (from, to) -> AccountType.isCard(from.type()) || AccountType.isCard(to.type()) ? CARD_TYPE : null,
+                null);
         /** A payment: a checking or savings account pays a card (CARD_006, CARD_007). */
         public static final MovementKind CARD_PAYMENT = new MovementKind("card_payment", "card_payment_in", "payment",
                 (from, to) -> !AccountType.paysCards(from.type()) ? "Pay a card from a checking or savings account"
-                        : !AccountType.isCard(to.type()) ? "Choose a card to pay" : null);
+                        : !AccountType.isCard(to.type()) ? "Choose a card to pay" : null, null);
+        /** A payment from checking or savings to a loan: the whole amount out, the principal in (LOAN_003). */
+        public static final MovementKind LOAN_PAYMENT = new MovementKind("loan_payment", "loan_payment_in", "payment",
+                (from, to) -> !AccountType.paysCards(from.type()) ? "Pay a loan from a checking or savings account"
+                        : !AccountType.isDebt(to.type()) ? "Choose a loan to pay" : null, LOAN_INTEREST);
+
+        /** True for a kind whose paying row is split into principal and interest. */
+        boolean splits() {
+            return interestCategory != null;
+        }
+
+        /** True when the second account may be a debt (a loan): it is read like a ledger account for this kind only. */
+        boolean paysDebt() {
+            return splits();
+        }
     }
 
     /** The saved movement and whether this call created it (false for a replay). */
@@ -60,8 +82,13 @@ public class MovementService {
     private record Pair(Account from, Account to) {
     }
 
-    private record Parsed(UUID fromId, UUID toId, BigDecimal amount, LocalDate on, String description, UUID memberId,
-            String reason) {
+    /** The portions of a loan payment: what reduces the debt, and what is interest. */
+    record Split(BigDecimal principal, BigDecimal interest) {
+    }
+
+    /** `inAmount` is what the receiving row holds: the amount, or the principal of a loan payment. */
+    private record Parsed(UUID fromId, UUID toId, BigDecimal amount, BigDecimal inAmount, Split split, LocalDate on,
+            String description, UUID memberId, String reason) {
     }
 
     private static final Duration KEY_LIFETIME = EntryService.KEY_LIFETIME;
@@ -76,14 +103,16 @@ public class MovementService {
     private final ActivityRepository activities;
     private final ActivityStore store;
     private final MovementStore movements;
+    private final PortionStore portions;
     private final MovementKind kind;
     private final Clock clock;
     private final TransactionalOperator transactions;
 
     public MovementService(AccountRepository accounts, EntryValidator validator, ActivityRepository activities,
-            ActivityStore store, MovementStore movements, MovementKind kind, Clock clock,
+            ActivityStore store, MovementStore movements, PortionStore portions, MovementKind kind, Clock clock,
             TransactionalOperator transactions) {
         this.accounts = accounts;
+        this.portions = portions;
         this.validator = validator;
         this.activities = activities;
         this.store = store;
@@ -200,6 +229,7 @@ public class MovementService {
     private Mono<Saved> writeNew(Pair pair, Parsed parsed, String key, Instant now, UUID replacesOut, UUID replacesIn) {
         return requireStates(pair, Set.of()).then(Mono.defer(() -> checkDate(pair, parsed.on())))
                 .then(Mono.defer(() -> validator.memberLocked(pair.from(), parsed.memberId())))
+                .then(Mono.defer(() -> requireNotOverpaid(pair, parsed)))
                 .then(Mono.defer(() -> insertPair(pair, parsed, key, now, replacesOut, replacesIn)))
                 .flatMap(movement -> get(movement)).map(t -> new Saved(t, true));
     }
@@ -214,6 +244,7 @@ public class MovementService {
                         .then(Mono.defer(() -> movements.removePair(movementId, parsed.memberId(), now)))
                         .flatMap(n -> n == 2 ? events(fresh, "replaced", parsed.memberId(), now)
                                 : Mono.error(changed()))
+                        .then(Mono.defer(() -> requireNotOverpaid(pair, parsed)))
                         .then(Mono.defer(() -> insertPair(pair, parsed, key, now, leg(fresh, kind.outKind()).id(),
                                 leg(fresh, kind.inKind()).id())))
                         .flatMap(this::get).map(t -> new Saved(t, true))));
@@ -224,7 +255,8 @@ public class MovementService {
                 .switchIfEmpty(Mono.error(conflict("This entry was already changed or removed.")))
                 .flatMap(original -> loadPair(original.accountId(), request.toAccountId()).flatMap(pair -> {
                     Parsed parsed = new Parsed(original.accountId(), request.toAccountId(), original.amount(),
-                            original.occurredOn(), null, request.enteredByMemberId(), request.reason().strip());
+                            original.amount(), null, original.occurredOn(), null, request.enteredByMemberId(),
+                            request.reason().strip());
                     return requireStates(pair, Set.of(original.accountId()))
                             .then(Mono.defer(() -> checkDate(pair, original.occurredOn())))
                             .then(Mono.defer(() -> validator.memberLocked(pair.from(), parsed.memberId())))
@@ -270,8 +302,12 @@ public class MovementService {
         UUID movement = UUID.randomUUID();
         return movements.insertLeg(movement, pair.from().id(), kind.outKind(), parsed.amount(), parsed.on(),
                         parsed.description(), parsed.memberId(), key, now, parsed.reason(), replacesOut)
-                .then(Mono.defer(() -> movements.insertLeg(movement, pair.to().id(), kind.inKind(), parsed.amount(),
-                        parsed.on(), parsed.description(), parsed.memberId(), null, now, parsed.reason(), replacesIn)))
+                .flatMap(outId -> parsed.split() == null ? Mono.<Void>empty()
+                        : portions.insertLoan(outId, parsed.split().principal(), parsed.split().interest(),
+                                kind.interestCategory()))
+                .then(Mono.defer(() -> movements.insertLeg(movement, pair.to().id(), kind.inKind(),
+                        parsed.inAmount(), parsed.on(), parsed.description(), parsed.memberId(), null, now,
+                        parsed.reason(), replacesIn)))
                 .thenReturn(movement);
     }
 
@@ -286,18 +322,103 @@ public class MovementService {
             if (request.fromAccountId().equals(request.toAccountId())) {
                 throw EntryValidator.bad("Choose a different account");
             }
-            BigDecimal amount = EntryValidator.amount(request.amount());
-            String reason = request.reason() == null || request.reason().isBlank() ? null : request.reason().strip();
-            return new Parsed(request.fromAccountId(), request.toAccountId(), amount, request.occurredOn(),
-                    EntryValidator.description(request.description()), request.enteredByMemberId(), reason);
+            return parsed(request.fromAccountId(), request.toAccountId(), request);
         });
     }
 
-    private static Parsed request(Pair pair, TransferRequest request) {
+    private Parsed request(Pair pair, TransferRequest request) {
+        return parsed(pair.from().id(), pair.to().id(), request);
+    }
+
+    private Parsed parsed(UUID fromId, UUID toId, TransferRequest request) {
         BigDecimal amount = EntryValidator.amount(request.amount());
+        Split split = split(kind, amount, request.principal(), request.interest());
         String reason = request.reason() == null || request.reason().isBlank() ? null : request.reason().strip();
-        return new Parsed(pair.from().id(), pair.to().id(), amount, request.occurredOn(),
-                EntryValidator.description(request.description()), request.enteredByMemberId(), reason);
+        return new Parsed(fromId, toId, amount, split == null ? amount : split.principal(), split,
+                request.occurredOn(), EntryValidator.description(request.description()),
+                request.enteredByMemberId(), reason);
+    }
+
+    /**
+     * The portions of a payment: none for a transfer or a card payment (principal and interest are refused there, so
+     * both rows always hold one amount); for a loan payment a principal above zero and an interest of zero or more
+     * that together are the amount (MORTGAGE_006 wording: what remains unassigned is named).
+     */
+    static Split split(MovementKind kind, BigDecimal amount, Object principal, Object interest) {
+        if (!kind.splits()) {
+            if (principal != null || interest != null) {
+                throw EntryValidator.bad("Principal and interest apply to a loan payment only");
+            }
+            return null;
+        }
+        BigDecimal p = principalOf(principal);
+        BigDecimal i = interestOf(interest);
+        BigDecimal rest = amount.subtract(p).subtract(i);
+        if (rest.signum() > 0) {
+            throw EntryValidator.bad(dollars(rest) + " remains unassigned");
+        }
+        if (rest.signum() < 0) {
+            throw EntryValidator.bad("Principal and interest are " + dollars(rest.negate())
+                    + " more than the payment");
+        }
+        return new Split(p, i);
+    }
+
+    private static boolean blank(Object value) {
+        return value == null || value instanceof String text && text.isBlank();
+    }
+
+    private static BigDecimal principalOf(Object principal) {
+        if (blank(principal)) {
+            throw EntryValidator.bad("Enter the principal");
+        }
+        BigDecimal p = portion(principal);
+        if (p.signum() <= 0) {
+            throw EntryValidator.bad("Enter a principal above $0.00");
+        }
+        return p;
+    }
+
+    private static BigDecimal interestOf(Object interest) {
+        BigDecimal i = blank(interest) ? BigDecimal.ZERO : portion(interest);
+        if (i.signum() < 0) {
+            throw EntryValidator.bad("Enter zero or a positive interest");
+        }
+        return i;
+    }
+
+    private static BigDecimal portion(Object value) {
+        if (value instanceof String text) {
+            return Money.parse(text).orElseThrow(() -> EntryValidator.bad("Enter a valid amount"));
+        }
+        throw EntryValidator.bad("Enter a valid amount");
+    }
+
+    static String dollars(BigDecimal amount) {
+        return String.format(java.util.Locale.US, "$%,.2f", amount);
+    }
+
+    /** The refusal for principal above what is owed: an overpayment must not turn a debt into an asset (LOAN_006). */
+    static String overpayment(BigDecimal principal, BigDecimal owed) {
+        return "Principal " + dollars(principal) + " is " + dollars(principal.subtract(owed)) + " more than the "
+                + dollars(owed) + " owed. Correct the principal, or record an actual lender refund or other asset "
+                + "separately.";
+    }
+
+    /**
+     * A loan payment may not take the debt below zero. The debt is read under the locks, with any payment being
+     * replaced already removed, so the figure is the one the new payment will meet.
+     */
+    private Mono<Void> requireNotOverpaid(Pair pair, Parsed parsed) {
+        if (parsed.split() == null) {
+            return Mono.empty();
+        }
+        return store.deltaOf(pair.to().id()).flatMap(delta -> {
+            BigDecimal owed = pair.to().openingAmount().add(delta.amount()).negate();
+            return parsed.split().principal().compareTo(owed) > 0
+                    ? Mono.<Void>error(EntryValidator.bad(overpayment(parsed.split().principal(), owed)))
+                    : Mono.<Void>empty();
+        });
     }
 
     /** Both accounts exist, belong to one household (another household's is not found) and hold activity. */
@@ -308,8 +429,9 @@ public class MovementService {
                     if (!both.getT1().householdId().equals(both.getT2().householdId())) {
                         return Mono.error(notFound("Account not found: " + toId));
                     }
-                    if (!AccountType.holdsActivity(both.getT1().type())
-                            || !AccountType.holdsActivity(both.getT2().type())) {
+                    boolean toOk = AccountType.holdsActivity(both.getT2().type())
+                            || kind.paysDebt() && AccountType.isDebt(both.getT2().type());
+                    if (!AccountType.holdsActivity(both.getT1().type()) || !toOk) {
                         return Mono.error(EntryValidator.bad(WRONG_TYPE));
                     }
                     String refusal = kind.refusal().apply(both.getT1(), both.getT2());
@@ -397,7 +519,8 @@ public class MovementService {
         Leg out = leg(existing, kind.outKind());
         Leg in = leg(existing, kind.inKind());
         return out.accountId().equals(parsed.fromId()) && in.accountId().equals(parsed.toId())
-                && out.amount().compareTo(parsed.amount()) == 0 && out.occurredOn().equals(parsed.on())
+                && out.amount().compareTo(parsed.amount()) == 0 && in.amount().compareTo(parsed.inAmount()) == 0
+                && out.occurredOn().equals(parsed.on())
                 && java.util.Objects.equals(out.description(), parsed.description())
                 && java.util.Objects.equals(out.memberId(), parsed.memberId())
                 && java.util.Objects.equals(out.reason(), parsed.reason());
@@ -434,7 +557,8 @@ public class MovementService {
         return new Transfer(out.movementId(), new Transfer.Leg(out.id(), out.accountId(), out.accountName()),
                 new Transfer.Leg(in.id(), in.accountId(), in.accountName()), Money.format(out.amount()),
                 out.occurredOn(), out.description(), out.memberId(), out.memberName(), out.createdAt(), out.reason(),
-                status);
+                status, kind.splits() ? Money.format(out.principal()) : null,
+                kind.splits() ? Money.format(out.interest() == null ? BigDecimal.ZERO : out.interest()) : null);
     }
 
     private static String requireKey(String key) {

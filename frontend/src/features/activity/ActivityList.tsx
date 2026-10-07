@@ -47,7 +47,11 @@ export function ActivityList({
   return (
     <>
       {activity.data.length === 0 ? (
-        <p className="mb-4 mt-1 text-sm text-ink-muted">No money activity has been recorded yet.</p>
+        <p className="mb-4 mt-1 text-sm text-ink-muted">
+          {accountType === 'loan'
+            ? 'No payments have been recorded yet.'
+            : 'No money activity has been recorded yet.'}
+        </p>
       ) : (
         <div className="mb-4 mt-3 overflow-x-auto">
           <Table>
@@ -82,7 +86,14 @@ export function ActivityList({
                     </span>
                   </Td>
                   <Td>
-                    {entry.portions.length > 0 ? (
+                    {entry.kind === 'loan_payment_in' ? (
+                      'Principal'
+                    ) : entry.kind === 'loan_payment' ? (
+                      <>
+                        {entry.portions.length > 0 ? 'Includes interest' : 'No interest'}
+                        <PortionList portions={entry.portions} />
+                      </>
+                    ) : entry.portions.length > 0 ? (
                       <>
                         Split
                         <PortionList portions={entry.portions} />

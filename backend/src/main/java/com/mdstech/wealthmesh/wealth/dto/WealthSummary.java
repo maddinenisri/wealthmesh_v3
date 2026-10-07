@@ -8,10 +8,10 @@ import java.util.List;
  * savings with their own signed Balances (an overdraft stays negative there), `cards` lists every card with its signed
  * Balance (owed negative, Card credit positive) and `debtLines` lists what makes up `debts`: each card that is owed
  * and each overdrawn bank account, once (D-022, D-046). `loans` lists every loan with its signed Balance (owed
- * negative, D-053); an owed loan is also one of the `debtLines`. `propertyAndOther` lists the manually valued accounts with the
- * date of the value each one counts. Archived and closed accounts are included, labeled by status. `asOf` is the date
- * the figures are for; `notTracked` names the accounts that had not begun tracking then (they are not counted as
- * zero).
+ * negative, D-053); an owed loan is also one of the `debtLines`. `propertyAndOther` lists the manually valued
+ * accounts with the date of the value each one counts. Archived and closed accounts are included, labeled by
+ * status. `asOf` is the date the figures are for; `notTracked` names the accounts that had not begun tracking then
+ * (they are not counted as zero).
  */
 public record WealthSummary(LocalDate asOf, String financialAssets, String debts, String netWorth, Group bankMoney,
         Group cards, Group loans, Group propertyAndOther, List<Line> debtLines, List<NotTracked> notTracked) {

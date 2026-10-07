@@ -43,6 +43,25 @@ public class PortionStore {
         }).then();
     }
 
+    /**
+     * Writes the portions of a loan payment on its paying row: the principal, and the interest (when there is any) as
+     * a category portion under the loan's interest category, with that category's default class (D-042).
+     */
+    public Mono<Void> insertLoan(UUID activityId, BigDecimal principal, BigDecimal interest, UUID interestCategory) {
+        Mono<Long> principalRow = client.sql("INSERT INTO activity_portion (activity_id, seq, kind, amount) "
+                        + "VALUES (:activity, 1, 'principal', :amount)")
+                .bind("activity", activityId).bind("amount", principal).fetch().rowsUpdated();
+        if (interest.signum() == 0) {
+            return principalRow.then();
+        }
+        return principalRow.then(client.sql("INSERT INTO activity_portion "
+                        + "(activity_id, seq, kind, category_id, classification, amount) "
+                        + "SELECT :activity, 2, 'category', c.id, c.default_class, :amount FROM category c "
+                        + "WHERE c.id = :category")
+                .bind("activity", activityId).bind("amount", interest).bind("category", interestCategory)
+                .fetch().rowsUpdated()).then();
+    }
+
     /** The stored portions of one payment, in the order they were entered; empty for a payment that is not split. */
     public Mono<List<Portion>> of(UUID activityId) {
         return client.sql("SELECT category_id, classification, amount FROM activity_portion "

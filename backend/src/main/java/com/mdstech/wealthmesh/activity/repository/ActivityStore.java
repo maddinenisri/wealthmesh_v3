@@ -24,7 +24,8 @@ public class ActivityStore {
 
     /** Signed effect of one row on a bank Balance (foundations 6). */
     public static final String SIGNED = """
-            CASE WHEN kind IN ('income', 'refund', 'transfer_in', 'card_payment_in', 'interest', 'correction')
+            CASE WHEN kind IN ('income', 'refund', 'transfer_in', 'card_payment_in', 'loan_payment_in', 'interest',
+                              'correction')
                  THEN amount
                  ELSE -amount END""";
 
@@ -40,6 +41,11 @@ public class ActivityStore {
             LEFT JOIN activity cp ON cp.movement_id = a.movement_id AND cp.id <> a.id
             LEFT JOIN account cpa ON cpa.id = cp.account_id
             WHERE a.removed_at IS NULL""";
+
+    /** What a row shows as its amount in a spending list: a loan payment its interest, any other row its amount. */
+    private static final String SHOWN_AMOUNT = "CASE WHEN a.kind = 'loan_payment' "
+            + "THEN (SELECT COALESCE(SUM(lp.amount), 0) FROM activity_portion lp "
+            + "WHERE lp.activity_id = a.id AND lp.kind = 'category') ELSE a.amount END";
 
     private final DatabaseClient client;
     private final PortionStore portions;
@@ -203,14 +209,16 @@ public class ActivityStore {
 
     /**
      * What counts toward one month figure, defined once so every reader agrees (decision 3): spending is expenses
-     * minus refunds, income is income. `filter` selects the rows, `value` is each row's effect on the figure, and
-     * `prefix` is the table alias ("a." or ""). Transfers, payments and corrections are in neither.
+     * minus refunds plus the interest of loan payments, income is income. `filter` selects the rows, `value` is each
+     * row's effect on the figure, and `prefix` is the table alias ("a." or ""). Read it over `activity_part`: a loan
+     * payment is there as its interest portion only. Transfers, card payments, the principal of a loan payment and
+     * corrections are in neither.
      */
     public record Counted(String filter, String value) {
         public static Counted of(String kind, String prefix) {
             return "income".equals(kind)
                     ? new Counted(prefix + "kind = 'income'", prefix + "amount")
-                    : new Counted(prefix + "kind IN ('expense', 'refund')",
+                    : new Counted(prefix + "kind IN ('expense', 'refund', 'loan_payment')",
                             "CASE WHEN " + prefix + "kind = 'refund' THEN -" + prefix + "amount ELSE " + prefix
                                     + "amount END");
         }
@@ -219,7 +227,12 @@ public class ActivityStore {
     /** Entries of one kind (expense or income) in a month, optionally one category or only those with none. */
     public Flux<ActivityResponse> monthEntries(String kind, LocalDate from, LocalDate to, UUID categoryId,
             boolean uncategorized, UUID accountId) {
-        String sql = ENTRY_COLUMNS + " AND " + Counted.of(kind, "a.").filter()
+        // A loan payment is listed with its interest as the amount (the principal is not spending), and only when it
+        // has interest, so the list adds up to the totals read from `activity_part`.
+        String sql = ENTRY_COLUMNS.replace("a.kind, a.amount,", "a.kind, " + SHOWN_AMOUNT + " AS amount,")
+                + " AND " + Counted.of(kind, "a.").filter()
+                + " AND (a.kind <> 'loan_payment' OR EXISTS (SELECT 1 FROM activity_portion lp "
+                + "WHERE lp.activity_id = a.id AND lp.kind = 'category'))"
                 + " AND a.occurred_on >= :from AND a.occurred_on < :to"
                 + (categoryId == null ? "" : " AND EXISTS (SELECT 1 FROM activity_part ap JOIN category pc "
                         + "ON pc.id = ap.category_id WHERE ap.id = a.id "
@@ -241,7 +254,7 @@ public class ActivityStore {
     /** Total of one kind (expense or income) in a month; removed rows never count. */
     public Mono<BigDecimal> monthTotal(String kind, LocalDate from, LocalDate to) {
         Counted counted = Counted.of(kind, "");
-        return client.sql("SELECT COALESCE(SUM(" + counted.value() + "), 0) AS total FROM activity "
+        return client.sql("SELECT COALESCE(SUM(" + counted.value() + "), 0) AS total FROM activity_part "
                         + "WHERE removed_at IS NULL AND " + counted.filter()
                         + " AND occurred_on >= :from AND occurred_on < :to")
                 .bind("from", from).bind("to", to)
@@ -305,7 +318,7 @@ public class ActivityStore {
     public Flux<MonthTotal> spendingByMonth() {
         Counted counted = Counted.of("expense", "");
         return client.sql("SELECT to_char(occurred_on, 'YYYY-MM') AS month, SUM(" + counted.value() + ") AS total "
-                + "FROM activity WHERE removed_at IS NULL AND " + counted.filter() + " GROUP BY 1 ORDER BY 1")
+                + "FROM activity_part WHERE removed_at IS NULL AND " + counted.filter() + " GROUP BY 1 ORDER BY 1")
                 .map((row, meta) -> new MonthTotal(row.get("month", String.class), row.get("total", BigDecimal.class)))
                 .all();
     }
@@ -395,7 +408,7 @@ public class ActivityStore {
                 LEFT JOIN account cpa ON cpa.id = cp.account_id
                 WHERE a.account_id = :account
                   AND a.kind IN ('expense', 'income', 'refund', 'correction', 'transfer_in', 'transfer_out',
-                      'card_payment', 'card_payment_in')
+                      'card_payment', 'card_payment_in', 'loan_payment', 'loan_payment_in')
                 ORDER BY a.created_at DESC, a.occurred_on DESC""")
                 .bind("account", accountId)
                 .map((row, meta) -> new HistoryEntry(row.get("id", UUID.class), row.get("kind", String.class),

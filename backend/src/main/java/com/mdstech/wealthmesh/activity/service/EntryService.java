@@ -56,7 +56,7 @@ public class EntryService {
     }
 
     public Flux<ActivityResponse> activityOf(UUID accountId) {
-        return load(accountId).thenMany(Flux.defer(() -> store.forAccount(accountId)));
+        return loadReadable(accountId).thenMany(Flux.defer(() -> store.forAccount(accountId)));
     }
 
     /** `kind` is "expense" (money out) or "income" (money in): it fixes the category kind and Balance direction. */
@@ -124,6 +124,15 @@ public class EntryService {
         return accounts.findById(id).switchIfEmpty(Mono.error(
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
                 .flatMap(account -> AccountType.holdsActivity(account.type()) ? Mono.just(account)
+                        : Mono.error(bad("Money in and out cannot be recorded on this type of account yet")));
+    }
+
+    /** A ledger account, or a loan: it lists the payments made to it, though it takes no other money in or out. */
+    private Mono<Account> loadReadable(UUID id) {
+        return accounts.findById(id).switchIfEmpty(Mono.error(
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
+                .flatMap(account -> AccountType.holdsActivity(account.type()) || AccountType.isDebt(account.type())
+                        ? Mono.just(account)
                         : Mono.error(bad("Money in and out cannot be recorded on this type of account yet")));
     }
 
