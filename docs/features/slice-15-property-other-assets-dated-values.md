@@ -1,8 +1,8 @@
 # Slice 15: Property and other assets, dated values
 
 - Slice: 15 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/property/setup.feature` (002 to 006), `accounts/other-assets/setup.feature` (002 to 006), `accounts/lifecycle/dated-values.feature` (002, 004)
-- Status: in-progress (checkpoint 1)
-- Started: 2026-10-06 17:30 EDT (session clock)  Finished:  Commit:
+- Status: done (local, not pushed)
+- Started: 2026-10-06 17:30 EDT (session clock)  Finished: 2026-10-06  Commit: `b776e07` and the Land commit after it
 
 ## Prompts and directions
 
@@ -121,14 +121,29 @@ Run alone against the unfixed code: faults 3, 7 and 8 in e2e (red, then green af
 
 ## How it works
 
-(Written after Land.)
+(Written by a read-only agent from the diff and these notes; its claims were checked against the code and the screen title "Wealth over time" it gave was corrected to "Wealth on a date".)
+
+**What you can do.** Add account now offers Property and Other asset: owners, an optional Value (blank is $0.00) and a Value date, reviewed before saving. On the account page (no money buttons), **Record new value** reviews and saves a dated value; **Correct** replaces one (a reason is required, the original stays as "Replaced by a correction"); **Remove** and **Undo** soft-remove and restore; **Plan a future value** saves a future-dated plan that nothing counts. A date before the start is a reviewed **earlier start**: the old opening becomes a value on its own date. A "Changes" list keeps who, when and why. On the Household page, **Wealth on a date** shows wealth on any past date (a valued account shows the date of its value, "Older value" after 30 days, and accounts not yet tracking are named, not counted as zero), and **What changed** explains the difference between two dates.
+
+**What changed.** `V23` (one occurrence per due date) and `V24__account_value.sql`; `value/` (`ValueController`, `ValueService`, `ValueStore`); `AccountType` kinds; `ActivityStore.EFFECTIVE_VALUES`; `wealth/` (`WealthService`, `WealthStore`, `WealthChange`); `features/values/*`, `features/household/WealthOverTime.tsx`, `api/values.ts`, `hooks/useValues.ts`; tests `Value*ApiTests`, `ValuedSetupApiTests`, `WealthAsOfApiTests`, `RecurringOccurrenceApiTests`, `Values*.test.tsx`, `WealthOverTime.test.tsx`, `16-valued-assets.spec.ts`.
+
+**Record a value.** (1) The form asks the server to review (nothing written). (2) Confirm sends one save key. (3) The server locks the account row, reads the key under the lock (a retry replays), checks the account is active (a correction, removal, Undo or start move needs only not closed), then the person under a share lock and the rules (not future unless a plan, not before the start). (4) The row is written with its event. (5) The Balance everywhere is the latest effective value (not removed, not replaced, not a plan), read through one place.
+
+**Decisions.** D-050 (valued accounts and dated values), D-051 (wealth on a date, the change identity, the 30-day constant), D-052 (one occurrence per due date, Reschedule onto a settled date refused, by-name retry after a rename). Left: the "Value when tracking began" row can be removed; the slice 14 untested inventory cells and the shorter-batch retry; slice 16 must grow the change identity with principal and interest kinds.
+
+**Verify.** `npm test`, `npm run e2e`, `npm run coverage -- --require --slice 15` (12/12), then the Household page and an account page at 710px and 1280px.
 
 ## Handoff
 
-(Written at Land.)
+- Built: groups 0 to 5, V23 and V24, D-050 to D-052, Q-050 to Q-053. Commits are local, nothing pushed (owner's instruction).
+- Watch for: any new reader of a Balance must go through `ActivityStore.deltaOf` or `deltasByAccount` (a valued account's value enters as a Delta) or read effective values with `NOT planned`; a tie of two values on one date is broken by save time, so the system "Value when tracking began" row is dated at the account's creation; the shared test clock is fixed at noon, so a tie test must move it (`clock.setAt`); run Gradle test classes one pattern per invocation (several `--tests` patterns together interfered); an e2e line in a serial describe cannot run alone if it needs an account made earlier in the describe.
+- Slice 16 (loans, mortgages): `WealthStore.flowsBetween` and the identity test must grow with principal and interest kinds; `DATED_VALUE_001` and `003` reuse the plan and the as-of reader; `AccountType.Kind.VALUED` or a new `DEBT` kind decides the Balance strategy.
+- Left open: the removable "Value when tracking began" row; slice 14's untested inventory cells (record vs removal of its entry, record held vs archive, category merge, archived or closed by deleted and by paused, same-key concurrency except Record) and the shorter-batch retry; no test opens Correct on a second row; Q-004 deferred.
+- v1 showed: not running, not consulted.
+- Next: slice 16 (see `INDEX.md`).
 
 ## Retro (3 lines, also appended to `docs/process/retro.md`)
 
-- What slowed this session:
-- What went well:
-- Process change to try:
+- What slowed this session: a design choice that touched about twenty `opening + delta` readers (solved by feeding a valued account's value in as a Delta); the validator's one high finding (a system row outranking a saved value on a tied date) was invisible because the test clock is fixed; the owner's pass found 9 faults after 209 e2e tests, none a data fault.
+- What went well: every plan reader and lock was planted away and seen red; the change identity is a test over four periods with `other` always zero; group 0 went in first with its own commit.
+- Process change to try: every "latest wins" rule gets a tie test with a moving clock; a form for a new account type is read against the type's own vocabulary (Bank, Opened on, Balance, joint) before Cowork does; a review that can be refused at Confirm asks the server first (`closeBlockedBy`).

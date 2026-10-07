@@ -56,6 +56,8 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
 - [ ] A panel or form that holds state for one row is keyed by the row (and action) and a test opens it on a second row
       (slice 14: Change opened on another bill saved the first bill's values). A mutation error is reset when a new
       panel opens. Assert the computed colour of each Button variant once (slice 14: `cn` dropped a label colour).
+- [ ] A rule that picks "the latest" or an order has a tie test: two writes on one date, with the clock moved between them (slice 15: a system row outranked a saved value; the shared test clock is fixed).
+- [ ] A form or page for a new account type is read against that type's own words before Cowork does (slice 15: Bank, Opened on, Balance and joint on a property); a review that Confirm can refuse is told by the server first.
 - [ ] Every Decision written in the notes is built with a test, or struck out, before the validator runs.
 - [ ] Anything new that distinguishes accounts or entries (type, status, owner) shows in the lists, not only on the
       detail page.
