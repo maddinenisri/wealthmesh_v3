@@ -187,7 +187,8 @@ function Explanation({
           ))}
       </ul>
       <p className="text-sm text-ink-muted">
-        Transfers, card payments and loan principal cancel out, so they change nothing here.
+        Transfers, card payments and loan or mortgage principal cancel out, so they change nothing
+        here.
       </p>
       {(change.correctionLines.length > 0 || change.restatements.length > 0) && (
         <ul className="list-disc pl-5 text-sm" aria-label="Corrections">

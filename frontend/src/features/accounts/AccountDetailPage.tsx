@@ -271,11 +271,11 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
     if (message) announce(message)
   }
   // The row that changed is what the person came for; the opener may be gone, so focus goes to the heading.
-  const announce = (message: string) => {
+  const announce = (message: string, headingId = 'activity-heading') => {
     remember.cancel()
     setNotice(message)
     requestAnimationFrame(() => {
-      const heading = document.getElementById('activity-heading')
+      const heading = document.getElementById(headingId)
       heading?.scrollIntoView?.({ block: 'start' })
       heading?.focus({ preventScroll: true })
     })
@@ -448,7 +448,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
           initial={planning}
           onDone={(message) => {
             setPlanning(null)
-            if (message) announce(message)
+            if (message) announce(message, 'plans-heading')
           }}
         />
       )}
@@ -460,7 +460,7 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
           members={members}
           onDone={(message) => {
             setPlanChange(null)
-            if (message) announce(message)
+            if (message) announce(message, 'plans-heading')
           }}
         />
       )}

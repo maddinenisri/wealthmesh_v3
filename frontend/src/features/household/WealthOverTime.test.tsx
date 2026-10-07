@@ -129,7 +129,9 @@ describe('what changed', () => {
     expect(moves).toHaveTextContent(
       'Family Home value increase of $20,000.00 ($300,000.00 to $320,000.00), an asset value change rather than income or spending.',
     )
-    expect(change).toHaveTextContent('Transfers, card payments and loan principal cancel out')
+    expect(change).toHaveTextContent(
+      'Transfers, card payments and loan or mortgage principal cancel out',
+    )
     expect(change).not.toHaveTextContent('Not explained')
   })
 

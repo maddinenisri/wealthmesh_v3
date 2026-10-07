@@ -219,7 +219,7 @@ public class AccountLifecycleService {
             reasons.add(counted(found.schedules(), "recurring bill", "recurring bills"));
         }
         if (found.values() > 0) {
-            reasons.add(counted(found.values(), "dated value", "dated values") + " (removed ones count)");
+            reasons.add(valuesCounted(account, found.values()));
         }
         if (found.revisions() > 0) {
             reasons.add(AccountType.isValued(account.type()) ? "a start moved earlier"
@@ -233,8 +233,15 @@ public class AccountLifecycleService {
         return reasons;
     }
 
+    private static String valuesCounted(Account account, long values) {
+        return (AccountType.isDebt(account.type())
+                ? counted(values, "planned amount", "planned amounts")
+                : counted(values, "dated value", "dated values")) + " (removed ones count)";
+    }
+
     private static String plannedMessage(Account account, long planned) {
-        return account.name() + " has " + planned + " planned value" + (planned == 1 ? "" : "s") + ". Remove "
+        String noun = AccountType.isDebt(account.type()) ? "planned amount" : "planned value";
+        return account.name() + " has " + planned + " " + noun + (planned == 1 ? "" : "s") + ". Remove "
                 + (planned == 1 ? "it" : "them") + " first, then close.";
     }
 

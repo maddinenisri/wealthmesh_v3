@@ -84,7 +84,9 @@ describe.each([
     expect(await screen.findByRole('status')).toHaveTextContent(
       `Saved a plan of ${shown} owed for 2026-12-31. It is not counted in the Balance owed or wealth.`,
     )
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Activity' })).toHaveFocus())
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Planned amounts owed' })).toHaveFocus(),
+    )
     expect(await screen.findByLabelText('Account details')).toHaveTextContent(
       `Balance owed${now} as of 2026-09-01`,
     )
@@ -134,9 +136,12 @@ describe('working with a plan on a debt', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Removed the plan $15,000.00 owed dated 2026-12-31.',
     )
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Activity' })).toHaveFocus())
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Planned amounts owed' })).toHaveFocus(),
+    )
     const plans = await screen.findByRole('region', { name: 'Planned amounts owed' })
-    expect(plans).toHaveTextContent('Removed')
+    expect(plans).toHaveTextContent(/Removed by \S+ on /)
+    expect(within(plans).getByRole('columnheader', { name: 'Entered' })).toBeInTheDocument()
 
     await user.click(within(plans).getByRole('button', { name: 'Undo plan for 2026-12-31' }))
     const undo = await screen.findByRole('region', { name: 'Review Undo' })
@@ -227,7 +232,7 @@ describe('closing a debt that has a plan', () => {
     const { user } = renderRoute(`/accounts/${ID}`)
     await user.click(await screen.findByRole('button', { name: 'Close account' }))
     const review = await screen.findByRole('region', { name: 'Review closing Home Mortgage' })
-    await waitFor(() => expect(review).toHaveTextContent('has 1 planned value. Remove it first'))
+    await waitFor(() => expect(review).toHaveTextContent('has 1 planned amount. Remove it first'))
     expect(review).toHaveTextContent('Closing needs a zero Balance owed')
   })
 })

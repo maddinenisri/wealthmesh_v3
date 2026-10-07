@@ -288,3 +288,15 @@ Run on the dev stack at 710px and 1280px, one picture per step, `document.active
 | 12 | Guidance said "Future values" on a debt | "A future amount is not completed account history..." (UI only) |
 
 Not fixed, with reason: 2 (the Close message "planned value" on a debt is slice 15's message, kept by the owner's "same message"); 3 and 4 (Add account Confirm has no sentence and Back focuses the first field: older behaviour for every type, not mortgage-specific); 6 (a stale "Saved a plan" sentence stays under Activity beside the Close review, which lives in the status card); 7, 13 (wraps in the older history/review grids); 11 (empty "Saved by" on the initial row: older, from 16a); 14 (correction sentence has no figure: older). Already logged: Wealth on a date omits debts; "Entered by" header wraps. Not reached: plan row in the debt's history, overpayment on a mortgage, Correct initial amount on a mortgage, a long name, Archive/Restore of a mortgage.
+
+### 16b Cowork pass (2026-10-07): 5 faults (previous slices: 8, 8, 5, 5, 5, 7, 9, 9, 8)
+
+All eight steps passed. Faults, each fixed with an e2e assertion in `20-mortgages.spec.ts` (written with the fix, not seen red first):
+
+| # | Fault | Fix |
+| --- | --- | --- |
+| 1 | After a plan is saved, removed or restored, status and focus went to Activity, above the plans card | `announce(message, 'plans-heading')`; the card heading takes focus |
+| 2 | Cancel returned focus to an opener hard against the bottom edge | `useReturnFocus` scrolls an opener within 80px of the bottom (or off screen) to the middle |
+| 3 | Debt screens said "planned value", "dated value", "loan principal" | A debt says "planned amount"; the What changed note says "loan or mortgage principal" |
+| 4 | Shortfall worded two ways ("still to assign" vs "remains unassigned") | One wording: "$X remains unassigned" |
+| 5 | Plan card put "Entered by" under Reason; a removed plan named nobody | Separate Entered column; "Removed by … on …"; table scrolls inside the card |

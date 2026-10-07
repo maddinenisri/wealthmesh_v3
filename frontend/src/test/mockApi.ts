@@ -1667,7 +1667,7 @@ export function mockApi(
         closeBlockedBy:
           planned > 0
             ? [
-                `${existing.name} has ${planned} planned value${planned === 1 ? '' : 's'}. Remove ${planned === 1 ? 'it' : 'them'} first, then close.`,
+                `${existing.name} has ${planned} planned ${isDebtType(existing.type) ? 'amount' : 'value'}${planned === 1 ? '' : 's'}. Remove ${planned === 1 ? 'it' : 'them'} first, then close.`,
               ]
             : [],
       })

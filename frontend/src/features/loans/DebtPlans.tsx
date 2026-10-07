@@ -24,56 +24,72 @@ export function DebtPlans({
   if (plans.length === 0) return null
   return (
     <Card aria-labelledby="plans-heading" className="mb-4">
-      <CardTitle id="plans-heading" className="text-lg">
+      <CardTitle id="plans-heading" tabIndex={-1} className="text-lg outline-none">
         Planned amounts owed
       </CardTitle>
       <p className="mt-1 text-sm text-ink-muted">
         A plan is never counted in the Balance owed, wealth or any past date.
       </p>
-      <Table>
-        <thead>
-          <tr>
-            <Th>Planned for</Th>
-            <Th className="text-right">Amount owed</Th>
-            <Th>Reason</Th>
-            <Th>Status</Th>
-            <Th>
-              <span className="sr-only">Actions</span>
-            </Th>
-          </tr>
-        </thead>
-        <tbody>
-          {plans.map((row) => (
-            <tr key={row.id}>
-              <Td className="whitespace-nowrap">{row.valueOn}</Td>
-              <Td className="text-right whitespace-nowrap">
-                {balanceText(account.type, row.amount)}
-              </Td>
-              <Td>
-                {row.reason ?? ''}
-                {row.reason && row.enteredBy ? ' · ' : ''}
-                {row.enteredBy && (
-                  <>
-                    Entered by {row.enteredBy} on <Stamped at={row.createdAt} />
-                  </>
-                )}
-              </Td>
-              <Td>{row.status === 'removed' ? 'Removed' : 'Planned'}</Td>
-              <Td>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={disabled}
-                  aria-label={`${row.status === 'removed' ? 'Undo' : 'Remove'} plan for ${row.valueOn}`}
-                  onClick={() => onChange(row.status === 'removed' ? 'undo' : 'remove', row)}
-                >
-                  {row.status === 'removed' ? 'Undo' : 'Remove'}
-                </Button>
-              </Td>
+      <div className="overflow-x-auto">
+        <Table>
+          <thead>
+            <tr>
+              <Th>Planned for</Th>
+              <Th className="text-right">Amount owed</Th>
+              <Th>Reason</Th>
+              <Th>Entered</Th>
+              <Th>Status</Th>
+              <Th>
+                <span className="sr-only">Actions</span>
+              </Th>
             </tr>
-          ))}
-        </tbody>
-      </Table>
+          </thead>
+          <tbody>
+            {plans.map((row) => (
+              <tr key={row.id}>
+                <Td className="whitespace-nowrap">{row.valueOn}</Td>
+                <Td className="text-right whitespace-nowrap">
+                  {balanceText(account.type, row.amount)}
+                </Td>
+                <Td>{row.reason ?? ''}</Td>
+                <Td>
+                  {row.enteredBy && (
+                    <>
+                      {row.enteredBy} on <Stamped at={row.createdAt} />
+                    </>
+                  )}
+                </Td>
+                <Td>
+                  {row.status === 'removed' ? 'Removed' : 'Planned'}
+                  {row.status === 'removed' && row.removedBy && (
+                    <>
+                      {' '}
+                      by {row.removedBy}
+                      {row.removedAt && (
+                        <>
+                          {' '}
+                          on <Stamped at={row.removedAt} />
+                        </>
+                      )}
+                    </>
+                  )}
+                </Td>
+                <Td>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={disabled}
+                    aria-label={`${row.status === 'removed' ? 'Undo' : 'Remove'} plan for ${row.valueOn}`}
+                    onClick={() => onChange(row.status === 'removed' ? 'undo' : 'remove', row)}
+                  >
+                    {row.status === 'removed' ? 'Undo' : 'Remove'}
+                  </Button>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </div>
     </Card>
   )
 }

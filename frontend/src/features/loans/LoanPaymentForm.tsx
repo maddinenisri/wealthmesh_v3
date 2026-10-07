@@ -377,8 +377,8 @@ function LoanPaymentFields({
         {left !== null && left !== 0 && !errors.interest && (
           <p role="status" className="text-sm text-ink-muted">
             {left > 0
-              ? `${formatMoney(left / 100)} still to assign to principal or interest.`
-              : `Principal and interest are ${formatMoney(-left / 100)} more than the payment.`}
+              ? `${formatMoney(left / 100)} remains unassigned`
+              : `Principal and interest are ${formatMoney(-left / 100)} more than the payment`}
           </p>
         )}
         <TextField

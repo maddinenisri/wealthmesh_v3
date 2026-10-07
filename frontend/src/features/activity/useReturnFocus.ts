@@ -10,8 +10,13 @@ export function useReturnFocus(open: boolean): { (): void; cancel: () => void } 
   useEffect(() => {
     // Focus returns without scrolling: a save scrolls to the new row itself, and the opener (often below a long
     // table) must not pull the page away from it.
-    if (wasOpen.current && !open && trigger.current?.isConnected)
-      trigger.current.focus({ preventScroll: true })
+    if (wasOpen.current && !open && trigger.current?.isConnected) {
+      const opener = trigger.current
+      opener.focus({ preventScroll: true })
+      // An opener hard against the bottom edge (or off screen) is brought to the middle, so Cancel leaves it visible.
+      const { top, bottom } = opener.getBoundingClientRect()
+      if (top < 0 || bottom > window.innerHeight - 80) opener.scrollIntoView?.({ block: 'center' })
+    }
     wasOpen.current = open
   }, [open])
   const remember = () => {

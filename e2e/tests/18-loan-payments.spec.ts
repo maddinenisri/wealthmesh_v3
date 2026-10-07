@@ -101,7 +101,7 @@ for (const width of [710, 1280] as const) {
       await form.getByLabel('Loan to pay').selectOption({ label: `${loan} (Loan)` })
       await form.getByLabel('Payment amount').fill('500.00')
       await form.getByLabel('Principal').fill('450.00')
-      await expect(form.getByRole('status')).toContainText('$50.00 still to assign')
+      await expect(form.getByRole('status')).toHaveText('$50.00 remains unassigned')
       await form.getByLabel('Interest').fill('50.00')
       await form.getByLabel('Date').fill('2026-09-15')
       await form.getByRole('button', { name: 'Review' }).click()

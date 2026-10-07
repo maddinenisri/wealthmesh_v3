@@ -4,6 +4,17 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 // correction, removal and Undo, a lender correction and a future plan. The database is shared, so every width makes
 // its own accounts. Today is the stack's fixed 2026-10-03.
 
+/** The opener is on screen with room below it, not hard against the bottom edge. */
+async function expectComfortablyInView(page: Page, button: Locator) {
+  await expect
+    .poll(async () => {
+      const box = await button.boundingBox()
+      const height = page.viewportSize()?.height ?? 0
+      return box !== null && box.y >= 0 && box.y + box.height <= height - 80
+    })
+    .toBe(true)
+}
+
 async function ownerId(page: Page): Promise<string> {
   let household = await page.request.get('/api/v1/household')
   if (!household.ok()) {
@@ -133,6 +144,8 @@ for (const width of [710, 1280] as const) {
       await form.getByLabel('Principal').fill('800.00')
       await form.getByLabel('Interest').fill('350.00')
       await form.getByLabel('Date').fill('2026-09-15')
+      // The same shortfall reads the same while typing and on Review (slice 16b Cowork fault 4).
+      await expect(form.getByRole('status')).toHaveText('$50.00 remains unassigned')
       await form.getByRole('button', { name: 'Review' }).click()
       await expect(form.getByText('$50.00 remains unassigned')).toBeVisible()
       await form.getByLabel('Interest').fill('400.00')
@@ -208,6 +221,10 @@ for (const width of [710, 1280] as const) {
       await expectFocusInside(review)
       await expect(review).toContainText('Difference$100.00 decrease in debt')
       await review.getByRole('button', { name: 'Cancel' }).click()
+      // Focus returns to the opener and the opener is comfortably on screen (Cowork fault 2).
+      const opener = page.getByRole('button', { name: 'Update balance owed' })
+      await expect(opener).toBeFocused()
+      await expectComfortablyInView(page, opener)
       expect(await balanceOf(page, mortgageId)).toBe('-199150.00')
       await page.getByRole('button', { name: 'Update balance owed' }).click()
       await form.getByLabel('Balance owed').fill('199050.00')
@@ -251,13 +268,16 @@ for (const width of [710, 1280] as const) {
       await expect(page.getByRole('status')).toContainText(
         'Saved a plan of $150,000.00 owed for 2026-12-31.',
       )
-      await expect(page.getByRole('heading', { name: 'Activity' })).toBeFocused()
+      // The card that changed holds focus and is on screen (Cowork fault 1).
       const plans = page.getByRole('region', { name: 'Planned amounts owed' })
+      await expect(page.getByRole('heading', { name: 'Planned amounts owed' })).toBeFocused()
+      await expect(plans).toBeInViewport()
       await expect(plans).toContainText('$150,000.00 owed')
       expect(await balanceOf(page, mortgageId)).toBe('-199050.00')
 
       await page.getByRole('button', { name: 'Close account' }).click()
       await expect(page.getByRole('main')).toContainText('Closing needs a zero Balance owed')
+      await expect(page.getByRole('main')).toContainText('has 1 planned amount. Remove it first')
       await page.getByRole('button', { name: 'Cancel' }).first().click()
 
       await plans.getByRole('button', { name: 'Remove plan for 2026-12-31' }).click()
@@ -265,7 +285,20 @@ for (const width of [710, 1280] as const) {
       await expectFocusInside(removal)
       await removal.getByRole('button', { name: 'Confirm removal' }).click()
       await expect(page.getByRole('status')).toContainText('Removed the plan $150,000.00 owed')
-      await expect(plans).toContainText('Removed')
+      await expect(page.getByRole('heading', { name: 'Planned amounts owed' })).toBeFocused()
+      await expect(plans).toBeInViewport()
+      // Who and when: the entry sits under its own heading, a removal names who removed it (Cowork fault 5).
+      const row = plans.getByRole('row', { name: /2026-12-31/ })
+      await expect(row).toContainText(/Removed by .+ on \d{4}-\d{2}-\d{2}/)
+      await expect(plans.getByRole('columnheader', { name: 'Reason' })).toBeVisible()
+      await expect(plans.getByRole('columnheader', { name: 'Entered' })).toBeVisible()
+      await plans.getByRole('button', { name: 'Undo plan for 2026-12-31' }).click()
+      await page
+        .getByRole('region', { name: /Review/ })
+        .getByRole('button', { name: /^Confirm/ })
+        .click()
+      await expect(page.getByRole('heading', { name: 'Planned amounts owed' })).toBeFocused()
+      await expect(plans).toBeInViewport()
       expect(await balanceOf(page, mortgageId)).toBe('-199050.00')
       await expectNoSidewaysScroll(page)
     })

@@ -143,10 +143,10 @@ class DebtPlanApiTests extends DebtTestBase {
     void closeNeedsNoPlan() {
         String own = loan("Paid Off", null, "2026-09-01");
         String plan = planOf(own);
-        assertRefused(act(own, "close"), "has 1 planned value. Remove it first, then close.");
+        assertRefused(act(own, "close"), "has 1 planned amount. Remove it first, then close.");
         webTestClient.get().uri("/api/v1/accounts/{id}/lifecycle", own).exchange().expectBody()
                 .jsonPath("$.closeBlockedBy[0]").value(m -> assertThat(String.valueOf(m))
-                        .contains("1 planned value").contains("Remove it first"));
+                        .contains("1 planned amount").contains("Remove it first"));
         act(own, "archive").expectStatus().isOk();
         act(own, "restore").expectStatus().isOk();
         valueAction(own, plan, "removal", mayaId).expectStatus().isOk();
@@ -184,9 +184,9 @@ class DebtPlanApiTests extends DebtTestBase {
     void deleteAndCloseOrder() {
         String own = loan("Delete Loan", null, "2026-09-01");
         String plan = planOf(own);
-        assertRefused(act(own, "delete"), "dated value");
+        assertRefused(act(own, "delete"), "planned amount");
         valueAction(own, plan, "removal", mayaId).expectStatus().isOk();
-        assertRefused(act(own, "delete"), "dated value");
+        assertRefused(act(own, "delete"), "planned amount");
         String owing = loan("Owing Loan", "100.00", "2026-09-01");
         planOf(owing);
         assertRefused(act(owing, "close"), "needs a zero Balance owed");

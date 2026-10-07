@@ -96,7 +96,7 @@ describe('paying a loan from checking', () => {
     await user.selectOptions(within(form).getByLabelText('Loan to pay'), 'Car Loan (Loan)')
     await user.type(within(form).getByLabelText('Payment amount'), '500.00')
     await user.type(within(form).getByLabelText('Principal'), '450.00')
-    expect(within(form).getByRole('status')).toHaveTextContent('$50.00 still to assign')
+    expect(within(form).getByRole('status')).toHaveTextContent('$50.00 remains unassigned')
     await user.type(within(form).getByLabelText('Interest'), '50.00')
     expect(within(form).queryByRole('status')).not.toBeInTheDocument()
     fireEvent.change(within(form).getByLabelText('Date'), { target: { value: '2026-09-15' } })
@@ -145,7 +145,7 @@ describe('paying a loan from checking', () => {
     await user.click(within(form).getByRole('button', { name: 'Review' }))
     expect(await within(form).findByText('$10.00 remains unassigned')).toBeInTheDocument()
     // The same words are not repeated as a second line under the field.
-    expect(within(form).getAllByText(/remains unassigned|still to assign/)).toHaveLength(1)
+    expect(within(form).getAllByText(/remains unassigned/)).toHaveLength(1)
     const interest = within(form).getByLabelText('Interest')
     await user.clear(interest)
     await user.type(interest, '60.00')
