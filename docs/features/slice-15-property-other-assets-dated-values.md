@@ -1,7 +1,7 @@
 # Slice 15: Property and other assets, dated values
 
 - Slice: 15 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/property/setup.feature` (002 to 006), `accounts/other-assets/setup.feature` (002 to 006), `accounts/lifecycle/dated-values.feature` (002, 004)
-- Status: done (local, not pushed)
+- Status: done, pushed
 - Started: 2026-10-06 17:30 EDT (session clock)  Finished: 2026-10-06  Commit: `b776e07` and the Land commit after it
 
 ## Prompts and directions
@@ -152,7 +152,7 @@ Not fixed, left to the owner: reviews still say "Balance now/after" for a proper
 
 ## Handoff
 
-- Built: groups 0 to 5, V23 and V24, D-050 to D-052, Q-050 to Q-053. Commits are local, nothing pushed (owner's instruction).
+- Built: groups 0 to 5, V23 and V24, D-050 to D-052, Q-050 to Q-053. Pushed to `origin/main` (2026-10-06, owner's instruction; the pre-push hooks passed).
 - Watch for: any new reader of a Balance must go through `ActivityStore.deltaOf` or `deltasByAccount` (a valued account's value enters as a Delta) or read effective values with `NOT planned`; a tie of two values on one date is broken by save time, so the system "Value when tracking began" row is dated at the account's creation; the shared test clock is fixed at noon, so a tie test must move it (`clock.setAt`); run Gradle test classes one pattern per invocation (several `--tests` patterns together interfered); an e2e line in a serial describe cannot run alone if it needs an account made earlier in the describe.
 - Slice 16 (loans, mortgages): `WealthStore.flowsBetween` and the identity test must grow with principal and interest kinds; `DATED_VALUE_001` and `003` reuse the plan and the as-of reader; `AccountType.Kind.VALUED` or a new `DEBT` kind decides the Balance strategy.
 - Left open: the removable "Value when tracking began" row; slice 14's untested inventory cells (record vs removal of its entry, record held vs archive, category merge, archived or closed by deleted and by paused, same-key concurrency except Record) and the shorter-batch retry; no test opens Correct on a second row; Q-004 deferred.
