@@ -171,13 +171,13 @@ describe('Value history (faults 4, 5, 6 and 9)', () => {
     await user.click(await screen.findByRole('button', { name: /^Remove \$60,000.00/ }))
     await user.click(await screen.findByRole('button', { name: 'Confirm removal' }))
     expect(
-      await screen.findByText(/^Removed \$60,000.00 dated 2026-09-30\. Family Home Balance/),
+      await screen.findByText(/^Removed \$60,000.00 dated 2026-09-30\. Family Home value/),
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Archive account' }))
     await user.click(await screen.findByRole('button', { name: 'Archive Family Home' }))
     await waitFor(() =>
       expect(
-        screen.queryByText(/^Removed \$60,000.00 dated 2026-09-30\. Family Home Balance/),
+        screen.queryByText(/^Removed \$60,000.00 dated 2026-09-30\. Family Home value/),
       ).not.toBeInTheDocument(),
     )
   })

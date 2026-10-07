@@ -119,6 +119,17 @@ describe('words of the thing shown', () => {
     expect(close).not.toHaveTextContent('entries')
   })
 
+  it('V2_PROPERTY_003 the whole property page and its Close review say Value, never Balance (owner 2026-10-06)', async () => {
+    mockApi(seed(home()))
+    const { user } = renderRoute(`/accounts/${ID}`)
+    await screen.findByLabelText('Account details')
+    expect(screen.getByRole('main')).not.toHaveTextContent('Balance')
+    await user.click(screen.getByRole('button', { name: 'Close account' }))
+    const close = await screen.findByRole('region', { name: 'Review closing Family Home' })
+    expect(close).not.toHaveTextContent('Balance')
+    expect(close).toHaveTextContent('Closing needs a zero value')
+  })
+
   it('V2_PROPERTY_006 a plan is called a planned value, and its removal says the plan stays in history', async () => {
     mockApi(
       seed(home(), [

@@ -48,6 +48,7 @@ export function AccountStatusCard({ account }: { account: Account }) {
     if (failed) document.getElementById('status-review-heading')?.focus({ preventScroll: true })
   }, [failed])
   const figure = balanceText(account.type, account.balance.amount)
+  const word = isValued(account.type) ? 'value' : 'Balance'
   const atZero = Number(account.balance.amount) === 0
 
   // Deleting takes the account's page away, so the account list takes focus there (its status line, with Undo).
@@ -65,7 +66,7 @@ export function AccountStatusCard({ account }: { account: Account }) {
           {
             archive: `${account.name} is archived. Its ${figure} stays in wealth.`,
             restore: `${account.name} is active again with its ${figure} and complete history.`,
-            close: `${account.name} is closed with a ${figure} Balance. Its history is kept.`,
+            close: `${account.name} is closed with a ${figure} ${word}. Its history is kept.`,
             reopen: `${account.name} is open again. Its history is as it was.`,
           }[action],
         )
@@ -138,7 +139,7 @@ export function AccountStatusCard({ account }: { account: Account }) {
               </>
             ) : review === 'restore' ? (
               <p className="text-sm">
-                {account.name} returns to the active list with the same Balance ({figure}) and
+                {account.name} returns to the active list with the same {word} ({figure}) and
                 complete history.
               </p>
             ) : review === 'close' ? (
@@ -146,13 +147,13 @@ export function AccountStatusCard({ account }: { account: Account }) {
                 <p className="text-sm">{closeBlocked.join(' ')}</p>
               ) : atZero ? (
                 <p className="text-sm">
-                  {account.name} will be marked closed with a {figure} Balance and its history kept.
+                  {account.name} will be marked closed with a {figure} {word} and its history kept.
                   It takes no new {isValued(account.type) ? 'values' : 'entries'} until you reopen
                   it. Wealth does not change.
                 </p>
               ) : isValued(account.type) ? (
                 <p className="text-sm">
-                  Closing needs a zero Balance. {account.name} has {figure}: record a $0.00 value
+                  Closing needs a zero value. {account.name} has {figure}: record a $0.00 value
                   first (for example when it is sold), then review closing again.
                 </p>
               ) : (
@@ -183,7 +184,7 @@ export function AccountStatusCard({ account }: { account: Account }) {
                       ))}
                     </ul>
                     <p className="text-sm">
-                      Choose Archive to hide it, or Close once its Balance is zero. Nothing changes
+                      Choose Archive to hide it, or Close once its {word} is zero. Nothing changes
                       until you do.
                     </p>
                   </>

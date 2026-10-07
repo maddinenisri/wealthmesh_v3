@@ -71,7 +71,7 @@ Nine groups, more than 5. Proposed split (owner item 3): see question 1.
 
 | Group | Scenario IDs | Test level | Status |
 | --- | --- | --- | --- |
-| 0 (own commit) property review wording: "Value now / Value after", plus the other Balance words a property still shows | cites existing `V2_PROPERTY_00x` IDs | UI (Vitest red first) + e2e line | todo |
+| 0 (own commit) property review wording: "Value now / Value after", plus the other Balance words a property still shows | cites existing `V2_PROPERTY_00x` IDs | UI (Vitest red first) + e2e line | done (Vitest red first: 7 tests failed on the new wording before the source change; the two changed e2e lines are wording edits of existing assertions, green on the packaged jar; server history text "Value returns to"; the property page has no date lookup, so none was changed) |
 | 1 DEBT kind, loan setup, edit, blank is $0.00, validation, Lender, lists, Loans group in Debts | `V2_LOAN_001`, `002`, `005` | API + UI + e2e | todo |
 | 2 loan payment: per-leg amounts, portions, V25, spending interest, `flowsBetween` and the identity test, overpayment review | `V2_LOAN_003`, `006` | API (identity, races, replay) + UI + e2e | todo |
 | 3 debt correction and opening correction, remove and Undo, wealth explanation | `V2_LOAN_004`, `V2_DATED_VALUE_003` | API + UI + e2e | todo |

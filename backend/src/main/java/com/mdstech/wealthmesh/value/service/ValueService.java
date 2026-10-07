@@ -229,7 +229,7 @@ public class ValueService {
         return afterWithout(account, row).flatMap(after -> values.markRemoved(row.id(), member, now)
                 .filter(updated -> updated > 0).switchIfEmpty(Mono.error(conflict("This value was already removed.")))
                 .then(Mono.defer(() -> values.recordEvent(account.id(), row.id(), "removed", member, now,
-                        row.planned() ? "Plan removed" : "Balance returns to " + Money.format(after.after().amount()))))
+                        row.planned() ? "Plan removed" : "Value returns to " + Money.format(after.after().amount()))))
                 .then(Mono.defer(() -> values.byId(row.id())))
                 .map(saved -> new ValueResult(view(saved, null), Money.format(after.before().amount()),
                         Money.format(after.after().amount()), after.after().on())));

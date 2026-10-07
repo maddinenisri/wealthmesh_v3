@@ -109,8 +109,8 @@ export function ValueForm({
         onSuccess: (result) =>
           onDone(
             planning
-              ? `Saved a plan of ${formatMoney(Number(result.value.amount))} for ${result.value.valueOn}. It is not counted in the Balance or wealth.`
-              : `${replacesId ? 'Corrected to' : 'Saved'} ${formatMoney(Number(result.value.amount))} dated ${result.value.valueOn}. ${account.name} Balance is ${formatMoney(Number(result.balanceAfter))}, dated ${result.balanceAfterOn}.`,
+              ? `Saved a plan of ${formatMoney(Number(result.value.amount))} for ${result.value.valueOn}. It is not counted in the value or wealth.`
+              : `${replacesId ? 'Corrected to' : 'Saved'} ${formatMoney(Number(result.value.amount))} dated ${result.value.valueOn}. ${account.name} value is ${formatMoney(Number(result.balanceAfter))}, dated ${result.balanceAfterOn}.`,
           ),
       },
     )
@@ -157,18 +157,18 @@ export function ValueForm({
                   : `${formatMoney(Math.abs(change))} asset value ${change < 0 ? 'decrease' : 'increase'}`}
               </Item>
             )}
-            <Item label={`${account.name} Balance now`}>
+            <Item label={`${account.name} Value now`}>
               {formatMoney(Number(figures.balanceBefore))}, dated{' '}
               <Dated on={figures.balanceBeforeOn} />
             </Item>
-            <Item label={`${account.name} Balance after`}>
+            <Item label={`${account.name} Value after`}>
               {formatMoney(Number(figures.balanceAfter))}, dated{' '}
               <Dated on={figures.balanceAfterOn} />
             </Item>
           </dl>
           <p className="mt-3 max-w-md text-sm text-ink-muted">
             {planning
-              ? 'A plan is never counted in the Balance, wealth or any past date. It stays here until you remove it.'
+              ? 'A plan is never counted in the value, wealth or any past date. It stays here until you remove it.'
               : 'A value is an estimate, not a transaction: it is excluded from income and spending and moves no cash.'}
           </p>
           <EnteredBy members={members} member={member} setMemberId={setMemberId} />

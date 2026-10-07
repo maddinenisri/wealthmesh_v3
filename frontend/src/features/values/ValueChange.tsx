@@ -46,14 +46,14 @@ export function ValueChange({
         </p>
         {mode === 'remove' && removal.data && !plan && (
           <p className="mt-2 max-w-md text-sm">
-            The latest effective Balance will return to{' '}
+            The latest effective value will return to{' '}
             {formatMoney(Number(removal.data.balanceAfter))}, dated {removal.data.balanceAfterOn}.
           </p>
         )}
         <p className="mt-2 max-w-md text-sm text-ink-muted">
           {mode === 'remove'
             ? `The ${plan ? 'plan' : 'value'} stays in history, where Undo restores it. No cash or spending changes.`
-            : 'It returns under its original date. The Balance is the latest value.'}
+            : 'It returns under its original date. The value is the latest one.'}
         </p>
         <EnteredBy members={members} member={member} setMemberId={setMemberId} />
         <div className="mt-4 flex gap-2">
@@ -69,8 +69,8 @@ export function ValueChange({
                       mode === 'remove'
                         ? plan
                           ? `Removed the plan ${what}.`
-                          : `Removed ${what}. ${account.name} Balance is ${formatMoney(Number(result.balanceAfter))}, dated ${result.balanceAfterOn}.`
-                        : `Restored ${what}. ${account.name} Balance is ${formatMoney(Number(result.balanceAfter))}, dated ${result.balanceAfterOn}.`,
+                          : `Removed ${what}. ${account.name} value is ${formatMoney(Number(result.balanceAfter))}, dated ${result.balanceAfterOn}.`
+                        : `Restored ${what}. ${account.name} value is ${formatMoney(Number(result.balanceAfter))}, dated ${result.balanceAfterOn}.`,
                     ),
                 },
               )

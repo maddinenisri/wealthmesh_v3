@@ -87,7 +87,7 @@ for (const [width, type, label, name, balance, shown] of [
       await expectNoSidewaysScroll(page)
     })
 
-    test(`V2_PROPERTY_004 a negative amount shows its message on the Balance field (${width}px)`, async ({
+    test(`V2_PROPERTY_004 a negative amount shows its message on the Value field (${width}px)`, async ({
       page,
     }) => {
       await page.goto('/accounts/new')
@@ -179,7 +179,7 @@ for (const [width, name, first, second] of [
       await enter(page, first, '2026-09-30', 'September estimate')
       await page.getByRole('button', { name: 'Confirm value' }).click()
       const status = page.getByRole('status')
-      await expect(status).toContainText('Balance is $')
+      await expect(status).toContainText('value is $')
       await expect(page.getByRole('heading', { name: 'Value history' })).toBeFocused()
       await expect(page.getByRole('heading', { name: 'Value history' })).toBeInViewport({
         ratio: 1,
@@ -224,7 +224,7 @@ for (const [width, name, first, second] of [
       const review = page.getByRole('region', { name: 'Review plan' })
       await expectFocusInside(review)
       await review.getByRole('button', { name: 'Confirm plan' }).click()
-      await expect(page.getByRole('status')).toContainText('not counted in the Balance or wealth')
+      await expect(page.getByRole('status')).toContainText('not counted in the value or wealth')
       await expect(page.getByRole('table')).toContainText('Plan')
       expect(await balanceOf(page, id)).toBe(before)
     })

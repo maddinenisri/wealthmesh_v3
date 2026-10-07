@@ -74,7 +74,7 @@ const post = (api: { requests: string[] }) =>
   api.requests.filter((r) => r.startsWith('POST') && !r.endsWith('/review'))
 
 describe('recording a value', () => {
-  it('V2_PROPERTY_003 reviews a new estimate, saves it, and says the Balance and where it is dated', async () => {
+  it('V2_PROPERTY_003 reviews a new estimate, saves it, and says the value and where it is dated', async () => {
     const api = mockApi(seed(home()))
     const { user } = renderRoute(ACCOUNT)
 
@@ -85,14 +85,14 @@ describe('recording a value', () => {
       expect(review.parentElement).toContainElement(document.activeElement as HTMLElement),
     )
     expect(review).toHaveTextContent('Change$20,000.00 asset value increase')
-    expect(review).toHaveTextContent('Family Home Balance after$320,000.00, dated 2026-09-30')
+    expect(review).toHaveTextContent('Family Home Value after$320,000.00, dated 2026-09-30')
     expect(review).toHaveTextContent('excluded from income and spending')
     expect(post(api)).toHaveLength(0)
 
     await user.click(screen.getByRole('button', { name: 'Confirm value' }))
     const status = await screen.findByRole('status')
     expect(status).toHaveTextContent(
-      'Saved $320,000.00 dated 2026-09-30. Family Home Balance is $320,000.00, dated 2026-09-30.',
+      'Saved $320,000.00 dated 2026-09-30. Family Home value is $320,000.00, dated 2026-09-30.',
     )
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'Value history' })).toHaveFocus(),
@@ -159,12 +159,12 @@ describe('recording a value', () => {
 
     await user.click(within(alert).getByRole('button', { name: 'Save as a future plan' }))
     const review = await screen.findByRole('region', { name: 'Review plan' })
-    expect(review).toHaveTextContent('Family Home Balance after$300,000.00, dated 2026-09-01')
-    expect(review).toHaveTextContent('never counted in the Balance')
+    expect(review).toHaveTextContent('Family Home Value after$300,000.00, dated 2026-09-01')
+    expect(review).toHaveTextContent('never counted in the value')
     await user.click(screen.getByRole('button', { name: 'Confirm plan' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent(
-      'Saved a plan of $330,000.00 for 2026-12-31. It is not counted in the Balance or wealth.',
+      'Saved a plan of $330,000.00 for 2026-12-31. It is not counted in the value or wealth.',
     )
     const row = screen.getByText('$330,000.00').closest('tr')!
     expect(row).toHaveTextContent('Plan')
@@ -235,13 +235,13 @@ describe('correcting, removing and restoring a value', () => {
     )
     const review = await screen.findByRole('region', { name: 'Review removal' })
     expect(review).toHaveTextContent(
-      'The latest effective Balance will return to $30,000.00, dated 2026-09-01.',
+      'The latest effective value will return to $30,000.00, dated 2026-09-01.',
     )
     expect(review).toHaveTextContent('The value stays in history')
     await user.click(await screen.findByRole('button', { name: 'Confirm removal' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent(
-      'Removed $28,000.00 dated 2026-09-30. Family Car Balance is $30,000.00, dated 2026-09-01.',
+      'Removed $28,000.00 dated 2026-09-30. Family Car value is $30,000.00, dated 2026-09-01.',
     )
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'Value history' })).toHaveFocus(),
@@ -286,7 +286,7 @@ describe('correcting, removing and restoring a value', () => {
     )
     const review = await screen.findByRole('region', { name: 'Review removal' })
     expect(review).toHaveTextContent('Remove the plan $330,000.00 dated 2026-12-31.')
-    expect(review).not.toHaveTextContent('latest effective Balance')
+    expect(review).not.toHaveTextContent('latest effective value')
     await user.click(screen.getByRole('button', { name: 'Confirm removal' }))
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Removed the plan $330,000.00 dated 2026-12-31.',
@@ -343,7 +343,7 @@ describe('moving the start earlier', () => {
       '2026-09-01: value $30,000.00',
       '2026-09-30: value $28,000.00',
     ])
-    expect(review).toHaveTextContent('Balance stays $28,000.00, dated 2026-09-30')
+    expect(review).toHaveTextContent('Value stays $28,000.00, dated 2026-09-30')
     expect(review).toHaveTextContent('no income, spending or transfer is created')
 
     await user.click(within(review).getByRole('button', { name: 'Cancel' }))
@@ -368,7 +368,7 @@ describe('moving the start earlier', () => {
     await user.click(screen.getByRole('button', { name: 'Confirm earlier start' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent(
-      'Family Car now starts at $31,000.00 on 2026-08-01. Balance is $28,000.00, dated 2026-09-30.',
+      'Family Car now starts at $31,000.00 on 2026-08-01. Value is $28,000.00, dated 2026-09-30.',
     )
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'Value history' })).toHaveFocus(),

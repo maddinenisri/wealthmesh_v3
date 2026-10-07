@@ -57,7 +57,7 @@ export function ExtendStart({
       {
         onSuccess: (result) =>
           onDone(
-            `${account.name} now starts at ${formatMoney(Number(result.amount))} on ${result.openedOn}. Balance is ${formatMoney(Number(result.balance))}, dated ${result.balanceOn}.`,
+            `${account.name} now starts at ${formatMoney(Number(result.amount))} on ${result.openedOn}. Value is ${formatMoney(Number(result.balance))}, dated ${result.balanceOn}.`,
           ),
       },
     )
@@ -88,9 +88,8 @@ export function ExtendStart({
               ))}
             </ul>
             <p className="mt-3 max-w-md text-sm text-ink-muted">
-              Balance stays {formatMoney(Number(review.data.balance))}, dated{' '}
-              {review.data.balanceOn}. This adds history only: no income, spending or transfer is
-              created.
+              Value stays {formatMoney(Number(review.data.balance))}, dated {review.data.balanceOn}.
+              This adds history only: no income, spending or transfer is created.
             </p>
           </>
         )}
