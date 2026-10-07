@@ -31,6 +31,8 @@ export type Wealth = {
   cards: WealthGroup
   loans: WealthGroup
   mortgages: WealthGroup
+  /** Brokerage and other investment accounts, one total line (the finer groups are slice 18). */
+  investments: WealthGroup
   propertyAndOther: WealthGroup
   debtLines: WealthLine[]
   notTracked: NotTracked[]
@@ -127,6 +129,7 @@ function parseWealth(value: unknown): Wealth {
     cards: parseGroup(data.cards),
     loans: parseGroup(data.loans),
     mortgages: parseGroup(data.mortgages),
+    investments: parseGroup(data.investments),
     propertyAndOther: parseGroup(data.propertyAndOther),
     debtLines: parseLines(data.debtLines),
     notTracked: data.notTracked.map((item) => {

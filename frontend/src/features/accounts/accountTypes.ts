@@ -8,7 +8,11 @@ export const ACCOUNT_TYPES = [
   { value: 'credit_card', label: 'Credit card', ready: true },
   { value: 'property', label: 'Property', ready: true, valued: 'property' },
   { value: 'other_asset', label: 'Other asset', ready: true, valued: 'asset' },
-  { value: 'brokerage', label: 'Brokerage', ready: false },
+  { value: 'brokerage', label: 'Brokerage', ready: true, investment: true },
+  { value: '401k', label: '401(k)', ready: false, investment: true },
+  { value: 'traditional_ira', label: 'Traditional IRA', ready: false, investment: true },
+  { value: 'roth_ira', label: 'Roth IRA', ready: false, investment: true },
+  { value: 'hsa', label: 'Health savings account (HSA)', ready: false, investment: true },
   { value: 'loan', label: 'Loan', ready: true, debt: true },
   { value: 'mortgage', label: 'Mortgage', ready: true, debt: true },
 ] as const satisfies readonly {
@@ -17,6 +21,7 @@ export const ACCOUNT_TYPES = [
   ready: boolean
   valued?: 'property' | 'asset'
   debt?: true
+  investment?: true
 }[]
 
 export type AccountTypeValue = (typeof ACCOUNT_TYPES)[number]['value']
@@ -36,6 +41,57 @@ export function isValued(type: string): boolean {
 export function isDebt(type: string): boolean {
   const found = ACCOUNT_TYPES.find((candidate) => candidate.value === type)
   return !!found && 'debt' in found
+}
+
+/** True for a brokerage, retirement or health account: set up from opening cash and holdings (the server's `AccountType.isInvestment`). */
+export function isInvestment(type: string): boolean {
+  const found = ACCOUNT_TYPES.find((candidate) => candidate.value === type)
+  return !!found && 'investment' in found
+}
+
+/** How a type's Balance is read, the one answer every type branch asks (the server's `AccountType.Kind`). */
+export type TypeKind = 'ledger' | 'card' | 'valued' | 'debt' | 'investment'
+
+/** What a type is, in the words and gates the screens need. Branch on this, not on a type literal. */
+export type TypeTraits = {
+  kind: TypeKind
+  /** The label of the bank, issuer, lender or institution field; null for a property or other asset. */
+  institutionLabel: string | null
+  /** True for a type that takes ordinary money in and out (the server's `AccountType.holdsActivity`, plus cards). */
+  holdsMoney: boolean
+  /** The label of the opening date field. */
+  dateLabel: string
+}
+
+export function typeTraits(type: string): TypeTraits {
+  const kind: TypeKind =
+    type === 'credit_card'
+      ? 'card'
+      : isValued(type)
+        ? 'valued'
+        : isDebt(type)
+          ? 'debt'
+          : isInvestment(type)
+            ? 'investment'
+            : 'ledger'
+  return {
+    kind,
+    institutionLabel: {
+      ledger: 'Bank',
+      card: 'Issuer',
+      valued: null,
+      debt: 'Lender',
+      investment: 'Institution',
+    }[kind],
+    holdsMoney: kind === 'ledger' || kind === 'card',
+    dateLabel: {
+      ledger: 'Opened on',
+      card: 'Opened on',
+      valued: 'Value date',
+      debt: 'As of',
+      investment: 'Setup date',
+    }[kind],
+  }
 }
 
 /** "loan" or "mortgage": what a debt type is called in a sentence. */

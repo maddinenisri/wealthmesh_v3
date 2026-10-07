@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { useForm, useWatch, type Control } from 'react-hook-form'
+import { useEffect, useState } from 'react'
+import { useForm, useWatch, type Control, type UseFormSetFocus } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router'
-import type { Account } from '../../api/accounts'
+import type { Account, NewAccount } from '../../api/accounts'
+import type { OpeningPreview } from '../../api/investments'
 import type { Member } from '../../api/household'
 import {
   Button,
@@ -12,19 +13,24 @@ import {
   TextField,
 } from '../../design-system'
 import { useCreateAccount, useUpdateAccount } from '../../hooks/useAccounts'
+import { usePreviewOpening } from '../../hooks/useInvestments'
 import { formatMoney, parseAmount } from '../../lib/money'
 import { Panel } from '../activity/Panel'
-import { ACCOUNT_TYPES, accountTypeLabel, isDebt, valuedNoun } from './accountTypes'
+import { OpeningFields } from '../investments/OpeningFields'
+import { OpeningReview } from '../investments/OpeningReview'
+import { toOpening, type OpeningValues } from '../investments/openingForm'
+import { ACCOUNT_TYPES, accountTypeLabel, isDebt, typeTraits, valuedNoun } from './accountTypes'
 import { isCard } from './cardBalance'
 import { memberLabel } from './ownerNames'
 
 type DetailsValues = { name: string; institution: string; ownerMemberIds: string[] }
-type SetupValues = DetailsValues & {
-  type: string
-  openedOn: string
-  balance: string
-  balanceSide: 'owed' | 'credit'
-}
+type SetupValues = DetailsValues &
+  OpeningValues & {
+    type: string
+    openedOn: string
+    balance: string
+    balanceSide: 'owed' | 'credit'
+  }
 
 const nameRules = {
   validate: (value: string) => value.trim() !== '' || 'Enter an account name',
@@ -79,7 +85,7 @@ function OwnerChoices<T extends DetailsValues>({
 export function AccountSetupForm({ members, today }: { members: Member[]; today: string }) {
   const navigate = useNavigate()
   const create = useCreateAccount()
-  const { control, handleSubmit, setFocus } = useForm<SetupValues>({
+  const { control, handleSubmit, setFocus, getValues } = useForm<SetupValues>({
     defaultValues: {
       type: 'checking',
       name: '',
@@ -88,15 +94,31 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       openedOn: today,
       balance: '',
       balanceSide: 'owed',
+      total: '',
+      cash: '',
+      holdings: [],
     },
   })
   const typeValue = useWatch({ control, name: 'type' })
+  const traits = typeTraits(typeValue)
+  const investment = traits.kind === 'investment'
   const card = isCard(typeValue)
   const noun = valuedNoun(typeValue)
   const debt = isDebt(typeValue)
   // A property, other asset or loan is reviewed before it is saved (PROPERTY_002, LOAN_001): the review says what it
   // will start at.
   const [review, setReview] = useState<SetupValues | null>(null)
+  // An investment account is reviewed by the server (cash plus holdings against the typed total) before it is saved.
+  const preview = usePreviewOpening()
+  // A refusal from the server has no field: bring it into view where the person is looking.
+  const refusal = preview.error?.message ?? create.error?.message
+  useEffect(() => {
+    if (refusal) document.querySelector('[role="alert"]')?.scrollIntoView?.({ block: 'center' })
+  }, [refusal])
+  const [openingReview, setOpeningReview] = useState<{
+    values: SetupValues
+    result: OpeningPreview
+  } | null>(null)
   const owners = (ids: string[]) =>
     members
       .filter((member) => ids.includes(member.id))
@@ -119,7 +141,40 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         () => navigate('/accounts'),
         () => undefined,
       )
+  const newInvestment = (values: SetupValues): NewAccount => ({
+    type: values.type,
+    name: values.name.trim(),
+    institution: values.institution.trim(),
+    ownerMemberIds: values.ownerMemberIds,
+    openedOn: values.openedOn,
+    openingBalance: null,
+    opening: toOpening(values, values.openedOn),
+  })
+  // Review asks the server first. Cash left unanswered keeps a draft at once (V2_BROKERAGE_003): its own page says what
+  // it needs; a complete or mismatched opening is reviewed here and saved only by Confirm.
+  const reviewInvestment = async (values: SetupValues) => {
+    create.reset()
+    preview.reset()
+    const account = newInvestment(values)
+    const result = await preview.mutateAsync({ account }).catch(() => null)
+    if (result) setOpeningReview({ values, result })
+  }
+  const confirmInvestment = async (values: SetupValues) => {
+    const saved = await create.mutateAsync(newInvestment(values)).catch(() => null)
+    if (saved) {
+      const typedTotal = values.total.trim() !== ''
+      navigate(`/accounts/${saved.id}`, {
+        state: {
+          notice:
+            saved.status === 'draft'
+              ? `${saved.name} is saved as a draft. It needs the opening cash${typedTotal ? ', which is not worked out from the total' : ''}, and it is not counted in household wealth until setup is finished.`
+              : `${saved.name} is set up with a Balance of ${formatMoney(Number(saved.balance.amount))} as of ${saved.balance.asOf}.`,
+        },
+      })
+    }
+  }
   const onSubmit = handleSubmit((values) => {
+    if (investment) return reviewInvestment(values)
     if (valuedNoun(values.type) || isDebt(values.type)) {
       create.reset()
       setReview(values)
@@ -127,6 +182,44 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
     }
     return save(values)
   })
+
+  if (openingReview) {
+    const { values, result } = openingReview
+    const blank =
+      values.total.trim() === '' && values.cash.trim() === '' && values.holdings.length === 0
+    return (
+      <Panel>
+        <OpeningReview
+          heading={`Review new ${accountTypeLabel(values.type).toLowerCase()}`}
+          name={values.name.trim()}
+          openedOn={values.openedOn}
+          preview={result}
+          blank={blank}
+          details={
+            <>
+              {values.institution.trim() !== '' && `Institution: ${values.institution.trim()}. `}
+              Owners: {owners(values.ownerMemberIds)}.
+            </>
+          }
+          error={create.error?.message}
+          pending={create.isPending}
+          confirmLabel={result.state === 'draft' ? 'Save draft' : 'Confirm'}
+          onConfirm={() => void confirmInvestment(values)}
+          onBack={() => {
+            create.reset()
+            setOpeningReview(null)
+            // The form is back on the page; its first field takes focus, not the body.
+            requestAnimationFrame(() => setFocus('name'))
+          }}
+          cancel={
+            <Link to="/accounts" className={buttonStyles({ variant: 'ghost' })}>
+              Cancel
+            </Link>
+          }
+        />
+      </Panel>
+    )
+  }
 
   if (review) {
     const amount = review.balance.trim() === '' ? 0 : Number(parseAmount(review.balance))
@@ -183,7 +276,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex max-w-md flex-col gap-4">
-      <FormAlert message={create.error?.message} />
+      <FormAlert message={create.error?.message ?? preview.error?.message} />
       <SelectField control={control} name="type" label="Account type">
         {ACCOUNT_TYPES.map((type) => (
           <option key={type.value} value={type.value} disabled={!type.ready}>
@@ -196,7 +289,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         <TextField
           control={control}
           name="institution"
-          label={card ? 'Issuer' : debt ? 'Lender' : 'Bank'}
+          label={traits.institutionLabel ?? 'Bank'}
           rules={bankRules}
         />
       )}
@@ -204,37 +297,47 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       <TextField
         control={control}
         name="openedOn"
-        label={noun ? 'Value date' : debt ? 'As of' : 'Opened on'}
+        label={traits.dateLabel}
         type="date"
         rules={{
           required: 'Enter an opening date',
           validate: (value) => value <= today || 'The opening date cannot be in the future',
         }}
       />
-      <TextField
-        control={control}
-        name="balance"
-        label={noun ? 'Value' : debt ? 'Amount owed' : 'Balance'}
-        inputMode="decimal"
-        placeholder="0.00"
-        hint={
-          noun
-            ? 'Optional. Leave blank to start at $0.00 on the value date.'
-            : debt
-              ? 'Optional. Leave blank to start at $0.00 owed on the date.'
-              : 'Optional. Leave blank to start at $0.00 on the opening date.'
-        }
-        rules={{
-          validate: (value) => {
-            if (value.trim() === '') return true
-            const amount = parseAmount(value)
-            if (amount === null) return 'Enter a valid amount'
-            if (noun && amount.startsWith('-')) return `Enter zero or a positive ${noun} value`
-            if (debt && amount.startsWith('-')) return 'Enter zero or a positive amount owed'
-            return !(card && amount.startsWith('-')) || 'Enter a valid amount'
-          },
-        }}
-      />
+      {investment && (
+        <OpeningFields
+          control={control as unknown as Control<OpeningValues>}
+          setFocus={setFocus as unknown as UseFormSetFocus<OpeningValues>}
+          setupOn={() => getValues('openedOn')}
+          today={today}
+        />
+      )}
+      {!investment && (
+        <TextField
+          control={control}
+          name="balance"
+          label={noun ? 'Value' : debt ? 'Amount owed' : 'Balance'}
+          inputMode="decimal"
+          placeholder="0.00"
+          hint={
+            noun
+              ? 'Optional. Leave blank to start at $0.00 on the value date.'
+              : debt
+                ? 'Optional. Leave blank to start at $0.00 owed on the date.'
+                : 'Optional. Leave blank to start at $0.00 on the opening date.'
+          }
+          rules={{
+            validate: (value) => {
+              if (value.trim() === '') return true
+              const amount = parseAmount(value)
+              if (amount === null) return 'Enter a valid amount'
+              if (noun && amount.startsWith('-')) return `Enter zero or a positive ${noun} value`
+              if (debt && amount.startsWith('-')) return 'Enter zero or a positive amount owed'
+              return !(card && amount.startsWith('-')) || 'Enter a valid amount'
+            },
+          }}
+        />
+      )}
       {card && (
         <SelectField
           control={control}
@@ -247,8 +350,12 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         </SelectField>
       )}
       <div className="flex gap-2">
-        <Button type="submit" disabled={create.isPending}>
-          {create.isPending ? 'Saving' : noun || debt ? 'Review' : 'Save account'}
+        <Button type="submit" disabled={create.isPending || preview.isPending}>
+          {create.isPending || preview.isPending
+            ? 'Saving'
+            : noun || debt || investment
+              ? 'Review'
+              : 'Save account'}
         </Button>
         <Link to="/accounts" className={buttonStyles({ variant: 'ghost' })}>
           Cancel
@@ -287,7 +394,7 @@ export function AccountEditForm({ account, members }: { account: Account; member
         <TextField
           control={control}
           name="institution"
-          label={isCard(account.type) ? 'Issuer' : isDebt(account.type) ? 'Lender' : 'Bank'}
+          label={typeTraits(account.type).institutionLabel ?? 'Bank'}
           rules={bankRules}
         />
       )}

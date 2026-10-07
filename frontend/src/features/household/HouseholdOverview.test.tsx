@@ -26,7 +26,7 @@ describe('the household overview', () => {
     await user.click(within(wealth).getByRole('link', { name: 'Add account' }))
     const type = await screen.findByLabelText('Account type')
     expect(type).toHaveDisplayValue('Checking')
-    expect(within(type).getByRole('option', { name: /Brokerage.*coming soon/ })).toBeDisabled()
+    expect(within(type).getByRole('option', { name: /401\(k\).*coming soon/ })).toBeDisabled()
     await user.type(screen.getByLabelText('Account name'), 'Everyday Checking')
     await user.click(screen.getByRole('checkbox', { name: 'Maya' }))
     fireEvent.change(screen.getByLabelText('Opened on'), { target: { value: '2026-09-01' } })

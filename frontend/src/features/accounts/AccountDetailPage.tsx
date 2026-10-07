@@ -29,7 +29,8 @@ import { usableAccounts } from '../transfers/accountChoice'
 import { TransferForm } from '../transfers/TransferForm'
 import { ValueChange } from '../values/ValueChange'
 import { ValuedAccount } from '../values/ValuedAccount'
-import { accountTypeLabel, debtNounOf, isDebt, isValued } from './accountTypes'
+import { InvestmentAccount } from '../investments/InvestmentAccount'
+import { accountTypeLabel, debtNounOf, isDebt, isValued, typeTraits } from './accountTypes'
 import { AccountStatusCard } from './AccountStatusCard'
 import { STATUS_LABEL } from './statusLabel'
 import { BalanceFigure } from './BalanceFigure'
@@ -84,6 +85,8 @@ export function AccountDetailPage() {
           <AccountStatusCard account={account.data} />
           {isValued(account.data.type) ? (
             <ValuedAccount account={account.data} members={members} />
+          ) : typeTraits(account.data.type).kind === 'investment' ? (
+            <InvestmentAccount account={account.data} members={members} />
           ) : (
             <Activity account={account.data} members={members} />
           )}
@@ -106,51 +109,70 @@ function Details({ account, owners }: { account: Account; owners: string }) {
         {!isValued(account.type) && (
           <div>
             <dt className="text-caption text-ink-muted">
-              {isCard(account.type) ? 'Issuer' : isDebt(account.type) ? 'Lender' : 'Bank'}
+              {typeTraits(account.type).institutionLabel}
             </dt>
             <dd>{account.institution ?? 'Not set'}</dd>
           </div>
         )}
-        <div>
-          <dt className="text-caption text-ink-muted">
-            {isValued(account.type) ? 'Value' : isDebt(account.type) ? 'Balance owed' : 'Balance'}
-          </dt>
-          <dd>
-            <BalanceFigure
-              type={account.type}
-              amount={account.balance.amount}
-              className="font-sans text-2xl normal-nums"
-              bare={isDebt(account.type)}
-            />
-            <span className="block text-caption text-ink-muted">as of {account.balance.asOf}</span>
-            {!isCard(account.type) &&
-              !isDebt(account.type) &&
-              Number(account.balance.amount) < 0 && (
-                <span className="mt-1 block max-w-prose text-sm text-ink-muted">
-                  {OVERDRAFT_NOTICE}
+        {account.status === 'draft' ? (
+          <div>
+            <dt className="text-caption text-ink-muted">Balance</dt>
+            <dd className="text-sm text-ink-muted">
+              None yet. A draft adds nothing to household wealth.
+            </dd>
+          </div>
+        ) : (
+          <>
+            <div>
+              <dt className="text-caption text-ink-muted">
+                {isValued(account.type)
+                  ? 'Value'
+                  : isDebt(account.type)
+                    ? 'Balance owed'
+                    : 'Balance'}
+              </dt>
+              <dd>
+                <BalanceFigure
+                  type={account.type}
+                  amount={account.balance.amount}
+                  className="font-sans text-2xl normal-nums"
+                  bare={isDebt(account.type)}
+                />
+                <span className="block text-caption text-ink-muted">
+                  as of {account.balance.asOf}
                 </span>
-              )}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-caption text-ink-muted">
-            {isValued(account.type)
-              ? 'Initial value'
-              : isDebt(account.type)
-                ? 'Initial amount owed'
-                : 'Initial Balance'}
-          </dt>
-          <dd>
-            <BalanceFigure
-              type={account.type}
-              amount={account.openingAmount}
-              overdraft={false}
-              className="font-sans text-2xl normal-nums"
-              bare={isDebt(account.type)}
-            />
-            <span className="block text-caption text-ink-muted">{` on ${account.openedOn}`}</span>
-          </dd>
-        </div>
+                {!isCard(account.type) &&
+                  !isDebt(account.type) &&
+                  Number(account.balance.amount) < 0 && (
+                    <span className="mt-1 block max-w-prose text-sm text-ink-muted">
+                      {OVERDRAFT_NOTICE}
+                    </span>
+                  )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-caption text-ink-muted">
+                {isValued(account.type)
+                  ? 'Initial value'
+                  : isDebt(account.type)
+                    ? 'Initial amount owed'
+                    : typeTraits(account.type).kind === 'investment'
+                      ? 'Opening Balance'
+                      : 'Initial Balance'}
+              </dt>
+              <dd>
+                <BalanceFigure
+                  type={account.type}
+                  amount={account.openingAmount}
+                  overdraft={false}
+                  className="font-sans text-2xl normal-nums"
+                  bare={isDebt(account.type)}
+                />
+                <span className="block text-caption text-ink-muted">{` on ${account.openedOn}`}</span>
+              </dd>
+            </div>
+          </>
+        )}
       </dl>
     </Card>
   )

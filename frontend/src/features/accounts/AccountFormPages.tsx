@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router'
 import { Card, EmptyState, PageHeader, buttonStyles } from '../../design-system'
 import { useAccount, useToday } from '../../hooks/useAccounts'
-import { isDebt, isValued } from './accountTypes'
+import { isDebt, isValued, typeTraits } from './accountTypes'
 import { AccountEditForm, AccountSetupForm } from './AccountForms'
 import { useAccountContext } from './useAccountContext'
 
@@ -71,7 +71,9 @@ export function EditAccountPage() {
               ? 'Change the name or owner. Values are not changed here; record a new value on the account.'
               : isDebt(account.data.type)
                 ? 'Change the name, lender or owner. The amount owed is changed by payments and reviewed corrections, not here.'
-                : 'Change the name, owner or bank. Money is not changed here; use Update balance on the account.'
+                : typeTraits(account.data.type).kind === 'investment'
+                  ? 'Change the name, institution or owner. The opening cash and holdings are not changed here.'
+                  : 'Change the name, owner or bank. Money is not changed here; use Update balance on the account.'
         }
       />
       {(account.isPending || context.isPending) && <p className="text-ink-muted">Loading</p>}

@@ -12,7 +12,7 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { stamp } from '../../lib/stamp'
 import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
-import { debtNoun, isDebt, isValued } from './accountTypes'
+import { debtNoun, isDebt, isValued, typeTraits } from './accountTypes'
 import { balanceText, isCard } from './cardBalance'
 import { memberLabel } from './ownerNames'
 import { STATUS_LABEL } from './statusLabel'
@@ -26,6 +26,8 @@ const EVENT_LABEL: Record<string, string> = {
   reopened: 'Reopened',
   deleted: 'Deleted',
   undeleted: 'Deleted, then brought back',
+  setup_finished: 'Setup finished',
+  discarded: 'Draft cancelled',
 }
 
 type Review = 'archive' | 'restore' | 'close' | 'reopen' | 'delete'
@@ -56,7 +58,11 @@ export function AccountStatusCard({ account }: { account: Account }) {
   const confirmDelete = () =>
     remove.mutate(undefined, {
       onSuccess: () =>
-        navigate('/accounts', { state: { deleted: { id: account.id, name: account.name } } }),
+        navigate('/accounts', {
+          state: {
+            deleted: { id: account.id, name: account.name, draft: account.status === 'draft' },
+          },
+        }),
     })
 
   const confirm = (action: Exclude<Review, 'delete'>) =>
@@ -177,6 +183,11 @@ export function AccountStatusCard({ account }: { account: Account }) {
                   </p>
                   {closeBlocked.length > 0 && <p className="text-sm">{closeBlocked.join(' ')}</p>}
                 </>
+              ) : typeTraits(account.type).kind === 'investment' ? (
+                <p className="text-sm">
+                  Closing needs a zero Balance. {account.name} has {figure}. Moving money out of an
+                  investment account comes later, so it cannot be closed with a Balance yet.
+                </p>
               ) : (
                 <p className="text-sm">
                   Closing needs a zero Balance. {account.name} has {figure}, which must be accounted

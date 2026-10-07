@@ -23,7 +23,22 @@ export type NewAccount = {
   openingBalance: string | null
   /** A card's amount is positive; this says if it is owed or Card credit. Left out for every other type. */
   balanceSide?: 'owed' | 'credit' | null
+  /** An investment account's opening cash and holdings, instead of one balance (slice 17). */
+  opening?: OpeningInput
 }
+
+export type HoldingInput = {
+  symbol: string
+  /** Shares, for example "200" or "12.5". */
+  quantity: string
+  /** The market price of one share, for example "100.00". */
+  price: string
+  /** The date of the price; null means the setup date. */
+  valueOn: string | null
+}
+
+/** Cash and holdings as typed. A null cash is "not answered" (a draft when anything else was entered). */
+export type OpeningInput = { total: string | null; cash: string | null; holdings: HoldingInput[] }
 
 export type AccountDetails = { name: string; institution: string; ownerMemberIds: string[] }
 
@@ -38,7 +53,7 @@ function str(value: unknown): string {
   return value
 }
 
-function parseAccount(value: unknown): Account {
+export function parseAccount(value: unknown): Account {
   const data = record(value)
   const balance = record(data.balance)
   if (!Array.isArray(data.ownerMemberIds)) throw new Error('Unexpected response from the server.')
@@ -77,6 +92,7 @@ export const createAccount = (account: NewAccount) =>
       openedOn: account.openedOn,
       openingBalance: account.openingBalance,
       ...(account.balanceSide ? { balanceSide: account.balanceSide } : {}),
+      ...(account.opening ? { opening: account.opening } : {}),
     },
     parse: parseAccount,
   })

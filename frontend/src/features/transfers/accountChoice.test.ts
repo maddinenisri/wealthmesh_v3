@@ -32,4 +32,12 @@ describe('account choosers', () => {
     expect(usableAccounts(all).map((a) => a.type)).toEqual(['checking'])
     expect(usableAccounts(all, 'loanactive').map((a) => a.type)).not.toContain('loan')
   })
+
+  it('V2_BROKERAGE_002 never offer a brokerage, even a draft or a kept one: it takes no ordinary money until purchases and funding exist', () => {
+    const all = [account('checking'), account('brokerage'), account('brokerage', 'draft')]
+    expect(usableAccounts(all).map((a) => a.type)).toEqual(['checking'])
+    expect(usableAccounts(all, 'brokerageactive', 'brokeragedraft').map((a) => a.type)).toEqual([
+      'checking',
+    ])
+  })
 })

@@ -15,7 +15,7 @@ import type { Account } from '../../api/accounts'
 import type { WealthLine } from '../../api/wealth'
 import { useAccounts } from '../../hooks/useAccounts'
 import { useWealth } from '../../hooks/useWealth'
-import { accountTypeLabel, isDebt, isValued } from '../accounts/accountTypes'
+import { accountTypeLabel, isDebt, isValued, typeTraits } from '../accounts/accountTypes'
 import { BalanceFigure } from '../accounts/BalanceFigure'
 import { cardSide, isCard } from '../accounts/cardBalance'
 import { STATUS_LABEL } from '../accounts/statusLabel'
@@ -134,10 +134,7 @@ function AccountsAndWealth() {
             id="bank-money-heading"
             title="Bank money"
             total={wealth.data?.bankMoney.total}
-            accounts={accounts.data.filter(
-              (account) =>
-                !isCard(account.type) && !isValued(account.type) && !isDebt(account.type),
-            )}
+            accounts={accounts.data.filter((account) => typeTraits(account.type).kind === 'ledger')}
             members={members}
             note={
               wealth.data?.debtLines.some((line) => !isCard(line.type) && !isDebt(line.type))
@@ -169,6 +166,16 @@ function AccountsAndWealth() {
             owed
             total={wealth.data?.mortgages.total}
             accounts={accounts.data.filter((account) => account.type === 'mortgage')}
+            members={members}
+          />
+          <AccountGroup
+            id="investments-heading"
+            title="Investments"
+            total={wealth.data?.investments.total}
+            accounts={accounts.data.filter(
+              (account) =>
+                typeTraits(account.type).kind === 'investment' && account.status !== 'draft',
+            )}
             members={members}
           />
           <AccountGroup

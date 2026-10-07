@@ -31,6 +31,7 @@ export function StatementForm({
   members,
   today,
   replacing,
+  linkable = false,
   onDone,
 }: {
   accountId: string
@@ -41,12 +42,16 @@ export function StatementForm({
   today: string
   /** The active version being replaced; left out to attach a new statement. */
   replacing?: Statement
-  onDone: () => void
+  /** An investment account whose opening review uses no statement yet can link this one to it. */
+  linkable?: boolean
+  /** `saved` is true after a statement was saved; Cancel leaves it out. */
+  onDone: (saved?: boolean) => void
 }) {
   const card = isCard(accountType)
   const money = (value: string | number) => balanceText(accountType, String(value))
   const { member, setMemberId } = useEnteringAs(members)
   const [reviewing, setReviewing] = useState<Values | null>(null)
+  const [supportsOpening, setSupportsOpening] = useState(false)
   const [key] = useState(newKey)
   const attach = useAttachStatement(accountId)
   const revise = useReviseStatement(accountId, replacing?.id ?? '')
@@ -74,14 +79,15 @@ export function StatementForm({
       ...(card ? { balanceSide: values.balanceSide } : {}),
       note: values.note.trim(),
       enteredByMemberId: member.id,
+      ...(supportsOpening ? { supportsOpening } : {}),
     }
     if (replacing) {
       revise.mutate(
         { key, revision: { ...statement, reason: values.reason.trim() } },
-        { onSuccess: onDone },
+        { onSuccess: () => onDone(true) },
       )
     } else {
-      attach.mutate({ key, statement }, { onSuccess: onDone })
+      attach.mutate({ key, statement }, { onSuccess: () => onDone(true) })
     }
   }
 
@@ -117,7 +123,7 @@ export function StatementForm({
           <Button variant="secondary" onClick={() => setReviewing(null)} disabled={saving}>
             Back
           </Button>
-          <Button variant="ghost" onClick={onDone} disabled={saving}>
+          <Button variant="ghost" onClick={() => onDone()} disabled={saving}>
             Cancel
           </Button>
         </div>
@@ -168,6 +174,22 @@ export function StatementForm({
           </SelectField>
         )}
         <TextField control={control} name="note" label="Note" />
+        {linkable && !replacing && (
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={supportsOpening}
+              onChange={(event) => setSupportsOpening(event.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              This statement supports the opening cash and holdings
+              <span className="block text-caption text-ink-muted">
+                Optional. The opening breakdown stays even if the statement is removed later.
+              </span>
+            </span>
+          </label>
+        )}
         {replacing && (
           <TextField
             control={control}
@@ -181,7 +203,7 @@ export function StatementForm({
           <Button type="submit" disabled={saving || (!replacing && !member)}>
             {replacing ? 'Review' : saving ? 'Saving' : 'Save statement'}
           </Button>
-          <Button variant="ghost" onClick={onDone} disabled={saving}>
+          <Button variant="ghost" onClick={() => onDone()} disabled={saving}>
             Cancel
           </Button>
         </div>

@@ -49,7 +49,7 @@ describe('adding a savings account', () => {
     renderRoute('/accounts/new')
     const type = await screen.findByLabelText('Account type')
     expect(within(type).getByRole('option', { name: 'Savings' })).toBeEnabled()
-    expect(within(type).getByRole('option', { name: 'Brokerage (coming soon)' })).toBeDisabled()
+    expect(within(type).getByRole('option', { name: '401(k) (coming soon)' })).toBeDisabled()
   })
 
   it('V2_SAVINGS_001 follows Emergency Savings from the list to its detail and its actions', async () => {

@@ -13,6 +13,11 @@ export type Statement = {
   latest: boolean
   enteredByName: string
   createdAt: string
+  /** When a removed statement was removed (it stays in the list, for history); null while it is active. */
+  removedAt: string | null
+  removedByName: string | null
+  /** True when an investment account's opening review is linked to this statement. */
+  usedByOpening: boolean
 }
 
 export type NewStatement = {
@@ -22,6 +27,8 @@ export type NewStatement = {
   balanceSide?: 'owed' | 'credit'
   note: string
   enteredByMemberId: string
+  /** Links the statement to the completed opening review of an investment account. */
+  supportsOpening?: boolean
 }
 
 /** A corrected version of a statement; the reason is required. */
@@ -55,6 +62,9 @@ function parseStatement(value: unknown): Statement {
     latest: data.latest,
     enteredByName: str(data.enteredByName),
     createdAt: str(data.createdAt),
+    removedAt: strOrNull(data.removedAt),
+    removedByName: strOrNull(data.removedByName),
+    usedByOpening: data.usedByOpening === true,
   }
 }
 
@@ -85,5 +95,29 @@ export const reviseStatement = (
     method: 'POST',
     headers: { 'Idempotency-Key': key },
     body: revision,
+    parse: parseStatement,
+  })
+
+/** What removing a statement does, before Confirm. */
+export type RemovalReview = { openingBreakdowns: number; balance: string; message: string }
+
+export const getRemovalReview = (accountId: string, statementId: string) =>
+  request(`/accounts/${accountId}/statements/${statementId}/removal`, {
+    parse: (value): RemovalReview => {
+      const data = record(value)
+      if (typeof data.openingBreakdowns !== 'number') throw bad()
+      return {
+        openingBreakdowns: data.openingBreakdowns,
+        balance: str(data.balance),
+        message: str(data.message),
+      }
+    },
+  })
+
+/** Removes the statement from active records; the Balance and the opening breakdown are untouched. */
+export const removeStatement = (accountId: string, statementId: string, memberId: string) =>
+  request(`/accounts/${accountId}/statements/${statementId}/removal`, {
+    method: 'POST',
+    body: { enteredByMemberId: memberId },
     parse: parseStatement,
   })

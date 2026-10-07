@@ -25,20 +25,29 @@ export function AccountsPage() {
   const { members } = useAccountContext()
   // A delete on the account's own page lands here: the status line says so, takes focus and offers Undo (A3).
   const navigate = useNavigate()
-  const arrived = (useLocation().state as { deleted?: { id: string; name: string } } | null)
-    ?.deleted
+  const arrivedState = useLocation().state as {
+    deleted?: { id: string; name: string; draft?: boolean }
+    discarded?: { name: string }
+  } | null
+  const arrived = arrivedState?.deleted
   const [deleted] = useState(arrived)
   const [undone, setUndone] = useState(false)
   const { member } = useEnteringAs(members)
   const undo = useChangeAccountStatus(deleted?.id ?? '', member?.id)
   const { message, statusRef, changed } = useStateChangeFocus(
     false,
-    deleted ? `${deleted.name} is deleted. Wealth does not change.` : undefined,
+    deleted
+      ? `${deleted.name} is deleted. Wealth does not change.`
+      : arrivedState?.discarded
+        ? `${arrivedState.discarded.name} draft is cancelled and removed. Nothing was added to household wealth.`
+        : undefined,
   )
   // Archived and closed accounts leave the active list; this switch brings them back into view (CHECKING_012).
   const [showAll, setShowAll] = useState(false)
-  const hidden = (accounts.data ?? []).filter((account) => account.status !== 'active')
-  const shown = (accounts.data ?? []).filter((account) => showAll || account.status === 'active')
+  // A draft stays in the list, labelled, until it is finished or discarded.
+  const listed = (status: string) => status === 'active' || status === 'draft'
+  const hidden = (accounts.data ?? []).filter((account) => !listed(account.status))
+  const shown = (accounts.data ?? []).filter((account) => showAll || listed(account.status))
 
   return (
     <div className="flex flex-col gap-6">
@@ -71,7 +80,11 @@ export function AccountsPage() {
                     setUndone(true)
                     // A reload must not say "deleted" again for an account that is back.
                     navigate('.', { replace: true, state: null })
-                    changed(`${deleted.name} is back with its Balance and no new activity.`)
+                    changed(
+                      deleted.draft
+                        ? `${deleted.name} is back as a draft. It needs its opening cash and adds nothing to household wealth.`
+                        : `${deleted.name} is back with its Balance and no new activity.`,
+                    )
                   },
                 })
               }
@@ -119,7 +132,7 @@ export function AccountsPage() {
               <tr>
                 <Th>Account</Th>
                 <Th>Owners</Th>
-                <Th>Bank or lender</Th>
+                <Th>Bank, lender or institution</Th>
                 <Th className="text-right">Balance</Th>
               </tr>
             </thead>
@@ -146,10 +159,16 @@ export function AccountsPage() {
                   <Td>{ownerNames(account.ownerMemberIds, members)}</Td>
                   <Td>{account.institution}</Td>
                   <Td className="whitespace-nowrap text-right">
-                    <BalanceFigure type={account.type} amount={account.balance.amount} />
-                    <span className="block text-caption text-ink-muted">
-                      as of {account.balance.asOf}
-                    </span>
+                    {account.status === 'draft' ? (
+                      <span className="text-sm text-ink-muted">No Balance yet</span>
+                    ) : (
+                      <>
+                        <BalanceFigure type={account.type} amount={account.balance.amount} />
+                        <span className="block text-caption text-ink-muted">
+                          as of {account.balance.asOf}
+                        </span>
+                      </>
+                    )}
                   </Td>
                 </tr>
               ))}

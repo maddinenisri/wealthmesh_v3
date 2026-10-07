@@ -1,5 +1,5 @@
 import type { Account } from '../../api/accounts'
-import { ACCOUNT_TYPES, accountTypeLabel, isDebt, isValued } from '../accounts/accountTypes'
+import { ACCOUNT_TYPES, accountTypeLabel, typeTraits } from '../accounts/accountTypes'
 import { STATUS_LABEL } from '../accounts/statusLabel'
 
 /** "Emergency Savings (Savings)": the type tells apart accounts that share a name; a status other than active is said. */
@@ -10,7 +10,7 @@ export const accountChoice = (account: Account): string =>
 
 /**
  * The accounts a chooser may offer for new money: a type the app can set up that holds money activity (not a
- * property, other asset or loan) and an active status. An archived or
+ * property, other asset, loan or investment account) and an active status. An archived or
  * closed account leaves every chooser but keeps its history (slice 12). `keepIds` stay listed so an edit that already
  * points at one (a transfer's other side) still shows it. The server refuses the rest, too.
  */
@@ -18,7 +18,6 @@ export const usableAccounts = (accounts: Account[] | undefined, ...keepIds: stri
   (accounts ?? []).filter(
     (candidate) =>
       ACCOUNT_TYPES.some((type) => type.ready && type.value === candidate.type) &&
-      !isValued(candidate.type) &&
-      !isDebt(candidate.type) &&
+      typeTraits(candidate.type).holdsMoney &&
       (candidate.status === 'active' || keepIds.includes(candidate.id)),
   )

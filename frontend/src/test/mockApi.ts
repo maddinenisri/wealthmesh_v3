@@ -1,7 +1,16 @@
 import { http, HttpResponse } from 'msw'
 import { valueHandlers, valuedPoint, type MockValue } from './mockValues'
 import { server } from './server'
-import { isDebt as isDebtType } from '../features/accounts/accountTypes'
+import { isDebt as isDebtType, typeTraits } from '../features/accounts/accountTypes'
+import {
+  calculated,
+  judgeOpening,
+  mismatchMessage,
+  previewBody,
+  stateOf,
+  viewBody,
+  type MockOpening,
+} from './mockInvestments'
 
 type MockHousehold = { id: string; name: string }
 type MockMember = {
@@ -77,6 +86,8 @@ export type MockStatement = {
   replacesId?: string | null
   enteredByMemberId: string
   createdAt?: string
+  removedAt?: string
+  removedByMemberId?: string
 }
 
 export type MockBudget = {
@@ -373,6 +384,8 @@ export function mockApi(
     values?: MockValue[]
     /** Starting-amount corrections already saved. */
     openingRevisions?: MockOpeningRevision[]
+    /** Opening cash and holdings of investment accounts already saved, by account id. */
+    openings?: Record<string, MockOpening>
     /** Suggestions the server would find: the bills are the account's matching expenses. */
     suggestions?: { accountId: string; categoryId: string; description: string }[]
   } = {},
@@ -391,6 +404,8 @@ export function mockApi(
     suggestions: (seed.suggestions ?? []).map((s) => ({ ...s })),
     values: (seed.values ?? []).map((v) => ({ ...v })) as MockValue[],
     openingRevisions: [...(seed.openingRevisions ?? [])] as MockOpeningRevision[],
+    /** Opening cash and holdings of investment accounts, by account id. */
+    openings: new Map<string, MockOpening>(Object.entries(seed.openings ?? {})),
     /** Save keys seen on POST expenses, in order. */
     keys: [] as string[],
     /** When true the next expense is stored but its response is lost (a slow or dropped answer). */
@@ -499,7 +514,46 @@ export function mockApi(
       enteredByMemberId: s.enteredByMemberId,
       enteredByName: nameOf(s.enteredByMemberId),
       createdAt: s.createdAt ?? '2026-10-03T12:00:00Z',
+      removedAt: s.removedAt ?? null,
+      removedByMemberId: s.removedByMemberId ?? null,
+      removedByName: s.removedByMemberId ? nameOf(s.removedByMemberId) : null,
+      usedByOpening: [...state.openings.values()].some((o) => o.statementId === s.id),
     }
+  }
+  /** The header of an investment setup and its judged components, or the problem the server would answer. */
+  const judgeSetup = (body: NewAccountBody & { opening?: unknown }) => {
+    const failure =
+      validateAccount(body.name, body.ownerMemberIds) ??
+      validateOwners(state.members, body.ownerMemberIds, [])
+    if (failure) return failure
+    if (body.openedOn > today) return problem(400, 'The opening date cannot be in the future')
+    const judged = judgeOpening(
+      body.opening as Parameters<typeof judgeOpening>[0],
+      body.openedOn,
+      today,
+    )
+    return 'error' in judged ? problem(400, judged.error) : judged.opening
+  }
+  const createInvestment = (body: NewAccountBody & { opening?: unknown }) => {
+    const judged = judgeSetup(body)
+    if (judged instanceof Response) return judged
+    if (stateOf(judged) === 'mismatch') return problem(400, mismatchMessage(judged))
+    const draft = stateOf(judged) === 'draft'
+    const balance = (calculated(judged) ?? 0).toFixed(2)
+    const account: MockAccount = {
+      id: newId(),
+      type: body.type,
+      name: body.name.trim(),
+      institution: body.institution?.trim() || null,
+      ownerMemberIds: body.ownerMemberIds,
+      openedOn: body.openedOn,
+      openingAmount: balance,
+      balance: { amount: balance, asOf: body.openedOn },
+      status: draft ? 'draft' : 'active',
+    }
+    state.accounts.push(account)
+    state.openings.set(account.id, judged)
+    return HttpResponse.json(account, { status: 201 })
   }
   const saveStatement = async (request: Request, accountId: string, replaces: string | null) => {
     const key = request.headers.get('Idempotency-Key') ?? ''
@@ -510,9 +564,14 @@ export function mockApi(
       reason?: string
       balanceSide?: string
       enteredByMemberId: string
+      supportsOpening?: boolean
     }
     if (!/^-?\d+(\.\d{1,2})?$/.test(body.balance)) return problem(400, 'Enter a valid amount')
     const owner = state.accounts.find((a) => a.id === accountId)
+    if (owner?.status === 'draft')
+      return problem(409, `${owner.name} is a draft. Finish setting it up first.`)
+    if (replaces && state.statements.find((s) => s.id === replaces)?.removedAt)
+      return problem(409, 'This statement was removed, so it cannot be revised.')
     const shown = owner ? signedFor(owner, body.balance, body.balanceSide) : Number(body.balance)
     if (typeof shown !== 'number') return shown
     if (replaces && !body.reason?.trim())
@@ -532,6 +591,22 @@ export function mockApi(
       reason: body.reason?.trim() || null,
       replacesId: replaces,
       enteredByMemberId: body.enteredByMemberId,
+    }
+    if (!replaces && body.supportsOpening) {
+      const opening = state.openings.get(accountId)
+      if (!opening)
+        return problem(400, 'A statement can back the opening of an investment account only')
+      if (opening.statementId)
+        return problem(
+          409,
+          `${owner?.name}'s opening already uses a statement. Revise that one instead.`,
+        )
+      opening.statementId = statement.id
+    }
+    if (replaces) {
+      for (const opening of state.openings.values()) {
+        if (opening.statementId === replaces) opening.statementId = statement.id
+      }
     }
     state.statements.push(statement)
     return HttpResponse.json(statementView(statement), { status: 201 })
@@ -2168,6 +2243,88 @@ export function mockApi(
         { status: 201 },
       )
     }),
+    http.post('*/api/v1/accounts/opening-preview', async ({ request }) => {
+      log(request)
+      const judged = judgeSetup((await request.json()) as NewAccountBody & { opening?: unknown })
+      return judged instanceof Response ? judged : HttpResponse.json(previewBody(judged))
+    }),
+    http.get('*/api/v1/accounts/:id/opening', ({ request, params }) => {
+      log(request)
+      const opening = state.openings.get(String(params.id))
+      if (!opening) return problem(404, 'This account has no opening cash and holdings')
+      const linked = state.statements.find((s) => s.id === opening.statementId)
+      return HttpResponse.json(viewBody(opening, !!linked?.removedAt))
+    }),
+    http.put('*/api/v1/accounts/:id/opening', async ({ request, params }) => {
+      log(request)
+      const body = (await request.json()) as { opening?: unknown; enteredByMemberId?: string }
+      const account = state.accounts.find((a) => a.id === params.id)
+      if (!account) return problem(404, `Account not found: ${String(params.id)}`)
+      if (account.status !== 'draft') return problem(409, `${account.name} is already set up`)
+      if (!body.enteredByMemberId) return problem(400, 'Choose who entered this')
+      const judged = judgeOpening(
+        body.opening as Parameters<typeof judgeOpening>[0],
+        account.openedOn,
+        today,
+      )
+      if ('error' in judged) return problem(400, judged.error)
+      if (stateOf(judged.opening) === 'mismatch')
+        return problem(400, mismatchMessage(judged.opening))
+      state.openings.set(account.id, judged.opening)
+      if (stateOf(judged.opening) === 'complete') {
+        const balance = (calculated(judged.opening) ?? 0).toFixed(2)
+        account.status = 'active'
+        account.openingAmount = balance
+        account.balance = { amount: balance, asOf: account.openedOn }
+        noteAccountEvent(account.id, 'setup_finished', body.enteredByMemberId)
+      }
+      return HttpResponse.json(account)
+    }),
+    http.post('*/api/v1/accounts/:id/discard', async ({ request, params }) => {
+      log(request)
+      const body = (await request.json()) as { enteredByMemberId?: string }
+      const index = state.accounts.findIndex((a) => a.id === params.id)
+      if (index < 0) return problem(404, `Account not found: ${String(params.id)}`)
+      const account = state.accounts[index]
+      if (account.status !== 'draft')
+        return problem(409, `${account.name} is not a draft; delete it from its page instead`)
+      if (!body.enteredByMemberId) return problem(400, 'Choose who entered this')
+      state.accounts.splice(index, 1)
+      return HttpResponse.json(account)
+    }),
+    http.get('*/api/v1/accounts/:id/statements/:sid/removal', ({ request, params }) => {
+      log(request)
+      const statement = state.statements.find(
+        (s) => s.id === params.sid && s.accountId === params.id,
+      )
+      const account = state.accounts.find((a) => a.id === params.id)
+      if (!statement || !account) return problem(404, `Statement not found: ${String(params.sid)}`)
+      const uses = [...state.openings.values()].filter((o) => o.statementId === statement.id).length
+      return HttpResponse.json({
+        statementId: statement.id,
+        openingBreakdowns: uses,
+        balance: account.balance.amount,
+        message: `${
+          uses === 0
+            ? 'No opening breakdown uses this statement.'
+            : `${uses} opening breakdown${uses === 1 ? ' uses' : 's use'} this statement.`
+        } Removing it keeps the recorded cash, shares and price, and the Balance stays ${Number(account.balance.amount).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}. The removal stays in history.`,
+      })
+    }),
+    http.post('*/api/v1/accounts/:id/statements/:sid/removal', async ({ request, params }) => {
+      log(request)
+      const body = (await request.json()) as { enteredByMemberId?: string }
+      const statement = state.statements.find(
+        (s) => s.id === params.sid && s.accountId === params.id,
+      )
+      if (!statement) return problem(404, `Statement not found: ${String(params.sid)}`)
+      if (!body.enteredByMemberId) return problem(400, 'Choose who entered this')
+      if (!statement.removedAt) {
+        statement.removedAt = '2026-10-03T13:00:00Z'
+        statement.removedByMemberId = body.enteredByMemberId
+      }
+      return HttpResponse.json(statementView(statement))
+    }),
     http.get('*/api/v1/accounts/:id/statements', ({ request, params }) => {
       log(request)
       return HttpResponse.json(
@@ -2612,7 +2769,7 @@ export function mockApi(
       log(request)
       const asOf = new URL(request.url).searchParams.get('asOf') ?? today
       if (asOf > today) return problem(400, 'The date cannot be in the future')
-      const tracked = state.accounts.filter((a) => a.openedOn <= asOf)
+      const tracked = state.accounts.filter((a) => a.openedOn <= asOf && a.status !== 'draft')
       const lines = tracked.map((a) => {
         const valued = a.type === 'property' || a.type === 'other_asset'
         const point = valued ? valuedPoint(state.values, a, asOf) : null
@@ -2630,16 +2787,11 @@ export function mockApi(
       })
       const sum = (rows: { balance: string }[]) =>
         rows.reduce((x, row) => x + Number(row.balance), 0)
-      const bank = lines.filter(
-        (l) =>
-          l.type !== 'credit_card' &&
-          l.type !== 'property' &&
-          l.type !== 'other_asset' &&
-          !isDebtType(l.type),
-      )
+      const bank = lines.filter((l) => typeTraits(l.type).kind === 'ledger')
       const cards = lines.filter((l) => l.type === 'credit_card')
       const loans = lines.filter((l) => l.type === 'loan')
       const mortgages = lines.filter((l) => l.type === 'mortgage')
+      const investmentLines = lines.filter((l) => typeTraits(l.type).kind === 'investment')
       const debtLines = lines.filter((l) => Number(l.balance) < 0)
       const assets = lines.map((l) => Number(l.balance)).filter((b) => b > 0)
       const financialAssets = assets.reduce((x, y) => x + y, 0)
@@ -2654,6 +2806,7 @@ export function mockApi(
         cards: { total: sum(cards).toFixed(2), accounts: cards },
         loans: { total: sum(loans).toFixed(2), accounts: loans },
         mortgages: { total: sum(mortgages).toFixed(2), accounts: mortgages },
+        investments: { total: sum(investmentLines).toFixed(2), accounts: investmentLines },
         propertyAndOther: { total: sum(valuedLines).toFixed(2), accounts: valuedLines },
         debtLines,
         notTracked: state.accounts
@@ -2703,6 +2856,7 @@ export function mockApi(
     http.post('*/api/v1/accounts', async ({ request }) => {
       log(request)
       const body = (await request.json()) as NewAccountBody
+      if (typeTraits(body.type).kind === 'investment') return createInvestment(body)
       const failure =
         validateAccount(body.name, body.ownerMemberIds) ??
         validateOwners(state.members, body.ownerMemberIds, []) ??

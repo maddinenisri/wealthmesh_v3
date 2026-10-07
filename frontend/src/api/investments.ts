@@ -1,0 +1,135 @@
+import { request } from './client'
+import { parseAccount, type NewAccount } from './accounts'
+
+const bad = () => new Error('Unexpected response from the server.')
+
+function record(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) throw bad()
+  return value as Record<string, unknown>
+}
+
+function str(value: unknown): string {
+  if (typeof value !== 'string') throw bad()
+  return value
+}
+
+const strOrNull = (value: unknown) => (value == null ? null : str(value))
+
+/** One holding line as the server keeps it: `value` is shares x price to the cent. */
+export type HoldingLine = {
+  symbol: string
+  quantity: string
+  price: string
+  value: string
+  valueOn: string
+}
+
+/**
+ * The review of an opening before it is saved. `complete` saves an active account, `draft` (cash not answered) keeps a
+ * draft, `mismatch` cannot be saved (the typed total differs from cash plus holdings).
+ */
+export type OpeningPreview = {
+  state: 'complete' | 'draft' | 'mismatch'
+  canSave: boolean
+  cash: string | null
+  holdingsValue: string
+  calculatedBalance: string | null
+  openingTotal: string | null
+  difference: string | null
+  missing: string[]
+  message: string | null
+  holdings: HoldingLine[]
+}
+
+/** What an investment account was opened with. */
+export type OpeningView = {
+  total: string | null
+  cash: string | null
+  holdingsValue: string
+  noStartingAmount: boolean
+  holdings: HoldingLine[]
+  statementId: string | null
+  statementRemoved: boolean
+}
+
+function parseLines(value: unknown): HoldingLine[] {
+  if (!Array.isArray(value)) throw bad()
+  return value.map((item) => {
+    const data = record(item)
+    return {
+      symbol: str(data.symbol),
+      quantity: str(data.quantity),
+      price: str(data.price),
+      value: str(data.value),
+      valueOn: str(data.valueOn),
+    }
+  })
+}
+
+function parsePreview(value: unknown): OpeningPreview {
+  const data = record(value)
+  if (data.state !== 'complete' && data.state !== 'draft' && data.state !== 'mismatch') throw bad()
+  if (typeof data.canSave !== 'boolean' || !Array.isArray(data.missing)) throw bad()
+  return {
+    state: data.state,
+    canSave: data.canSave,
+    cash: strOrNull(data.cash),
+    holdingsValue: str(data.holdingsValue),
+    calculatedBalance: strOrNull(data.calculatedBalance),
+    openingTotal: strOrNull(data.openingTotal),
+    difference: strOrNull(data.difference),
+    missing: data.missing.map(str),
+    message: strOrNull(data.message),
+    holdings: parseLines(data.holdings),
+  }
+}
+
+function parseView(value: unknown): OpeningView {
+  const data = record(value)
+  if (typeof data.noStartingAmount !== 'boolean' || typeof data.statementRemoved !== 'boolean')
+    throw bad()
+  return {
+    total: strOrNull(data.total),
+    cash: strOrNull(data.cash),
+    holdingsValue: str(data.holdingsValue),
+    noStartingAmount: data.noStartingAmount,
+    holdings: parseLines(data.holdings),
+    statementId: strOrNull(data.statementId),
+    statementRemoved: data.statementRemoved,
+  }
+}
+
+/** The review of a new setup: the same checks as the save, writing nothing. */
+/** `accountId` is set when finishing a draft: its present owners may stay, as an edit allows. */
+export const previewOpening = (account: NewAccount, accountId?: string) =>
+  request(`/accounts/opening-preview${accountId ? `?accountId=${accountId}` : ''}`, {
+    method: 'POST',
+    body: {
+      type: account.type,
+      name: account.name,
+      institution: account.institution,
+      ownerMemberIds: account.ownerMemberIds,
+      openedOn: account.openedOn,
+      opening: account.opening,
+    },
+    parse: parsePreview,
+  })
+
+export const getOpening = (accountId: string) =>
+  request(`/accounts/${accountId}/opening`, { parse: parseView })
+
+/** Finish setup of a draft: the components again; the account becomes active when they are complete. */
+export const finishSetup = (accountId: string, opening: NewAccount['opening'], memberId: string) =>
+  request(`/accounts/${accountId}/opening`, {
+    method: 'PUT',
+    body: { opening, enteredByMemberId: memberId },
+    parse: parseAccount,
+  })
+
+/** Quick discard of a draft: gone at once, no Undo. */
+export const discardDraft = (accountId: string, memberId: string) =>
+  request(`/accounts/${accountId}/discard`, {
+    method: 'POST',
+    body: { enteredByMemberId: memberId },
+    parse: parseAccount,
+  })

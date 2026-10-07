@@ -9,7 +9,7 @@ import {
   useSpendingEntries,
   useSpendingHistory,
 } from '../../hooks/useActivity'
-import { isDebt, isValued } from '../accounts/accountTypes'
+import { typeTraits } from '../accounts/accountTypes'
 import { accountChoice } from '../transfers/accountChoice'
 import { UNCATEGORIZED } from '../../api/activity'
 import { formatMoney } from '../../lib/money'
@@ -65,7 +65,7 @@ export function SpendingPage() {
               >
                 <option value="">All accounts</option>
                 {accounts.data
-                  ?.filter((account) => !isValued(account.type) && !isDebt(account.type))
+                  ?.filter((account) => typeTraits(account.type).holdsMoney)
                   .map((account) => (
                     <option key={account.id} value={account.id}>
                       {accountChoice(account)}
