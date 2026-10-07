@@ -60,6 +60,8 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
 - [ ] A form or page for a new account type is read against that type's own words before Cowork does (slice 15: Bank, Opened on, Balance and joint on a property); a review that Confirm can refuse is told by the server first.
 - [ ] Every Confirm, removal and Undo ends with a sentence saying what changed and focus on the section heading; every Back returns focus to the form's heading and clears the save error (slice 16a, fifth slice with this fault in Cowork).
 - [ ] A rule the save refuses is refused in the review too: the preview endpoint runs the same check, and Confirm stays off (slice 16a: a new initial amount below what was paid).
+- [ ] A new type or account state (draft) is checked against every page that groups or lists accounts by type: Household groups, Accounts list, pickers, Spending, wealth groups; the totals equal the lines shown (slice 17a: Bank money listed brokerages; Financial assets outran the page).
+- [ ] A step that destroys something (Cancel on a draft, a discard) asks once before it acts, even when there is no Undo; ask the owner at checkpoint 1 if the scenario is silent.
 - [ ] Every Decision written in the notes is built with a test, or struck out, before the validator runs.
 - [ ] Anything new that distinguishes accounts or entries (type, status, owner) shows in the lists, not only on the
       detail page.
