@@ -57,6 +57,26 @@ export type WealthChange = {
     end: string
     change: string
   }[]
+  /** Each Balance correction dated in the period (a loan's is a debt correction). */
+  correctionLines: {
+    accountId: string
+    name: string
+    type: string
+    amount: string
+    reason: string | null
+    on: string
+  }[]
+  /** Each starting amount corrected in the period: the figures on every date already use the corrected amount. */
+  restatements: {
+    accountId: string
+    name: string
+    type: string
+    previousAmount: string
+    amount: string
+    change: string
+    reason: string | null
+    madeOn: string
+  }[]
 }
 
 const bad = () => new Error('Unexpected response from the server.')
@@ -122,6 +142,7 @@ function parseWealth(value: unknown): Wealth {
 function parseChange(value: unknown): WealthChange {
   const data = record(value)
   if (!Array.isArray(data.valueMoves)) throw bad()
+  if (!Array.isArray(data.correctionLines) || !Array.isArray(data.restatements)) throw bad()
   return {
     from: text(data.from),
     to: text(data.to),
@@ -144,6 +165,30 @@ function parseChange(value: unknown): WealthChange {
         start: text(move.start),
         end: text(move.end),
         change: text(move.change),
+      }
+    }),
+    correctionLines: data.correctionLines.map((item) => {
+      const line = record(item)
+      return {
+        accountId: text(line.accountId),
+        name: text(line.name),
+        type: text(line.type),
+        amount: text(line.amount),
+        reason: line.reason == null ? null : text(line.reason),
+        on: text(line.on),
+      }
+    }),
+    restatements: data.restatements.map((item) => {
+      const line = record(item)
+      return {
+        accountId: text(line.accountId),
+        name: text(line.name),
+        type: text(line.type),
+        previousAmount: text(line.previousAmount),
+        amount: text(line.amount),
+        change: text(line.change),
+        reason: line.reason == null ? null : text(line.reason),
+        madeOn: text(line.madeOn),
       }
     }),
   }

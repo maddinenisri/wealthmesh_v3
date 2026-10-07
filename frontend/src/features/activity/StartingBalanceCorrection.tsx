@@ -6,6 +6,8 @@ import { Button, Card, CardTitle, FormAlert, TextField } from '../../design-syst
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useOpeningPreview, useSaveOpening } from '../../hooks/useStartingBalance'
 import { formatMoney, parseAmount } from '../../lib/money'
+import { isDebt } from '../accounts/accountTypes'
+import { balanceText } from '../accounts/cardBalance'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { EnteredBy } from './EnteredBy'
 
@@ -37,6 +39,10 @@ export function StartingBalanceCorrection({
   onDone: () => void
 }) {
   const { member, setMemberId } = useEnteringAs(members)
+  const debt = isDebt(account.type)
+  // A loan's figures read "owed": the server sends them with the asset sign (owed is negative).
+  const shown = (amount: string) =>
+    debt ? balanceText(account.type, amount) : formatMoney(Number(amount))
   const [reviewing, setReviewing] = useState<{ amount: string; on: string } | null>(null)
   const [key] = useState(newKey)
   const save = useSaveOpening(account.id)
@@ -71,7 +77,7 @@ export function StartingBalanceCorrection({
     return (
       <Card aria-labelledby="starting-review-heading">
         <CardTitle id="starting-review-heading" className="text-lg">
-          Review starting balance correction
+          {debt ? 'Review initial amount owed correction' : 'Review starting balance correction'}
         </CardTitle>
         <FormAlert
           message={save.error?.message ?? (preview.isError ? preview.error.message : undefined)}
@@ -80,16 +86,16 @@ export function StartingBalanceCorrection({
         {figures && (
           <>
             <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
-              <Item label="Original starting balance">
-                {formatMoney(Number(figures.originalAmount))} on {figures.originalOn}
+              <Item label={debt ? 'Original initial amount owed' : 'Original starting balance'}>
+                {shown(figures.originalAmount)} on {figures.originalOn}
               </Item>
-              <Item label="Corrected starting balance">
-                {formatMoney(Number(figures.openingAmount))} on {figures.openedOn}
+              <Item label={debt ? 'Corrected initial amount owed' : 'Corrected starting balance'}>
+                {shown(figures.openingAmount)} on {figures.openedOn}
               </Item>
             </dl>
             <p className="mt-3 max-w-md text-sm">
-              Balance will change from {formatMoney(Number(figures.currentBalance))} to{' '}
-              {formatMoney(Number(figures.currentBalanceAfter))}.
+              {debt ? 'Balance owed' : 'Balance'} will change from {shown(figures.currentBalance)}{' '}
+              to {shown(figures.currentBalanceAfter)}.
             </p>
             <p className="mt-2 max-w-md text-sm text-ink-muted">
               This correction is not income or spending, and your entries stay on their own dates.
@@ -137,7 +143,7 @@ export function StartingBalanceCorrection({
   return (
     <Card aria-labelledby="starting-heading">
       <CardTitle id="starting-heading" className="text-lg">
-        Correct the starting balance
+        {debt ? 'Correct the initial amount owed' : 'Correct the starting balance'}
       </CardTitle>
       {initial && (
         <p role="status" className="mt-3 max-w-md rounded-control border border-line p-3 text-sm">
@@ -155,10 +161,16 @@ export function StartingBalanceCorrection({
         <TextField
           control={control}
           name="amount"
-          label="Starting balance"
+          label={debt ? 'Initial amount owed' : 'Starting balance'}
           inputMode="decimal"
           placeholder="0.00"
-          rules={{ validate: (value) => parseAmount(value) !== null || 'Enter a valid amount' }}
+          rules={{
+            validate: (value) => {
+              const amount = parseAmount(value)
+              if (amount === null) return 'Enter a valid amount'
+              return !debt || !amount.startsWith('-') || 'Enter zero or a positive amount owed'
+            },
+          }}
         />
         <TextField
           control={control}
@@ -171,8 +183,10 @@ export function StartingBalanceCorrection({
           }}
         />
         <p className="text-sm text-ink-muted">
-          Enter what the account held at the start of that day. You will review the change before it
-          is saved.
+          {debt
+            ? 'Enter what was owed at the start of that day.'
+            : 'Enter what the account held at the start of that day.'}{' '}
+          You will review the change before it is saved.
         </p>
         <div className="flex gap-2">
           <Button type="submit">Review</Button>

@@ -19,7 +19,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.Account;
 import com.mdstech.wealthmesh.account.domain.AccountState;
+import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
+import com.mdstech.wealthmesh.account.service.DebtRules;
 import com.mdstech.wealthmesh.activity.domain.Activity;
 import com.mdstech.wealthmesh.activity.domain.Portion;
 import com.mdstech.wealthmesh.activity.dto.ExpenseRequest;
@@ -48,10 +50,12 @@ public class EntryChangeService {
     private final Clock clock;
     private final TransactionalOperator transactions;
     private final MoveTarget moveTarget;
+    private final DebtRules debt;
 
     public EntryChangeService(AccountRepository accounts, EntryValidator validator, ActivityRepository activities,
             ActivityStore store, PortionStore portions, Clock clock, TransactionalOperator transactions,
-            MoveTarget moveTarget) {
+            MoveTarget moveTarget, DebtRules debt) {
+        this.debt = debt;
         this.portions = portions;
         this.transactions = transactions;
         this.moveTarget = moveTarget;
@@ -80,7 +84,8 @@ public class EntryChangeService {
                         .then(Mono.defer(() -> store.markRemoved(activityId, memberId, now))))
                 .filter(updated -> updated > 0)
                 .switchIfEmpty(Mono.error(conflict("This entry was already changed or removed.")))
-                .flatMap(updated -> store.recordEvent(activityId, "removed", memberId, now));
+                .flatMap(updated -> debt.requireNotCredit(accountId)
+                        .then(Mono.defer(() -> store.recordEvent(activityId, "removed", memberId, now))));
         return transactions.transactional(removed).then(Mono.defer(() -> entry(accountId, activityId)));
     }
 
@@ -95,7 +100,8 @@ public class EntryChangeService {
                                 AccountState::requireNotClosed)))
                         .then(Mono.defer(() -> store.clearRemoved(activityId))))
                 .flatMap(updated -> updated > 0
-                        ? store.recordEvent(activityId, "restored", memberId, clock.instant())
+                        ? debt.requireNotCredit(accountId).then(Mono.defer(() -> store.recordEvent(activityId,
+                                "restored", memberId, clock.instant())))
                         : alreadyRestored(activityId));
         return transactions.transactional(restored).then(Mono.defer(() -> entry(accountId, activityId)));
     }
@@ -263,8 +269,10 @@ public class EntryChangeService {
         }
     }
 
+    /** Removal and Undo: a loan's Balance correction can be removed and brought back; a ledger one is replaced. */
     private Mono<Activity> original(UUID accountId, UUID activityId) {
-        return original(accountId, activityId, false);
+        return accounts.findById(accountId).switchIfEmpty(Mono.error(notFound("Account not found: " + accountId)))
+                .flatMap(account -> original(accountId, activityId, AccountType.isDebt(account.type())));
     }
 
     private Mono<Activity> original(UUID accountId, UUID activityId, boolean allowCorrection) {

@@ -93,4 +93,19 @@ abstract class DebtTestBase extends ValuedTestBase {
                 .value(java.util.List.class, ids -> id.set((String) ids.get(0)));
         return id.get();
     }
+
+    /** A reviewed correction of the initial amount owed (opening dated 2026-09-01), entered by Sam. */
+    protected WebTestClient.ResponseSpec correctInitial(String account, String key, String owed, String reason) {
+        return post(account, "starting-balance-corrections", key, """
+                {"openingAmount": "%s", "openedOn": "2026-09-01", "reason": "%s", "enteredByMemberId": "%s"}"""
+                .formatted(owed, reason, samId));
+    }
+
+    /** A reviewed dated correction: the amount owed on `date` is `owed`, entered by Maya. */
+    protected WebTestClient.ResponseSpec correctOn(String account, String key, String owed, String date,
+            String reason) {
+        return post(account, "balance-corrections", key, """
+                {"requestedBalance": "%s", "asOn": "%s", "reason": "%s", "enteredByMemberId": "%s"}"""
+                .formatted(owed, date, reason, mayaId));
+    }
 }

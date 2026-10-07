@@ -17,6 +17,7 @@ import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
 import com.mdstech.wealthmesh.account.service.AccountService;
+import com.mdstech.wealthmesh.account.service.DebtRules;
 import com.mdstech.wealthmesh.activity.domain.Activity;
 import com.mdstech.wealthmesh.activity.dto.BalanceView;
 import com.mdstech.wealthmesh.activity.dto.CorrectionPreview;
@@ -42,11 +43,13 @@ public class BalanceCorrectionService {
     private final Clock clock;
     private final TransactionalOperator transactions;
     private final ValueStore values;
+    private final DebtRules debt;
 
     public BalanceCorrectionService(AccountRepository accounts, EntryValidator validator,
             ActivityRepository activities, ActivityStore store, Clock clock, TransactionalOperator transactions,
-            ValueStore values) {
+            ValueStore values, DebtRules debt) {
         this.values = values;
+        this.debt = debt;
         this.accounts = accounts;
         this.validator = validator;
         this.activities = activities;
@@ -81,7 +84,8 @@ public class BalanceCorrectionService {
             BigDecimal after = f.current().subtract(replaced).add(f.difference());
             return new CorrectionPreview(asOn, Money.format(f.onDate()), Money.format(f.requested()),
                     Money.format(f.difference()), Money.format(f.current()), Money.format(after),
-                    after.signum() < 0 && !AccountType.isCard(account.type()));
+                    after.signum() < 0 && !AccountType.isCard(account.type())
+                            && !AccountType.isDebt(account.type()));
         }));
     }
 
@@ -128,13 +132,16 @@ public class BalanceCorrectionService {
                     }
                     Activity row = new Activity(null, account.id(), "correction", f.difference(), request.asOn(),
                             null, null, memberId, key, now, reason, request.replacesId(), null, f.requested(), null);
-                    return f.replaced() == null ? insert(row)
+                    Mono<EntryService.Saved> written = f.replaced() == null ? insert(row)
                             : store.markRemoved(f.replaced().id(), memberId, now)
                                     .filter(updated -> updated > 0)
                                     .switchIfEmpty(Mono.error(conflict("This correction was already changed.")))
                                     .then(Mono.defer(() -> store.recordEvent(f.replaced().id(), "replaced",
                                             memberId, now)))
                                     .then(Mono.defer(() -> insert(row)));
+                    // A loan never ends above zero (D-053): a correction that lowers the debt below a later payment
+                    // is refused and rolled back with the whole save.
+                    return written.flatMap(saved -> debt.requireNotCredit(account.id()).thenReturn(saved));
                 });
     }
 
@@ -229,7 +236,7 @@ public class BalanceCorrectionService {
     private Mono<Account> load(UUID id) {
         return accounts.findById(id).switchIfEmpty(Mono.error(
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found: " + id)))
-                .filter(account -> AccountType.holdsActivity(account.type()))
+                .filter(account -> AccountType.holdsActivity(account.type()) || AccountType.isDebt(account.type()))
                 .switchIfEmpty(Mono.error(EntryValidator.bad(
                         "The Balance of this type of account cannot be corrected yet")));
     }

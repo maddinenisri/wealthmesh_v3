@@ -487,6 +487,17 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
             >
               Record payment
             </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                remember()
+                setCorrecting({})
+              }}
+              disabled={!canAdd}
+            >
+              Update balance owed
+            </Button>
           </div>
         ) : isCard(account.type) ? (
           <div className="flex flex-wrap gap-2">

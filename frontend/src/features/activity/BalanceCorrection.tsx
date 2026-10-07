@@ -7,6 +7,7 @@ import { Button, Card, CardTitle, FormAlert, SelectField, TextField } from '../.
 import { useBalanceAsOf, useCorrectionPreview, useSaveCorrection } from '../../hooks/useActivity'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney, parseAmount } from '../../lib/money'
+import { isDebt } from '../accounts/accountTypes'
 import { balanceText, isCard } from '../accounts/cardBalance'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
 import { EnteredBy } from './EnteredBy'
@@ -38,6 +39,15 @@ const requestedRules = {
   validate: (value: string) => parseAmount(value) !== null || 'Enter a valid amount',
 }
 
+/** A loan's amount owed is typed as zero or more; there is no side (it is always owed). */
+const debtRules = {
+  validate: (value: string) => {
+    const amount = parseAmount(value)
+    if (amount === null) return 'Enter a valid amount'
+    return !amount.startsWith('-') || 'Enter zero or a positive amount owed'
+  },
+}
+
 /**
  * Update balance: say what the Balance was on a date, review what that changes, give a reason, confirm.
  * A correction changes the Balance only; it is never income or spending. With `editing`, the form corrects an
@@ -65,6 +75,9 @@ export function BalanceCorrection({
 }) {
   const { member, setMemberId } = useEnteringAs(members)
   const card = isCard(account.type)
+  const debt = isDebt(account.type)
+  // A card or a loan is changed as a debt: it grows or shrinks, and its figures read "owed".
+  const owes = card || debt
   const [reviewing, setReviewing] = useState<{
     requested: string
     asOn: string
@@ -96,12 +109,17 @@ export function BalanceCorrection({
       // A card is typed positive with a side, so its stored (asset-signed) Balance is split back into both.
       setValue(
         'requested',
-        card ? Math.abs(Number(current.data.amount)).toFixed(2) : current.data.amount,
+        owes ? Math.abs(Number(current.data.amount)).toFixed(2) : current.data.amount,
       )
       if (card) setValue('balanceSide', Number(current.data.amount) > 0 ? 'credit' : 'owed')
     }
-  }, [editing, card, current.data, setValue, getFieldState, formState])
-  const title = editing ? 'Edit balance correction' : 'Update balance'
+  }, [editing, card, owes, current.data, setValue, getFieldState, formState])
+  const title = editing
+    ? 'Edit balance correction'
+    : debt
+      ? 'Update balance owed'
+      : 'Update balance'
+  const word = debt ? 'balance owed' : 'Balance'
 
   // A missing reason is reported at the field; bring the review back into view so the message is seen.
   const showReview = () =>
@@ -147,26 +165,31 @@ export function BalanceCorrection({
             <>
               <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
                 <Item label="Date">{figures.asOn}</Item>
-                {editing && <Item label="Original Balance">{money(original)}</Item>}
+                {editing && <Item label={`Original ${word}`}>{money(original)}</Item>}
                 {editing?.reason && <Item label="Original reason">{editing.reason}</Item>}
                 <Item
                   label={
                     editing
-                      ? 'Balance without this correction'
-                      : `Current Balance on ${figures.asOn}`
+                      ? `${debt ? 'Balance owed' : 'Balance'} without this correction`
+                      : `Current ${word} on ${figures.asOn}`
                   }
                 >
                   {money(figures.balanceOnDate)}
                 </Item>
-                <Item label={editing ? 'Corrected Balance' : 'Requested Balance'}>
+                <Item
+                  label={`${editing ? 'Corrected' : 'Requested'} ${word}`.replace(
+                    /^(\w)/,
+                    (letter) => letter.toUpperCase(),
+                  )}
+                >
                   {money(figures.requested)}
                 </Item>
                 <Item label="Difference">
                   {difference === 0
                     ? formatMoney(0)
-                    : `${formatMoney(Math.abs(difference))} ${changeWord(card, difference)}`}
+                    : `${formatMoney(Math.abs(difference))} ${changeWord(owes, difference)}`}
                 </Item>
-                <Item label={`${account.name} Balance after`}>
+                <Item label={`${account.name} ${word} after`}>
                   {money(figures.currentBalanceAfter)}
                 </Item>
               </dl>
@@ -235,10 +258,10 @@ export function BalanceCorrection({
         <TextField
           control={control}
           name="requested"
-          label="Balance"
+          label={debt ? 'Balance owed' : 'Balance'}
           inputMode="decimal"
           placeholder="0.00"
-          rules={card ? cardRules : requestedRules}
+          rules={debt ? debtRules : card ? cardRules : requestedRules}
         />
         {card && (
           <SelectField control={control} name="balanceSide" label="Balance means">
@@ -262,8 +285,10 @@ export function BalanceCorrection({
           }}
         />
         <p className="text-sm text-ink-muted">
-          Enter what the Balance was at the end of that day. You will review the change before it is
-          saved.
+          {debt
+            ? 'Enter what was owed at the end of that day.'
+            : 'Enter what the Balance was at the end of that day.'}{' '}
+          You will review the change before it is saved.
         </p>
         <div className="flex gap-2">
           <Button type="submit">Review</Button>

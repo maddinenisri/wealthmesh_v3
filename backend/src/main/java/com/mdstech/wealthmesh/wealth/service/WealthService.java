@@ -12,6 +12,8 @@ import org.springframework.web.server.ResponseStatusException;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.money.Money;
 import com.mdstech.wealthmesh.wealth.dto.WealthChange;
+import com.mdstech.wealthmesh.wealth.dto.WealthChange.CorrectionLine;
+import com.mdstech.wealthmesh.wealth.dto.WealthChange.Restatement;
 import com.mdstech.wealthmesh.wealth.dto.WealthChange.ValueMove;
 import com.mdstech.wealthmesh.wealth.dto.WealthSummary;
 import com.mdstech.wealthmesh.wealth.dto.WealthSummary.Group;
@@ -63,12 +65,16 @@ public class WealthService {
             }
             return new LocalDate[] { start, end };
         }).flatMap(dates -> Mono.zip(store.balancesAsOf(dates[0]).collectList(), store.balancesAsOf(dates[1])
-                .collectList(), store.flowsBetween(dates[0], dates[1])).map(all -> explain(dates[0], dates[1],
-                        all.getT1(), all.getT2(), all.getT3())));
+                .collectList(), store.flowsBetween(dates[0], dates[1]),
+                store.correctionsBetween(dates[0], dates[1]).collectList(),
+                store.restatementsBetween(dates[0], dates[1], clock.getZone().getId()).collectList())
+                .map(all -> explain(dates[0], dates[1], all.getT1(), all.getT2(), all.getT3(), all.getT4(),
+                        all.getT5())));
     }
 
     private static WealthChange explain(LocalDate from, LocalDate to, List<Balance> start, List<Balance> end,
-            WealthStore.Flows flows) {
+            WealthStore.Flows flows, List<WealthStore.CorrectionRow> corrected,
+            List<WealthStore.RestatementRow> restated) {
         BigDecimal startWealth = start.stream().map(WealthService::balance).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal endWealth = end.stream().map(WealthService::balance).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal valueChange = BigDecimal.ZERO;
@@ -95,7 +101,12 @@ public class WealthService {
         return new WealthChange(from, to, Money.format(startWealth), Money.format(endWealth), Money.format(change),
                 Money.format(flows.income()), Money.format(flows.spending()), Money.format(valueChange),
                 Money.format(flows.corrections()), Money.format(added), Money.format(flows.transfers()),
-                Money.format(change.subtract(explained)), moves);
+                Money.format(change.subtract(explained)), moves,
+                corrected.stream().map(c -> new CorrectionLine(c.accountId().toString(), c.name(), c.type(),
+                        Money.format(c.amount()), c.reason(), c.on())).toList(),
+                restated.stream().map(r -> new Restatement(r.accountId().toString(), r.name(), r.type(),
+                        Money.format(r.previous()), Money.format(r.amount()),
+                        Money.format(r.amount().subtract(r.previous())), r.reason(), r.madeOn())).toList());
     }
 
     /** The Balance on the date: a valued account's effective value (else its opening), or opening plus activity. */

@@ -3,6 +3,7 @@ import type { Account } from '../../api/accounts'
 import type { Activity } from '../../api/activity'
 import type { Member } from '../../api/household'
 import { BalanceCorrection } from './BalanceCorrection'
+import { isDebt } from '../accounts/accountTypes'
 import { isCard } from '../accounts/cardBalance'
 import { StartingBalanceCorrection } from './StartingBalanceCorrection'
 
@@ -39,7 +40,9 @@ export function UpdateBalance({
               checked={mode === 'date'}
               onChange={() => setMode('date')}
             />
-            Update the Balance on a date
+            {isDebt(account.type)
+              ? 'Update the balance owed on a date'
+              : 'Update the Balance on a date'}
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -49,7 +52,9 @@ export function UpdateBalance({
               checked={mode === 'starting'}
               onChange={() => setMode('starting')}
             />
-            Correct the starting balance
+            {isDebt(account.type)
+              ? 'Correct the initial amount owed'
+              : 'Correct the starting balance'}
           </label>
         </fieldset>
       )}

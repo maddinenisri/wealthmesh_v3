@@ -205,4 +205,67 @@ describe('what changed', () => {
     const dated = within(change).getAllByText('2026-09-30')[0]
     expect(dated.closest('.whitespace-nowrap')).not.toBeNull()
   })
+
+  it('V2_LOAN_004 names a loan’s corrections in the explanation: a $200.00 debt correction, the initial amount restated, and the identity left whole', async () => {
+    const loan: MockAccount = {
+      id: '66666666-6666-4666-8666-666666666666',
+      type: 'loan',
+      name: 'Car Loan',
+      institution: 'Maple Credit',
+      ownerMemberIds: [maya.id],
+      openedOn: '2026-09-01',
+      openingAmount: '-19800.00',
+      balance: { amount: '-19600.00', asOf: '2026-09-30' },
+      status: 'active',
+    }
+    mockApi({
+      household,
+      members: [maya],
+      accounts: [loan],
+      activity: [
+        {
+          id: '77777777-7777-4777-8777-777777777771',
+          accountId: loan.id,
+          kind: 'correction',
+          amount: '200.00',
+          occurredOn: '2026-09-30',
+          description: null,
+          categoryId: '',
+          enteredByMemberId: maya.id,
+          reason: 'Lender statement',
+        },
+      ],
+      openingRevisions: [
+        {
+          id: '88888888-8888-4888-8888-888888888881',
+          accountId: loan.id,
+          key: 'k',
+          previousAmount: '-20000.00',
+          previousOn: '2026-09-01',
+          openingAmount: '-19800.00',
+          openedOn: '2026-09-01',
+          reason: 'Copied the lender amount incorrectly',
+          enteredByMemberId: maya.id,
+          createdAt: '2026-10-03T12:00:00Z',
+        },
+      ],
+      today: '2026-10-03',
+    })
+    renderRoute('/')
+
+    const card = await overTime()
+    fireEvent.change(await within(card).findByLabelText('From'), {
+      target: { value: '2026-09-01' },
+    })
+    fireEvent.change(within(card).getByLabelText('To'), { target: { value: '2026-10-03' } })
+    const change = await within(card).findByRole('region', { name: 'Wealth change' })
+    const corrections = await within(change).findByRole('list', { name: 'Corrections' })
+    expect(corrections).toHaveTextContent(
+      'Car Loan: a $200.00 debt correction, lowering what is owed (Lender statement), dated 2026-09-30.',
+    )
+    expect(corrections).toHaveTextContent(
+      'Car Loan: the initial amount owed was corrected from $20,000.00 owed to $19,800.00 owed on 2026-10-03 (Copied the lender amount incorrectly): a $200.00 debt correction. Wealth on every date already uses the corrected amount.',
+    )
+    expect(change).not.toHaveTextContent('Not explained')
+  })
 })

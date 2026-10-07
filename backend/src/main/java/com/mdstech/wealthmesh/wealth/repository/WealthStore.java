@@ -73,6 +73,51 @@ public class WealthStore {
                 .all();
     }
 
+    /** One Balance correction row in a period, as a line of the explanation. */
+    public record CorrectionRow(UUID accountId, String name, String type, BigDecimal amount, String reason,
+            LocalDate on) {
+    }
+
+    /** One corrected starting amount, with the day it was corrected. */
+    public record RestatementRow(UUID accountId, String name, String type, BigDecimal previous, BigDecimal amount,
+            String reason, LocalDate madeOn) {
+    }
+
+    /** The Balance corrections dated after `from` and up to `to` that still count, oldest first. */
+    public Flux<CorrectionRow> correctionsBetween(LocalDate from, LocalDate to) {
+        return client.sql("""
+                        SELECT x.account_id, ac.name, ac.type, x.amount, x.reason, x.occurred_on
+                        FROM activity x
+                        JOIN account ac ON ac.id = x.account_id AND ac.deleted_at IS NULL AND ac.status <> 'draft'
+                        WHERE x.kind = 'correction' AND x.removed_at IS NULL AND x.occurred_on > :from
+                          AND x.occurred_on <= :to
+                        ORDER BY x.occurred_on, x.created_at""")
+                .bind("from", from).bind("to", to)
+                .map((row, meta) -> new CorrectionRow(row.get("account_id", UUID.class), row.get("name", String.class),
+                        row.get("type", String.class), row.get("amount", BigDecimal.class),
+                        row.get("reason", String.class), row.get("occurred_on", LocalDate.class)))
+                .all();
+    }
+
+    /** The starting amounts corrected after `from` and up to `to` (by the day of the correction), oldest first. */
+    public Flux<RestatementRow> restatementsBetween(LocalDate from, LocalDate to, String zone) {
+        return client.sql("""
+                        SELECT r.account_id, ac.name, ac.type, r.previous_amount, r.opening_amount, r.reason,
+                               (r.created_at AT TIME ZONE :zone)::date AS made_on
+                        FROM opening_revision r
+                        JOIN account ac ON ac.id = r.account_id AND ac.deleted_at IS NULL AND ac.status <> 'draft'
+                        WHERE r.opening_amount <> r.previous_amount
+                          AND (r.created_at AT TIME ZONE :zone)::date > :from
+                          AND (r.created_at AT TIME ZONE :zone)::date <= :to
+                        ORDER BY r.seq""")
+                .bind("from", from).bind("to", to).bind("zone", zone)
+                .map((row, meta) -> new RestatementRow(row.get("account_id", UUID.class), row.get("name", String.class),
+                        row.get("type", String.class), row.get("previous_amount", BigDecimal.class),
+                        row.get("opening_amount", BigDecimal.class), row.get("reason", String.class),
+                        row.get("made_on", LocalDate.class)))
+                .all();
+    }
+
     public Mono<Flows> flowsBetween(LocalDate from, LocalDate to) {
         return client.sql("""
                         SELECT COALESCE(SUM(CASE WHEN x.kind = 'income' THEN x.amount END), 0) AS income,

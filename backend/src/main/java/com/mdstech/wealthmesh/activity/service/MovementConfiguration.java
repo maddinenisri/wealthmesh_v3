@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.reactive.TransactionalOperator;
 
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
+import com.mdstech.wealthmesh.account.service.DebtRules;
 import com.mdstech.wealthmesh.activity.repository.ActivityRepository;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.activity.repository.MovementStore;
@@ -20,24 +21,24 @@ public class MovementConfiguration {
     @Bean
     public MovementService transfers(AccountRepository accounts, EntryValidator validator,
             ActivityRepository activities, ActivityStore store, MovementStore movements, PortionStore portions,
-            Clock clock, TransactionalOperator transactions) {
-        return new MovementService(accounts, validator, activities, store, movements, portions,
+            DebtRules debt, Clock clock, TransactionalOperator transactions) {
+        return new MovementService(accounts, validator, activities, store, movements, portions, debt,
                 MovementKind.TRANSFER, clock, transactions);
     }
 
     @Bean
     public MovementService cardPayments(AccountRepository accounts, EntryValidator validator,
             ActivityRepository activities, ActivityStore store, MovementStore movements, PortionStore portions,
-            Clock clock, TransactionalOperator transactions) {
-        return new MovementService(accounts, validator, activities, store, movements, portions,
+            DebtRules debt, Clock clock, TransactionalOperator transactions) {
+        return new MovementService(accounts, validator, activities, store, movements, portions, debt,
                 MovementKind.CARD_PAYMENT, clock, transactions);
     }
 
     @Bean
     public MovementService loanPayments(AccountRepository accounts, EntryValidator validator,
             ActivityRepository activities, ActivityStore store, MovementStore movements, PortionStore portions,
-            Clock clock, TransactionalOperator transactions) {
-        return new MovementService(accounts, validator, activities, store, movements, portions,
+            DebtRules debt, Clock clock, TransactionalOperator transactions) {
+        return new MovementService(accounts, validator, activities, store, movements, portions, debt,
                 MovementKind.LOAN_PAYMENT, clock, transactions);
     }
 }

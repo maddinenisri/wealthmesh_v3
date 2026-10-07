@@ -19,6 +19,8 @@ import com.mdstech.wealthmesh.account.domain.Account;
 import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
+import com.mdstech.wealthmesh.account.service.AccountService;
+import com.mdstech.wealthmesh.account.service.DebtRules;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
 import com.mdstech.wealthmesh.activity.service.EntryValidator;
 import com.mdstech.wealthmesh.money.Money;
@@ -59,12 +61,14 @@ public class OpeningRevisionService {
     private final OpeningRevisionStore store;
     private final ActivityStore activityStore;
     private final SpendingService spending;
+    private final DebtRules debt;
     private final Clock clock;
     private final TransactionalOperator transactions;
 
     public OpeningRevisionService(AccountRepository accounts, EntryValidator validator,
             OpeningRevisionRepository revisions, OpeningRevisionStore store, ActivityStore activityStore,
-            SpendingService spending, Clock clock, TransactionalOperator transactions) {
+            SpendingService spending, DebtRules debt, Clock clock, TransactionalOperator transactions) {
+        this.debt = debt;
         this.accounts = accounts;
         this.validator = validator;
         this.revisions = revisions;
@@ -88,7 +92,8 @@ public class OpeningRevisionService {
                     BigDecimal after = parsed.amount().add(delta.amount());
                     OpeningPreview base = new OpeningPreview(Money.format(account.openingAmount()),
                             account.openedOn(), Money.format(parsed.amount()), parsed.on(), Money.format(current),
-                            Money.format(after), after.signum() < 0, null, null, null);
+                            Money.format(after), after.signum() < 0 && !AccountType.isDebt(account.type()), null,
+                            null, null);
                     return entry == null ? Mono.just(base) : withEntry(base, parsed, after, entry);
                 })));
     }
@@ -139,7 +144,7 @@ public class OpeningRevisionService {
         Mono<Saved> work = activityStore.lockAccount(accountId).then(Mono.defer(() -> loadEditable(accountId)))
                 .map(AccountState::requireNotClosed)
                 .flatMap(account -> revisions.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
-                        .flatMap(existing -> replay(existing, request, memberId))
+                        .flatMap(existing -> replay(existing, request, memberId, AccountType.isDebt(account.type())))
                         .switchIfEmpty(Mono.defer(() -> applyLocked(account, key, request, memberId, now))));
         return transactions.transactional(work);
     }
@@ -155,19 +160,23 @@ public class OpeningRevisionService {
                     .flatMap(saved -> accounts.save(new Account(account.id(), account.householdId(), account.type(),
                             account.name(), account.institution(), parsed.on(), parsed.amount(), account.status(),
                             account.createdAt(), now)).thenReturn(saved))
+                    // A loan never ends above zero (D-053): payments already made may not exceed the new amount.
+                    .flatMap(saved -> debt.requireNotCredit(account.id()).thenReturn(saved))
                     .flatMap(saved -> store.byId(saved.id())).map(r -> new Saved(r, true));
         });
     }
 
     /** A retry is judged on what was saved, never on the account as it is now. */
-    private Mono<Saved> replay(OpeningRevision existing, OpeningRequest request, UUID memberId) {
-        return same(existing, request, memberId) ? store.byId(existing.id()).map(r -> new Saved(r, false))
+    private Mono<Saved> replay(OpeningRevision existing, OpeningRequest request, UUID memberId, boolean owed) {
+        return same(existing, request, memberId, owed) ? store.byId(existing.id()).map(r -> new Saved(r, false))
                 : Mono.error(conflict("This save was already used with different details. Start a new entry."));
     }
 
-    private static boolean same(OpeningRevision existing, OpeningRequest request, UUID memberId) {
+    /** `owed` is a loan: the amount is typed as a positive amount owed and stored negative. */
+    private static boolean same(OpeningRevision existing, OpeningRequest request, UUID memberId, boolean owed) {
         return request.openingAmount() instanceof String text
-                && Money.parse(text).filter(a -> a.compareTo(existing.openingAmount()) == 0).isPresent()
+                && Money.parse(text).map(a -> owed ? a.negate() : a)
+                        .filter(a -> a.compareTo(existing.openingAmount()) == 0).isPresent()
                 && existing.openedOn().equals(request.openedOn())
                 && Objects.equals(existing.reason(), request.reason() == null ? null : request.reason().strip())
                 && existing.enteredByMemberId().equals(memberId);
@@ -181,7 +190,7 @@ public class OpeningRevisionService {
     /** True when the correction stored under this key is exactly the one requested (a retry of a combined save). */
     public Mono<Boolean> storedMatches(String key, Instant cutoff, OpeningRequest request) {
         return revisions.findByIdempotencyKeyAndCreatedAtAfter(key, cutoff)
-                .map(existing -> same(existing, request, request.enteredByMemberId())).defaultIfEmpty(false);
+                .map(existing -> same(existing, request, request.enteredByMemberId(), false)).defaultIfEmpty(false);
     }
 
     /**
@@ -199,7 +208,9 @@ public class OpeningRevisionService {
             if (!(amount instanceof String text) || Money.parse(text).isEmpty()) {
                 throw EntryValidator.bad("Enter a valid amount");
             }
-            return Money.parse(text).orElseThrow();
+            BigDecimal typed = Money.parse(text).orElseThrow();
+            // A loan's amount is typed as a positive amount owed and stored negative, like a card that is owed.
+            return AccountType.isDebt(account.type()) ? AccountService.signed(account.type(), typed, null) : typed;
         }).flatMap(parsed -> activityStore.earliestOf(account.id()).map(java.util.Optional::of)
                 .defaultIfEmpty(java.util.Optional.empty()).map(earliest -> {
                     if (earliest.isPresent() && earliest.get().isBefore(on)) {

@@ -19,6 +19,7 @@ import com.mdstech.wealthmesh.account.domain.Account;
 import com.mdstech.wealthmesh.account.domain.AccountState;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
+import com.mdstech.wealthmesh.account.service.DebtRules;
 import com.mdstech.wealthmesh.activity.domain.Activity;
 import com.mdstech.wealthmesh.activity.dto.ConversionRequest;
 import com.mdstech.wealthmesh.activity.dto.Transfer;
@@ -104,15 +105,17 @@ public class MovementService {
     private final ActivityStore store;
     private final MovementStore movements;
     private final PortionStore portions;
+    private final DebtRules debt;
     private final MovementKind kind;
     private final Clock clock;
     private final TransactionalOperator transactions;
 
     public MovementService(AccountRepository accounts, EntryValidator validator, ActivityRepository activities,
-            ActivityStore store, MovementStore movements, PortionStore portions, MovementKind kind, Clock clock,
-            TransactionalOperator transactions) {
+            ActivityStore store, MovementStore movements, PortionStore portions, DebtRules debt, MovementKind kind,
+            Clock clock, TransactionalOperator transactions) {
         this.accounts = accounts;
         this.portions = portions;
+        this.debt = debt;
         this.validator = validator;
         this.activities = activities;
         this.store = store;
@@ -189,7 +192,8 @@ public class MovementService {
                             .then(Mono.defer(() -> actor(fresh, memberId)))
                             .then(Mono.defer(() -> startsStillCover(fresh)))
                             .then(Mono.defer(() -> movements.restorePair(movementId)))
-                            .flatMap(n -> n == 2 ? events(fresh, "restored", memberId, now)
+                            .flatMap(n -> n == 2 ? debt.requireNotCredit(leg(fresh, kind.inKind()).accountId())
+                                    .then(Mono.defer(() -> events(fresh, "restored", memberId, now)))
                                     : Mono.error(notRemoved()))));
             return transactions.transactional(work);
         }).then(Mono.defer(() -> get(movementId)));

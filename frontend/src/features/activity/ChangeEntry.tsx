@@ -5,6 +5,7 @@ import { Button, Card, CardTitle, FormAlert } from '../../design-system'
 import { useChangeEntry, useIncome, useSpending } from '../../hooks/useActivity'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney } from '../../lib/money'
+import { isDebt } from '../accounts/accountTypes'
 import { balanceText } from '../accounts/cardBalance'
 import { useRecurringPayments } from '../../hooks/useRecurring'
 import { EnteredBy } from './EnteredBy'
@@ -59,10 +60,12 @@ export function ChangeEntry({
 }) {
   const split = !!entry.portions && entry.portions.length > 0
   const income = entry.kind === 'income'
+  // A Balance correction (a loan's, D-053) changes the Balance only: no month figure, never income or spending.
+  const correction = entry.kind === 'correction'
   // A refund raises the Balance like money in, and lowers the month's spending instead of raising it.
   const refund = entry.kind === 'refund'
   const month = entry.occurredOn.slice(0, 7)
-  const spending = useSpending(income ? '' : month)
+  const spending = useSpending(income || correction ? '' : month)
   const incomeTotal = useIncome(income ? month : '')
   const monthTotal = income ? incomeTotal : spending
   const change = useChangeEntry(account.id, entry.id, mode === 'remove' ? 'removal' : 'undo')
@@ -70,7 +73,10 @@ export function ChangeEntry({
   const paid = useRecurringPayments(account.id).data?.find((p) => p.activityId === entry.id)
 
   // Money in raises the Balance and the month's income; money out lowers the Balance and counts as spending.
-  const effect = (income || refund ? 1 : -1) * Number(entry.amount) * (mode === 'remove' ? -1 : 1)
+  // A correction is a signed row: it carries its own direction.
+  const effect = correction
+    ? Number(entry.amount) * (mode === 'remove' ? -1 : 1)
+    : (income || refund ? 1 : -1) * Number(entry.amount) * (mode === 'remove' ? -1 : 1)
   const balanceAfter = Number(account.balance.amount) + effect
   const monthAfter = monthTotal.data
     ? Number(monthTotal.data.total) +
@@ -87,11 +93,13 @@ export function ChangeEntry({
       <FormAlert message={change.error?.message} />
       <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
         <Item label="Entry">
-          {split
-            ? entry.description
-              ? `${entry.description} (split)`
-              : 'Split expense'
-            : `${entry.description || entry.categoryName} (${entry.categoryName})`}
+          {correction
+            ? 'Balance correction'
+            : split
+              ? entry.description
+                ? `${entry.description} (split)`
+                : 'Split expense'
+              : `${entry.description || entry.categoryName} (${entry.categoryName})`}
         </Item>
         {entry.portions && entry.portions.length > 0 && (
           <Item label="Portions">
@@ -100,17 +108,25 @@ export function ChangeEntry({
         )}
         <Item label="Date">{entry.occurredOn}</Item>
         <Item label="Amount">{formatMoney(Number(entry.amount))}</Item>
-        <Item label={`${account.name} Balance after ${mode === 'remove' ? 'removal' : 'Undo'}`}>
+        <Item
+          label={`${account.name} ${isDebt(account.type) ? 'Balance owed' : 'Balance'} after ${mode === 'remove' ? 'removal' : 'Undo'}`}
+        >
           {balanceText(account.type, String(balanceAfter))}
         </Item>
-        <Item label={label}>{monthAfter === null ? '' : formatMoney(monthAfter)}</Item>
+        {!correction && (
+          <Item label={label}>{monthAfter === null ? '' : formatMoney(monthAfter)}</Item>
+        )}
       </dl>
       <p className="mt-3 max-w-md text-sm text-ink-muted">
-        {mode === 'undo'
-          ? 'The entry returns on its original date.'
-          : income
-            ? 'This does not reverse a bank deposit. The entry stays in history, where Undo restores it.'
-            : 'Removing a tracked expense does not obtain a merchant refund. The entry stays in history, where Undo restores it.'}
+        {correction
+          ? mode === 'undo'
+            ? 'The correction returns on its original date. It changes only the Balance owed.'
+            : 'A correction changes only the Balance owed: it is never a payment, income or spending. It stays in history, where Undo restores it.'
+          : mode === 'undo'
+            ? 'The entry returns on its original date.'
+            : income
+              ? 'This does not reverse a bank deposit. The entry stays in history, where Undo restores it.'
+              : 'Removing a tracked expense does not obtain a merchant refund. The entry stays in history, where Undo restores it.'}
       </p>
       {paid && (
         <p className="mt-2 max-w-md text-sm">

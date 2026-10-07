@@ -143,15 +143,28 @@ export function ActivityList({
                   </Td>
                   <Td className="whitespace-nowrap">
                     {entry.kind === 'correction' ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`Edit correction of ${entry.occurredOn}`}
-                        disabled={!onEditCorrection}
-                        onClick={() => onEditCorrection?.(entry)}
-                      >
-                        Edit
-                      </Button>
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Edit correction of ${entry.occurredOn}`}
+                          disabled={!onEditCorrection}
+                          onClick={() => onEditCorrection?.(entry)}
+                        >
+                          Edit
+                        </Button>
+                        {accountType === 'loan' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Remove correction of ${entry.occurredOn}`}
+                            disabled={!onRemove}
+                            onClick={() => onRemove?.(entry)}
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </>
                     ) : (
                       <>
                         <Button

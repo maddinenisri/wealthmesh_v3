@@ -368,6 +368,8 @@ export function mockApi(
     schedules?: MockSchedule[]
     /** Dated values of properties and other assets already saved (the account's balance is the seed's). */
     values?: MockValue[]
+    /** Starting-amount corrections already saved. */
+    openingRevisions?: MockOpeningRevision[]
     /** Suggestions the server would find: the bills are the account's matching expenses. */
     suggestions?: { accountId: string; categoryId: string; description: string }[]
   } = {},
@@ -385,7 +387,7 @@ export function mockApi(
     schedules: (seed.schedules ?? []).map((s) => ({ ...s })) as MockSchedule[],
     suggestions: (seed.suggestions ?? []).map((s) => ({ ...s })),
     values: (seed.values ?? []).map((v) => ({ ...v })) as MockValue[],
-    openingRevisions: [] as MockOpeningRevision[],
+    openingRevisions: [...(seed.openingRevisions ?? [])] as MockOpeningRevision[],
     /** Save keys seen on POST expenses, in order. */
     keys: [] as string[],
     /** When true the next expense is stored but its response is lost (a slow or dropped answer). */
@@ -700,6 +702,11 @@ export function mockApi(
   /** A card's typed amount is positive with a side and is held with the asset sign; others take no side. */
   const signedFor = (account: MockAccount, amount: string, side: string | null | undefined) => {
     const value = Number(amount)
+    if (account.type === 'loan') {
+      if (side) return problem(400, 'Owed or Card credit applies to a card only')
+      if (Number.isNaN(value)) return problem(400, 'Enter a valid amount')
+      return value < 0 ? problem(400, 'Enter zero or a positive amount owed') : -value || 0
+    }
     if (account.type !== 'credit_card') {
       return side ? problem(400, 'Owed or Card credit applies to a card only') : value
     }
@@ -1974,7 +1981,7 @@ export function mockApi(
         difference: (requested - onDate).toFixed(2),
         currentBalance: current.toFixed(2),
         currentBalanceAfter: after.toFixed(2),
-        overdraft: after < 0 && account.type !== 'credit_card',
+        overdraft: after < 0 && account.type !== 'credit_card' && account.type !== 'loan',
       })
     }),
     http.post('*/api/v1/accounts/:id/balance-corrections', async ({ request, params }) => {
@@ -2033,7 +2040,10 @@ export function mockApi(
         const account = state.accounts.find((a) => a.id === params.id)
         if (!account) return problem(404, 'Account not found')
         const query = new URL(request.url).searchParams
-        const amount = Number(query.get('openingAmount'))
+        const typed = signedFor(account, query.get('openingAmount') ?? '', null)
+        if (typeof typed !== 'number') return typed
+        // A loan's amount is typed as an amount owed; the figures below carry the stored (negative) sign.
+        const amount = account.type === 'loan' ? typed : Number(query.get('openingAmount'))
         const current = currentBalance(account)
         return HttpResponse.json({
           originalAmount: Number(account.openingAmount).toFixed(2),
@@ -2042,7 +2052,8 @@ export function mockApi(
           openedOn: query.get('openedOn'),
           currentBalance: current.toFixed(2),
           currentBalanceAfter: (current - Number(account.openingAmount) + amount).toFixed(2),
-          overdraft: current - Number(account.openingAmount) + amount < 0,
+          overdraft:
+            account.type !== 'loan' && current - Number(account.openingAmount) + amount < 0,
           ...(query.get('entryAmount') ? previewEntry(account, amount, query) : {}),
         })
       },
@@ -2102,7 +2113,7 @@ export function mockApi(
       const account = state.accounts.find((a) => a.id === params.id)
       if (!account) return problem(404, 'Account not found')
       const key = request.headers.get('Idempotency-Key') ?? ''
-      const body = (await request.json()) as {
+      let body = (await request.json()) as {
         openingAmount: string
         openedOn: string
         reason: string
@@ -2118,6 +2129,9 @@ export function mockApi(
       if (!/^-?\d+(\.\d{1,2})?$/.test(body.openingAmount))
         return problem(400, 'Enter a valid amount')
       if (!body.reason?.trim()) return problem(400, 'Enter a reason')
+      const typed = signedFor(account, body.openingAmount, null)
+      if (typeof typed !== 'number') return typed
+      if (account.type === 'loan') body = { ...body, openingAmount: typed.toFixed(2) }
       const revision: MockOpeningRevision = {
         id: newId(),
         accountId: account.id,
@@ -2206,7 +2220,7 @@ export function mockApi(
           const replaced = state.activity.some((r) => r.replacesId === entry.id)
           if (action === 'removal' ? entry.removedAt : !entry.removedAt || replaced)
             return problem(409, 'This entry was already changed or removed.')
-          const sign = entry.kind === 'income' ? 1 : -1
+          const sign = entry.kind === 'income' || entry.kind === 'correction' ? 1 : -1
           const direction = action === 'removal' ? -1 : 1
           entry.removedAt = action === 'removal' ? '2026-10-03T09:10:00Z' : null
           const { enteredByMemberId } = (await request.json()) as { enteredByMemberId: string }
@@ -2541,6 +2555,42 @@ export function mockApi(
         transfers: '0.00',
         other: '0.00',
         valueMoves: moves,
+        correctionLines: state.activity
+          .filter(
+            (a) =>
+              a.kind === 'correction' && !a.removedAt && a.occurredOn > from && a.occurredOn <= to,
+          )
+          .map((a) => {
+            const account = state.accounts.find((x) => x.id === a.accountId)!
+            return {
+              accountId: a.accountId,
+              name: account.name,
+              type: account.type,
+              amount: Number(a.amount).toFixed(2),
+              reason: a.reason ?? null,
+              on: a.occurredOn,
+            }
+          }),
+        restatements: state.openingRevisions
+          .filter(
+            (r) =>
+              r.previousAmount !== r.openingAmount &&
+              r.createdAt.slice(0, 10) > from &&
+              r.createdAt.slice(0, 10) <= to,
+          )
+          .map((r) => {
+            const account = state.accounts.find((x) => x.id === r.accountId)!
+            return {
+              accountId: r.accountId,
+              name: account.name,
+              type: account.type,
+              previousAmount: r.previousAmount,
+              amount: r.openingAmount,
+              change: (Number(r.openingAmount) - Number(r.previousAmount)).toFixed(2),
+              reason: r.reason,
+              madeOn: r.createdAt.slice(0, 10),
+            }
+          }),
       })
     }),
     http.get('*/api/v1/wealth', ({ request }) => {

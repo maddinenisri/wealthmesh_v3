@@ -3,7 +3,8 @@ import { Amount, Badge, Card, CardTitle } from '../../design-system'
 import { useToday } from '../../hooks/useAccounts'
 import { useWealth, useWealthChange } from '../../hooks/useWealth'
 import { formatMoney } from '../../lib/money'
-import { accountTypeLabel } from '../accounts/accountTypes'
+import { accountTypeLabel, isDebt } from '../accounts/accountTypes'
+import { balanceText } from '../accounts/cardBalance'
 import { Dated } from '../values/Dated'
 
 /**
@@ -188,6 +189,35 @@ function Explanation({
       <p className="text-sm text-ink-muted">
         Transfers and card payments cancel out, so they change nothing here.
       </p>
+      {(change.correctionLines.length > 0 || change.restatements.length > 0) && (
+        <ul className="text-sm" aria-label="Corrections">
+          {change.correctionLines.map((line, index) => (
+            <li key={`${line.accountId}-${line.on}-${index}`}>
+              {line.name}:{' '}
+              {isDebt(line.type)
+                ? `a ${formatMoney(Math.abs(Number(line.amount)))} debt correction, ${
+                    Number(line.amount) > 0 ? 'lowering' : 'raising'
+                  } what is owed`
+                : `a ${formatMoney(Math.abs(Number(line.amount)))} Balance correction`}
+              {line.reason ? ` (${line.reason})` : ''}, dated <Dated on={line.on} />.
+            </li>
+          ))}
+          {change.restatements.map((line, index) => (
+            <li key={`${line.accountId}-${line.madeOn}-${index}`}>
+              {line.name}:{' '}
+              {isDebt(line.type)
+                ? `the initial amount owed was corrected from ${balanceText(line.type, line.previousAmount)} to ${balanceText(line.type, line.amount)}`
+                : `the starting balance was corrected from ${formatMoney(Number(line.previousAmount))} to ${formatMoney(Number(line.amount))}`}{' '}
+              on <Dated on={line.madeOn} />
+              {line.reason ? ` (${line.reason})` : ''}
+              {isDebt(line.type)
+                ? `: a ${formatMoney(Math.abs(Number(line.change)))} debt correction`
+                : ''}
+              . Wealth on every date already uses the corrected amount.
+            </li>
+          ))}
+        </ul>
+      )}
       {change.valueMoves.length > 0 && (
         <ul className="text-sm" aria-label="Value changes">
           {change.valueMoves.map((move) => {
