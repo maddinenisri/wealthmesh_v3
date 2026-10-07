@@ -2448,9 +2448,14 @@ export function mockApi(
       const sum = (rows: { balance: string }[]) =>
         rows.reduce((x, row) => x + Number(row.balance), 0)
       const bank = lines.filter(
-        (l) => l.type !== 'credit_card' && l.type !== 'property' && l.type !== 'other_asset',
+        (l) =>
+          l.type !== 'credit_card' &&
+          l.type !== 'property' &&
+          l.type !== 'other_asset' &&
+          l.type !== 'loan',
       )
       const cards = lines.filter((l) => l.type === 'credit_card')
+      const loans = lines.filter((l) => l.type === 'loan')
       const debtLines = lines.filter((l) => Number(l.balance) < 0)
       const assets = lines.map((l) => Number(l.balance)).filter((b) => b > 0)
       const financialAssets = assets.reduce((x, y) => x + y, 0)
@@ -2463,6 +2468,7 @@ export function mockApi(
         netWorth: (financialAssets - debts).toFixed(2),
         bankMoney: { total: sum(bank).toFixed(2), accounts: bank },
         cards: { total: sum(cards).toFixed(2), accounts: cards },
+        loans: { total: sum(loans).toFixed(2), accounts: loans },
         propertyAndOther: { total: sum(valuedLines).toFixed(2), accounts: valuedLines },
         debtLines,
         notTracked: state.accounts
@@ -2520,10 +2526,9 @@ export function mockApi(
       if (failure) return failure
       // A card is entered as a positive figure with a side and stored with the asset sign (owed negative).
       const entered = amountOrZero(body.openingBalance) as string
-      const opening =
-        body.type === 'credit_card' && body.balanceSide === 'owed' && Number(entered) !== 0
-          ? (-Number(entered)).toFixed(2)
-          : entered
+      const owed =
+        (body.type === 'credit_card' && body.balanceSide === 'owed') || body.type === 'loan'
+      const opening = owed && Number(entered) !== 0 ? (-Number(entered)).toFixed(2) : entered
       const account: MockAccount = {
         id: newId(),
         type: body.type,
@@ -2610,6 +2615,12 @@ function validateAccount(name: string, owners: string[]) {
 
 /** A card amount needs Owed or Card credit and is never negative; any other type takes no side. */
 function validateSide(body: NewAccountBody) {
+  if (body.type === 'loan') {
+    if (body.balanceSide) return problem(400, 'Owed or Card credit applies to a card only')
+    return Number(amountOrZero(body.openingBalance)) < 0
+      ? problem(400, 'Enter zero or a positive amount owed')
+      : null
+  }
   const card = body.type === 'credit_card'
   if (!card) {
     return body.balanceSide ? problem(400, 'Owed or Card credit applies to a card only') : null

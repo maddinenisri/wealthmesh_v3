@@ -84,7 +84,9 @@ public class AccountService {
         // the committed ones (an inactive owner cannot be put back from a stale list).
         return Mono.fromCallable(() -> requireDetailsOnly(request))
                 .then(Mono.defer(() -> activity.lockAccount(id)).then(Mono.defer(() -> load(id))))
-                .flatMap(existing -> owners.ownersOf(existing.id())
+                .flatMap(existing -> Mono.fromRunnable(() -> requireInstitution(request.institution(),
+                        AccountType.fromWire(existing.type()).orElseThrow()))
+                        .then(owners.ownersOf(existing.id()))
                         .flatMap(current -> checkOwners(existing.householdId(), request.ownerMemberIds(), current))
                         .flatMap(ownerIds -> accounts.save(mapper.toUpdatedEntity(request, existing))
                                 .flatMap(saved -> owners.replace(saved.householdId(), saved.id(), ownerIds)
@@ -112,7 +114,7 @@ public class AccountService {
         if (openedOn.isAfter(today)) {
             throw bad("The opening date cannot be in the future");
         }
-        return new NewAccount(type, name, requireInstitution(request.institution()), openedOn, opening);
+        return new NewAccount(type, name, requireInstitution(request.institution(), type), openedOn, opening);
     }
 
     /**
@@ -120,6 +122,15 @@ public class AccountService {
      * Card credit positive) so Balance sums and wealth need no card branch. A zero card amount needs no side.
      */
     public static BigDecimal signed(AccountType type, BigDecimal amount, String side) {
+        if (type.kind() == AccountType.Kind.DEBT) {
+            if (side != null) {
+                throw bad("Owed or Card credit applies to a card only");
+            }
+            if (amount.signum() < 0) {
+                throw bad("Enter zero or a positive amount owed");
+            }
+            return amount.negate();
+        }
         if (type != AccountType.CREDIT_CARD) {
             if (side != null) {
                 throw bad("Owed or Card credit applies to a card only");
@@ -148,14 +159,14 @@ public class AccountService {
         if (request.extra() != null && !request.extra().isEmpty()) {
             throw bad("Edit account changes details only, not the balance or date");
         }
-        requireInstitution(request.institution());
         return requireName(request.name());
     }
 
-    static String requireInstitution(String institution) {
+    /** The lender of a loan or the bank of any other account, at most 120 characters. */
+    static String requireInstitution(String institution, AccountType type) {
         String stripped = institution == null || institution.isBlank() ? null : institution.strip();
         if (stripped != null && stripped.length() > 120) {
-            throw bad("Bank must be 120 characters or fewer");
+            throw bad((type.kind() == AccountType.Kind.DEBT ? "Lender" : "Bank") + " must be 120 characters or fewer");
         }
         return stripped;
     }

@@ -15,7 +15,7 @@ import type { Account } from '../../api/accounts'
 import type { WealthLine } from '../../api/wealth'
 import { useAccounts } from '../../hooks/useAccounts'
 import { useWealth } from '../../hooks/useWealth'
-import { accountTypeLabel, isValued } from '../accounts/accountTypes'
+import { accountTypeLabel, isDebt, isValued } from '../accounts/accountTypes'
 import { BalanceFigure } from '../accounts/BalanceFigure'
 import { cardSide, isCard } from '../accounts/cardBalance'
 import { STATUS_LABEL } from '../accounts/statusLabel'
@@ -135,11 +135,12 @@ function AccountsAndWealth() {
             title="Bank money"
             total={wealth.data?.bankMoney.total}
             accounts={accounts.data.filter(
-              (account) => !isCard(account.type) && !isValued(account.type),
+              (account) =>
+                !isCard(account.type) && !isValued(account.type) && !isDebt(account.type),
             )}
             members={members}
             note={
-              wealth.data?.debtLines.some((line) => !isCard(line.type))
+              wealth.data?.debtLines.some((line) => !isCard(line.type) && !isDebt(line.type))
                 ? 'An overdrawn account shows its negative amount here and is counted once, as debt.'
                 : undefined
             }
@@ -150,6 +151,15 @@ function AccountsAndWealth() {
             card
             total={wealth.data?.cards.total}
             accounts={accounts.data.filter((account) => isCard(account.type))}
+            members={members}
+          />
+          <AccountGroup
+            id="loans-heading"
+            title="Loans"
+            card
+            owed
+            total={wealth.data?.loans.total}
+            accounts={accounts.data.filter((account) => isDebt(account.type))}
             members={members}
           />
           <AccountGroup
@@ -180,7 +190,7 @@ function AccountsAndWealth() {
                     <span className="text-right">
                       <Amount value={Math.abs(Number(line.balance))} />{' '}
                       <span className="text-sm text-ink-muted">
-                        {isCard(line.type) ? 'owed' : 'overdrawn'}
+                        {isCard(line.type) || isDebt(line.type) ? 'owed' : 'overdrawn'}
                       </span>
                     </span>
                   </li>
@@ -204,6 +214,7 @@ function AccountGroup({
   note,
   lines,
   card = false,
+  owed = false,
 }: {
   id: string
   title: string
@@ -215,6 +226,8 @@ function AccountGroup({
   lines?: WealthLine[]
   /** A card group reads "owed" or "Card credit", never a minus sign. */
   card?: boolean
+  /** A loan group is always owed: its total never reads as Card credit. */
+  owed?: boolean
 }) {
   if (accounts.length === 0) return null
   return (
@@ -227,7 +240,7 @@ function AccountGroup({
           (card ? (
             <span>
               <Amount value={Math.abs(Number(total))} />{' '}
-              <span className="text-sm text-ink-muted">{cardSide(total)}</span>
+              <span className="text-sm text-ink-muted">{owed ? 'owed' : cardSide(total)}</span>
             </span>
           ) : (
             <Amount value={Number(total)} />

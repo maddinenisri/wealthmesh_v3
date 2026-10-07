@@ -23,7 +23,7 @@ import { TransferChange, type TransferTarget } from '../transfers/TransferChange
 import { usableAccounts } from '../transfers/accountChoice'
 import { TransferForm } from '../transfers/TransferForm'
 import { ValuedAccount } from '../values/ValuedAccount'
-import { accountTypeLabel, isValued } from './accountTypes'
+import { accountTypeLabel, isDebt, isValued } from './accountTypes'
 import { AccountStatusCard } from './AccountStatusCard'
 import { STATUS_LABEL } from './statusLabel'
 import { BalanceFigure } from './BalanceFigure'
@@ -78,7 +78,7 @@ export function AccountDetailPage() {
           <AccountStatusCard account={account.data} />
           {isValued(account.data.type) ? (
             <ValuedAccount account={account.data} members={members} />
-          ) : (
+          ) : isDebt(account.data.type) ? null : (
             <Activity account={account.data} members={members} />
           )}
         </>
@@ -100,14 +100,14 @@ function Details({ account, owners }: { account: Account; owners: string }) {
         {!isValued(account.type) && (
           <div>
             <dt className="text-caption text-ink-muted">
-              {isCard(account.type) ? 'Issuer' : 'Bank'}
+              {isCard(account.type) ? 'Issuer' : isDebt(account.type) ? 'Lender' : 'Bank'}
             </dt>
             <dd>{account.institution ?? 'Not set'}</dd>
           </div>
         )}
         <div>
           <dt className="text-caption text-ink-muted">
-            {isValued(account.type) ? 'Value' : 'Balance'}
+            {isValued(account.type) ? 'Value' : isDebt(account.type) ? 'Balance owed' : 'Balance'}
           </dt>
           <dd>
             <BalanceFigure
@@ -116,16 +116,22 @@ function Details({ account, owners }: { account: Account; owners: string }) {
               className="font-sans text-2xl normal-nums"
             />
             <span className="block text-caption text-ink-muted">as of {account.balance.asOf}</span>
-            {!isCard(account.type) && Number(account.balance.amount) < 0 && (
-              <span className="mt-1 block max-w-prose text-sm text-ink-muted">
-                {OVERDRAFT_NOTICE}
-              </span>
-            )}
+            {!isCard(account.type) &&
+              !isDebt(account.type) &&
+              Number(account.balance.amount) < 0 && (
+                <span className="mt-1 block max-w-prose text-sm text-ink-muted">
+                  {OVERDRAFT_NOTICE}
+                </span>
+              )}
           </dd>
         </div>
         <div>
           <dt className="text-caption text-ink-muted">
-            {isValued(account.type) ? 'Initial value' : 'Initial Balance'}
+            {isValued(account.type)
+              ? 'Initial value'
+              : isDebt(account.type)
+                ? 'Initial amount owed'
+                : 'Initial Balance'}
           </dt>
           <dd>
             <BalanceFigure

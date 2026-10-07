@@ -14,7 +14,7 @@ import {
 import { useCreateAccount, useUpdateAccount } from '../../hooks/useAccounts'
 import { formatMoney, parseAmount } from '../../lib/money'
 import { Panel } from '../activity/Panel'
-import { ACCOUNT_TYPES, accountTypeLabel, valuedNoun } from './accountTypes'
+import { ACCOUNT_TYPES, accountTypeLabel, isDebt, valuedNoun } from './accountTypes'
 import { isCard } from './cardBalance'
 import { memberLabel } from './ownerNames'
 
@@ -44,12 +44,15 @@ function OwnerChoices<T extends DetailsValues>({
   control,
   current = [],
   valued = false,
+  debt = false,
 }: {
   members: Member[]
   control: Control<T>
   current?: string[]
   /** A property or other asset: owners are named, and there is no "joint account" wording. */
   valued?: boolean
+  /** A loan: the people who owe it, and no "joint account" wording. */
+  debt?: boolean
 }) {
   const options = members
     .filter((member) => member.active || current.includes(member.id))
@@ -60,9 +63,11 @@ function OwnerChoices<T extends DetailsValues>({
       name="ownerMemberIds"
       label="Owners"
       hint={
-        valued
-          ? 'Choose everyone who owns this property or asset.'
-          : 'Choose everyone who owns this account. Two or more makes it a joint account.'
+        debt
+          ? 'Choose everyone who owes this loan.'
+          : valued
+            ? 'Choose everyone who owns this property or asset.'
+            : 'Choose everyone who owns this account. Two or more makes it a joint account.'
       }
       options={options}
       rules={ownerRules}
@@ -88,7 +93,9 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
   const typeValue = useWatch({ control, name: 'type' })
   const card = isCard(typeValue)
   const noun = valuedNoun(typeValue)
-  // A property or other asset is reviewed before it is saved (PROPERTY_002): the review says what it will start at.
+  const debt = isDebt(typeValue)
+  // A property, other asset or loan is reviewed before it is saved (PROPERTY_002, LOAN_001): the review says what it
+  // will start at.
   const [review, setReview] = useState<SetupValues | null>(null)
   const owners = (ids: string[]) =>
     members
@@ -113,7 +120,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         () => undefined,
       )
   const onSubmit = handleSubmit((values) => {
-    if (valuedNoun(values.type)) {
+    if (valuedNoun(values.type) || isDebt(values.type)) {
       create.reset()
       setReview(values)
       return undefined
@@ -123,6 +130,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
 
   if (review) {
     const amount = review.balance.trim() === '' ? 0 : Number(parseAmount(review.balance))
+    const owing = isDebt(review.type)
     return (
       <Panel>
         <section aria-labelledby="setup-review-heading" className="flex max-w-md flex-col gap-3">
@@ -131,14 +139,20 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
           </h2>
           <FormAlert message={create.error?.message} />
           <p>
-            {review.name.trim()} will start at {formatMoney(amount)} on {review.openedOn}.
+            {review.name.trim()} will start at {formatMoney(amount)}
+            {owing ? ' owed' : ''} on {review.openedOn}.
           </p>
           {review.balance.trim() === '' && (
             <p className="text-sm text-ink-muted">
-              The value was left blank, so it starts at $0.00. Saving completes the setup.
+              {owing
+                ? 'The amount owed was left blank, so it starts at $0.00 owed. Saving completes the setup.'
+                : 'The value was left blank, so it starts at $0.00. Saving completes the setup.'}
             </p>
           )}
-          <p className="text-sm text-ink-muted">Owners: {owners(review.ownerMemberIds)}.</p>
+          <p className="text-sm text-ink-muted">
+            {owing && review.institution.trim() !== '' && `Lender: ${review.institution.trim()}. `}
+            Owners: {owners(review.ownerMemberIds)}.
+          </p>
           <div className="flex gap-2">
             <Button type="button" disabled={create.isPending} onClick={() => void save(review)}>
               {create.isPending ? 'Saving' : 'Confirm'}
@@ -178,15 +192,15 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         <TextField
           control={control}
           name="institution"
-          label={card ? 'Issuer' : 'Bank'}
+          label={card ? 'Issuer' : debt ? 'Lender' : 'Bank'}
           rules={bankRules}
         />
       )}
-      <OwnerChoices members={members} control={control} valued={!!noun} />
+      <OwnerChoices members={members} control={control} valued={!!noun} debt={debt} />
       <TextField
         control={control}
         name="openedOn"
-        label={noun ? 'Value date' : 'Opened on'}
+        label={noun ? 'Value date' : debt ? 'As of' : 'Opened on'}
         type="date"
         rules={{
           required: 'Enter an opening date',
@@ -196,13 +210,15 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       <TextField
         control={control}
         name="balance"
-        label={noun ? 'Value' : 'Balance'}
+        label={noun ? 'Value' : debt ? 'Amount owed' : 'Balance'}
         inputMode="decimal"
         placeholder="0.00"
         hint={
           noun
             ? 'Optional. Leave blank to start at $0.00 on the value date.'
-            : 'Optional. Leave blank to start at $0.00 on the opening date.'
+            : debt
+              ? 'Optional. Leave blank to start at $0.00 owed on the date.'
+              : 'Optional. Leave blank to start at $0.00 on the opening date.'
         }
         rules={{
           validate: (value) => {
@@ -210,6 +226,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
             const amount = parseAmount(value)
             if (amount === null) return 'Enter a valid amount'
             if (noun && amount.startsWith('-')) return `Enter zero or a positive ${noun} value`
+            if (debt && amount.startsWith('-')) return 'Enter zero or a positive amount owed'
             return !(card && amount.startsWith('-')) || 'Enter a valid amount'
           },
         }}
@@ -227,7 +244,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       )}
       <div className="flex gap-2">
         <Button type="submit" disabled={create.isPending}>
-          {create.isPending ? 'Saving' : noun ? 'Review' : 'Save account'}
+          {create.isPending ? 'Saving' : noun || debt ? 'Review' : 'Save account'}
         </Button>
         <Link to="/accounts" className={buttonStyles({ variant: 'ghost' })}>
           Cancel
@@ -266,7 +283,7 @@ export function AccountEditForm({ account, members }: { account: Account; member
         <TextField
           control={control}
           name="institution"
-          label={isCard(account.type) ? 'Issuer' : 'Bank'}
+          label={isCard(account.type) ? 'Issuer' : isDebt(account.type) ? 'Lender' : 'Bank'}
           rules={bankRules}
         />
       )}
@@ -275,6 +292,7 @@ export function AccountEditForm({ account, members }: { account: Account; member
         control={control}
         current={account.ownerMemberIds}
         valued={!!valuedNoun(account.type)}
+        debt={isDebt(account.type)}
       />
       <div className="flex gap-2">
         <Button type="submit" disabled={update.isPending}>

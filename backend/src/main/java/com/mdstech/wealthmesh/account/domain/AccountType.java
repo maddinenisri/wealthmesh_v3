@@ -4,25 +4,36 @@ import java.util.Optional;
 
 /**
  * Account types the app can set up so far (T1: savings has the checking shape; T2: a card keeps one Balance that is
- * owed or Card credit; T3: property and other assets hold dated values, no activity). The table allows every type in
- * the foundations; add one per feature. A type's {@link Kind} decides how its Balance is read (foundations 3, 5).
+ * owed or Card credit; T3: property and other assets hold dated values, no activity; T4: a loan is a debt owed, set
+ * up with an amount and changed by payments and reviewed corrections). The table allows every type in the
+ * foundations; add one per feature. A type's {@link Kind} decides how its Balance is read (foundations 3, 5).
  */
 public enum AccountType {
     CHECKING(Kind.LEDGER),
     SAVINGS(Kind.LEDGER),
     CREDIT_CARD(Kind.LEDGER),
     PROPERTY(Kind.VALUED),
-    OTHER_ASSET(Kind.VALUED);
+    OTHER_ASSET(Kind.VALUED),
+    LOAN(Kind.DEBT);
 
-    /** How a type's Balance is read: opening plus signed activity (ledger), or the latest dated value (valued). */
+    /**
+     * How a type's Balance is read: opening plus signed activity (ledger), the latest dated value (valued), or the
+     * amount owed (debt: opening plus its payments and corrections, stored negative like a card, D-053). Only a ledger
+     * type takes ordinary money in and out; a debt takes a payment from a ledger account and a reviewed correction.
+     */
     public enum Kind {
-        LEDGER, VALUED
+        LEDGER, VALUED, DEBT
     }
 
     private final Kind kind;
 
     AccountType(Kind kind) {
         this.kind = kind;
+    }
+
+    /** How this type's Balance is read. */
+    public Kind kind() {
+        return kind;
     }
 
     /** True for a property or other asset (see {@link #isValued}). */
@@ -43,6 +54,11 @@ public enum AccountType {
     /** True for a property or other asset: no activity, one Balance that is its latest effective dated value. */
     public static boolean isValued(String wire) {
         return fromWire(wire).filter(type -> type.kind == Kind.VALUED).isPresent();
+    }
+
+    /** True for a loan: a debt with an amount owed, never an asset (see {@link Kind#DEBT}). */
+    public static boolean isDebt(String wire) {
+        return fromWire(wire).filter(type -> type.kind == Kind.DEBT).isPresent();
     }
 
     /** True for a credit card: its Balance is owed (negative) or Card credit (positive), and it takes no income. */

@@ -1,10 +1,10 @@
 import { Amount } from '../../design-system'
-import { cardSide, isCard } from './cardBalance'
+import { balanceSide, readsAsOwed } from './cardBalance'
 import { OverdrawnLabel } from './Overdrawn'
 
 /**
- * A Balance as the person reads it. A card shows its size with what it means: "$1,000.00 owed" or "$50.00 Card
- * credit". Any other account shows the signed figure, with the overdraft label under a negative one.
+ * A Balance as the person reads it. A card or loan shows its size with what it means: "$1,000.00 owed" or "$50.00
+ * Card credit". Any other account shows the signed figure, with the overdraft label under a negative one.
  */
 export function BalanceFigure({
   type,
@@ -18,7 +18,7 @@ export function BalanceFigure({
   overdraft?: boolean
 }) {
   const value = Number(amount)
-  if (!isCard(type)) {
+  if (!readsAsOwed(type)) {
     return (
       <>
         <Amount value={value} className={className} />
@@ -29,7 +29,7 @@ export function BalanceFigure({
   return (
     <span>
       <Amount value={Math.abs(value)} className={className} />{' '}
-      <span className="text-sm text-ink-muted">{cardSide(value)}</span>
+      <span className="text-sm text-ink-muted">{balanceSide(type, value)}</span>
     </span>
   )
 }

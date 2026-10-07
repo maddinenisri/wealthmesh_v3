@@ -26,4 +26,10 @@ describe('account choosers', () => {
     expect(usableAccounts(all).map((a) => a.type)).toEqual(['checking', 'savings', 'credit_card'])
     expect(usableAccounts(all, 'propertyactive').map((a) => a.type)).not.toContain('property')
   })
+
+  it('V2_LOAN_001 never offer a loan for new money, even one that is kept: a loan takes a payment, not ordinary entries', () => {
+    const all = [account('checking'), account('loan')]
+    expect(usableAccounts(all).map((a) => a.type)).toEqual(['checking'])
+    expect(usableAccounts(all, 'loanactive').map((a) => a.type)).not.toContain('loan')
+  })
 })

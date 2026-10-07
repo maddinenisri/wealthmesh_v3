@@ -144,6 +144,10 @@ public class AccountLifecycleService {
         return store.deltaOf(account.id()).flatMap(delta -> {
             BigDecimal balance = account.openingAmount().add(delta.amount());
             if (balance.signum() != 0) {
+                if (AccountType.isDebt(account.type())) {
+                    return Mono.error(conflict("Closing " + account.name() + " needs a zero Balance owed. It has "
+                            + dollars(balance.abs()) + " owed; record a payment first."));
+                }
                 return Mono.error(conflict("Closing " + account.name() + " needs a zero Balance. It has "
                         + dollars(balance) + (AccountType.isValued(account.type())
                                 ? "; record a $0.00 value first (for example when it is sold)."
@@ -219,7 +223,9 @@ public class AccountLifecycleService {
                     : "a starting-balance correction");
         }
         if (account.openingAmount().signum() != 0) {
-            reasons.add("a starting Balance of " + dollars(account.openingAmount()));
+            reasons.add(AccountType.isDebt(account.type())
+                    ? "a starting amount owed of " + dollars(account.openingAmount().abs())
+                    : "a starting Balance of " + dollars(account.openingAmount()));
         }
         return reasons;
     }

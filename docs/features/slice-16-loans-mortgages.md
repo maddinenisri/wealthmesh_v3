@@ -65,14 +65,18 @@ All 16 are citeable once the debt type exists (the map is right); none is blocke
 5. **Gate matrix for a debt account.** Accepted by: account edit, opening revision, balance correction (with remove and Undo), the loan payment (debt side only), lifecycle. Refused by every other writer (expense, income, refund, batch, historical, transfer, card payment, reminder, recurring, statement, value): one raw-API refusal test per writer (`ValuedSetupApiTests` pattern).
 6. **Wording proposal (owner item 1).** Ledger accounts keep "Balance"; valued accounts say "Value": the property review becomes "Value now / Value after" (group 0). Loans and mortgages: the one figure is "Balance owed", shown as "$20,000.00 owed" (the scenarios' own label); setup field "Amount owed (optional)"; reviews "Balance owed now / after"; "Lender" for the institution field (cards use "Issuer"); wealth groups under Debts named "Loans" and "Mortgages"; the validation message is the scenario string "Enter zero or a positive amount owed".
 
-## Task list (pending approval at checkpoint 1)
+7. **D-053 (draft, promoted at Land): a loan is a debt.** `AccountType.Kind.DEBT`, `LOAN` first; Balance = opening owed + its payments and corrections, stored negative like a card; `holdsActivity` stays LEDGER only, so every ordinary writer refuses it (`LoanSetupApiTests` lists them: expense, income, refund, batch, reminder, historical, statement, transfer both ways, card payment, recurring bill, dated value). `balanceSide`/`readsAsOwed` read a loan as "$X owed", never a minus. Wealth gets a `loans` group beside `cards`; an owed loan is also a `debtLine` once. Group 2 admits the loan as the in-side of a payment; group 3 admits balance and opening corrections (`balance-corrections` and `starting-balance-corrections` are refused today only by the ledger gate).
+8. **Lender**: the institution field; its over-120 message says "Lender" for a loan, "Bank" for the rest, on create and on edit.
+9. **Open, not fixed (group 1):** the as-of wealth lines on the Household page list only property and other assets, so a loan shows only in the net figure on a past date; a card's line there reads with a minus sign (older than this slice).
+
+## Task list (approved at checkpoint 1)
 
 Nine groups, more than 5. Proposed split (owner item 3): see question 1.
 
 | Group | Scenario IDs | Test level | Status |
 | --- | --- | --- | --- |
 | 0 (own commit) property review wording: "Value now / Value after", plus the other Balance words a property still shows | cites existing `V2_PROPERTY_00x` IDs | UI (Vitest red first) + e2e line | done (Vitest red first: 7 tests failed on the new wording before the source change; the two changed e2e lines are wording edits of existing assertions, green on the packaged jar; server history text "Value returns to"; the property page has no date lookup, so none was changed) |
-| 1 DEBT kind, loan setup, edit, blank is $0.00, validation, Lender, lists, Loans group in Debts | `V2_LOAN_001`, `002`, `005` | API + UI + e2e | todo |
+| 1 DEBT kind, loan setup, edit, blank is $0.00, validation, Lender, lists, Loans group in Debts | `V2_LOAN_001`, `002`, `005` | API + UI + e2e | done (`Kind.DEBT`, `AccountType.LOAN`, the debt stored negative; `LoanSetupApiTests` 9 tests with the per-writer refusal list and a lifecycle wording test seen red without its fix; `LoanSetup.test.tsx` 9 red first, `accountChoice.test.ts` seen red; e2e `17-loans.spec.ts` seen red against the old jar (the serial run stopped at line 1, so line 2 and `V2_LOAN_005` were not seen red alone: a miss, `LOAN_005` could have been run with `--grep`); full backend green only after the dev stack was stopped, see Handoff) |
 | 2 loan payment: per-leg amounts, portions, V25, spending interest, `flowsBetween` and the identity test, overpayment review | `V2_LOAN_003`, `006` | API (identity, races, replay) + UI + e2e | todo |
 | 3 debt correction and opening correction, remove and Undo, wealth explanation | `V2_LOAN_004`, `V2_DATED_VALUE_003` | API + UI + e2e | todo |
 | 4 mortgage type and setup (a noun and group over group 1) | `V2_MORTGAGE_001`, `002`, `007` | API + UI + e2e | todo |

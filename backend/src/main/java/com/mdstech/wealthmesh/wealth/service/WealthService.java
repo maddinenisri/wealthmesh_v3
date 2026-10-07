@@ -116,13 +116,14 @@ public class WealthService {
     private static WealthSummary summarize(LocalDate asOf, List<Line> lines, List<NotTracked> missing) {
         List<Line> bank = lines.stream().filter(l -> AccountType.paysCards(l.type())).toList();
         List<Line> cards = lines.stream().filter(l -> AccountType.isCard(l.type())).toList();
+        List<Line> loans = lines.stream().filter(l -> AccountType.isDebt(l.type())).toList();
         List<Line> valued = lines.stream().filter(l -> AccountType.isValued(l.type())).toList();
         BigDecimal assets = lines.stream().map(WealthService::amount).filter(b -> b.signum() > 0)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         List<Line> debtLines = lines.stream().filter(l -> amount(l).signum() < 0).toList();
         BigDecimal debts = debtLines.stream().map(l -> amount(l).negate()).reduce(BigDecimal.ZERO, BigDecimal::add);
         return new WealthSummary(asOf, Money.format(assets), Money.format(debts), Money.format(assets.subtract(debts)),
-                group(bank), group(cards), group(valued), debtLines, missing);
+                group(bank), group(cards), group(loans), group(valued), debtLines, missing);
     }
 
     private static Group group(List<Line> lines) {

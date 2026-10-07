@@ -12,7 +12,7 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { stamp } from '../../lib/stamp'
 import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
-import { isValued } from './accountTypes'
+import { isDebt, isValued } from './accountTypes'
 import { balanceText, isCard } from './cardBalance'
 import { memberLabel } from './ownerNames'
 import { STATUS_LABEL } from './statusLabel'
@@ -49,6 +49,7 @@ export function AccountStatusCard({ account }: { account: Account }) {
   }, [failed])
   const figure = balanceText(account.type, account.balance.amount)
   const word = isValued(account.type) ? 'value' : 'Balance'
+  const debt = isDebt(account.type)
   const atZero = Number(account.balance.amount) === 0
 
   // Deleting takes the account's page away, so the account list takes focus there (its status line, with Undo).
@@ -66,7 +67,9 @@ export function AccountStatusCard({ account }: { account: Account }) {
           {
             archive: `${account.name} is archived. Its ${figure} stays in wealth.`,
             restore: `${account.name} is active again with its ${figure} and complete history.`,
-            close: `${account.name} is closed with a ${figure} ${word}. Its history is kept.`,
+            close: debt
+              ? `${account.name} is closed at ${figure}. Its history is kept.`
+              : `${account.name} is closed with a ${figure} ${word}. Its history is kept.`,
             reopen: `${account.name} is open again. Its history is as it was.`,
           }[action],
         )
@@ -95,15 +98,18 @@ export function AccountStatusCard({ account }: { account: Account }) {
       )}
       {account.status === 'closed' && !message && (
         <p className="mt-2 max-w-prose text-sm text-ink-muted">
-          Closed: it takes no new {isValued(account.type) ? 'values' : 'entries'} and no changes
-          until you reopen it. Its history stays.
+          Closed: it takes no new{' '}
+          {isValued(account.type) ? 'values' : debt ? 'payments' : 'entries'} and no changes until
+          you reopen it. Its history stays.
         </p>
       )}
       {account.status === 'archived' && !message && (
         <p className="mt-2 max-w-prose text-sm text-ink-muted">
           {isValued(account.type)
             ? 'Archived: hidden from the active list and from new values.'
-            : 'Archived: hidden from the active list and from new entries, transfers and payments.'}{' '}
+            : debt
+              ? 'Archived: hidden from the active list and from new payments.'
+              : 'Archived: hidden from the active list and from new entries, transfers and payments.'}{' '}
           Its {figure} still counts in wealth.
         </p>
       )}
@@ -128,33 +134,45 @@ export function AccountStatusCard({ account }: { account: Account }) {
               <>
                 <p className="text-sm">
                   Its {figure} will remain in wealth
-                  {isCard(account.type) && Number(account.balance.amount) < 0 ? ' as debt' : ''},
-                  with a visible archived label.
+                  {(isCard(account.type) && Number(account.balance.amount) < 0) || debt
+                    ? ' as debt'
+                    : ''}
+                  , with a visible archived label.
                 </p>
                 <p className="text-sm">
                   {isValued(account.type)
                     ? `${account.name} leaves the active account list and takes no new values until you restore it. This changes the household list only.`
-                    : `${account.name} leaves the active account list and every choice for new entries, transfers and payments. This changes the household list. It does not close an account at its bank.`}
+                    : debt
+                      ? `${account.name} leaves the active account list and every choice for new payments. This changes the household list. It does not close the loan at its lender.`
+                      : `${account.name} leaves the active account list and every choice for new entries, transfers and payments. This changes the household list. It does not close an account at its bank.`}
                 </p>
               </>
             ) : review === 'restore' ? (
               <p className="text-sm">
-                {account.name} returns to the active list with the same {word} ({figure}) and
-                complete history.
+                {account.name} returns to the active list with the same{' '}
+                {debt ? 'balance owed' : word} ({figure}) and complete history.
               </p>
             ) : review === 'close' ? (
               closeBlocked.length > 0 ? (
                 <p className="text-sm">{closeBlocked.join(' ')}</p>
               ) : atZero ? (
                 <p className="text-sm">
-                  {account.name} will be marked closed with a {figure} {word} and its history kept.
-                  It takes no new {isValued(account.type) ? 'values' : 'entries'} until you reopen
-                  it. Wealth does not change.
+                  {debt
+                    ? `${account.name} will be marked closed at ${figure} and its history kept.`
+                    : `${account.name} will be marked closed with a ${figure} ${word} and its history kept.`}{' '}
+                  It takes no new{' '}
+                  {isValued(account.type) ? 'values' : debt ? 'payments' : 'entries'} until you
+                  reopen it. Wealth does not change.
                 </p>
               ) : isValued(account.type) ? (
                 <p className="text-sm">
                   Closing needs a zero value. {account.name} has {figure}: record a $0.00 value
                   first (for example when it is sold), then review closing again.
+                </p>
+              ) : debt ? (
+                <p className="text-sm">
+                  Closing needs a zero Balance owed. {account.name} has {figure}: record a payment
+                  for it, then review closing again.
                 </p>
               ) : (
                 <p className="text-sm">
@@ -184,8 +202,8 @@ export function AccountStatusCard({ account }: { account: Account }) {
                       ))}
                     </ul>
                     <p className="text-sm">
-                      Choose Archive to hide it, or Close once its {word} is zero. Nothing changes
-                      until you do.
+                      Choose Archive to hide it, or Close once its {debt ? 'balance owed' : word} is
+                      zero. Nothing changes until you do.
                     </p>
                   </>
                 )}
