@@ -2,7 +2,7 @@
 
 - Slice: 17 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `accounts/{401k,brokerage,hsa,roth-ira,traditional-ira}/setup.feature`, `accounts/lifecycle/manage-accounts.feature` (007), `investments/corrections.feature` (005)
 - Status: 17a built and proven, waiting for Checkpoint 2 (17b next)
-- Started: 2026-10-07 14:43 EDT (session clock)  Finished:  Commit:
+- Started: 2026-10-07 14:43 EDT (session clock)  Finished: 2026-10-07 (17a)  Commit: `ee8247f` to `0e8b514`
 
 ## Prompts and directions
 
@@ -166,9 +166,23 @@ Owner's decision taken: **Financial assets no longer outruns the page.** `GET /w
 
 ## Handoff (17a)
 
-- Built: brokerage setup from cash and holdings (V27, V28), the draft (Save draft, Finish setup, Cancel draft with one question, reviewed delete and Undo), statement backing the opening and its reviewed removal, an `investments` wealth group (D-061), `typeTraits` (D-060). D-057 to D-061. Full proof in the Prove section; Cowork 6. Not committed at the time of writing (see the commit hash in the INDEX row once landed).
+- Built: brokerage setup from cash and holdings (V27, V28), the draft (Save draft, Finish setup, Cancel draft with one question, reviewed delete and Undo), statement backing the opening and its reviewed removal, an `investments` wealth group (D-061), `typeTraits` (D-060). D-057 to D-061. Full proof in the Prove section; Cowork 6. Committed as `ee8247f`, `6d3f7f2`, `6a8d5cc`, `0e8b514` (no attribution trailer); not pushed (D-002).
 - **17b (next session):** add `K401`(wire `401k`), `HSA`, `ROTH_IRA`, `TRADITIONAL_IRA` to `AccountType` (kind INVESTMENT; the enum needs a wire override for `401k`), flip `ready: true` on the four rows already in `ACCOUNT_TYPES` (they read "coming soon" now; three older tests name `401(k)` as the coming-soon type: pick another then), turn `InvestmentSetupApiTests` and `InvestmentDraftApiTests` into per-type parameterised runs (displayed names must cite all five IDs for coverage), one Vitest per type for its own words (institution label, owner hint: retirement and health types take exactly one owner, but that rule is slice 18), one e2e spec over the four wires, then `npm run coverage -- --require --slice 17`. The sentence "Opening" words, Household group and statements are shared and need nothing.
 - Watch for: a `Kind.INVESTMENT` type must never join `holdsActivity` (D-057); every list/group page (checklist lines added in 17a); Cancel draft asks first.
 - Owner's not-verified list: 1280px by eye and saves at 1280px; the deactivated-owner Finish fix; the statement-removal API fix; the lock/race gaps below; Archive, Close and Edit on a brokerage.
 - Open (logged, not built): visual faults 3 (arrival sentence beside the delete review), 6 (no who/when on a directly set up account; account creation records none for any type), 8 (early value date text is the scenario's), 10 (Back focuses Account name, Opening total below the fold at 710px); validator items: no race test for two concurrent linked-statement attaches (`link()` is a plain UPDATE), Finish against delete is behaviour-only, no tie test for `wasDiscarded`, no long-list seed in e2e, the guard matrix asserts a 4xx not a message per cell; two timing flakes under load (`AccountStatusCard` close in Vitest, `DeletedAccountSweepApiTests` read timeouts in the full backend run; both pass alone).
 - Advisor: available at checkpoint 1 and again before Land; both used. v1 not running, not consulted.
+
+## How it works (17a)
+
+Written by a read-only agent over the diff and the notes, then checked by me against the code and tests: the six refusals' words (server `OpeningComponents`, browser `openingForm.ts`, same text), the three review states (`complete`, `draft`, `mismatch`) and the disabled Confirm, the save in one transaction, the account-lock on Finish, Cancel draft and statement removal, the Cancel-draft question, the Investments group and drafts excluded, and the empty-setup text (`noStartingAmount`, test and Opening card) all hold. The agent did not run anything; the test counts and planted-away results are in the Prove and planted-away sections above.
+
+**What a person can now do.** Add a Brokerage with a setup date, an optional opening total, cash and holding lines (name or symbol, quantity, market price, value date); the Balance is cash plus quantity times price to the cent. A blank setup starts at $0.00 and the account page says no starting amount was entered. Six bad inputs are refused at their field (cash below zero, shares of 0 or -2, a negative price, a future value date, a value date before the setup date), and a number too large to record is refused too. A total that differs from cash plus holdings is shown as a mismatch, cannot be confirmed, and the difference never becomes cash. With anything entered but cash blank, the review says the account will be a draft ("Not answered yet"); Save draft keeps it, listed with no Balance and not in wealth. Finish setup answers the cash under the same checks and makes it active; Cancel draft asks once and then removes it for good; Delete account on a draft is reviewed and can be undone, returning the same draft. A statement can back the opening; removing it is reviewed and keeps the cash, shares, price and Balance, with who and when in history. The Household page has an Investments line.
+
+**Underneath.** A new kind of account (investment) that entries, transfers, reminders and corrections refuse until slices 20 to 23; the opening components in two tables (V27, V28); the account's opening amount is cash plus holdings, frozen until prices (slice 19); a draft is an account marked draft, refused by every writer except edit details, Finish, Cancel and delete; a removed statement is only marked removed and its link to the opening stays.
+
+**Where each rule is enforced.** In the browser (field checks, the too-large check), in the review (the server runs the same judgement and returns complete, draft or mismatch), at save (the server judges again and refuses a mismatch), and under the account lock for Finish, discard and statement removal.
+
+**Left.** 17b: the four retirement and health types, 16 IDs. Slice 18: split the Investments group, owner rule, per-person view. Slice 19: prices, cost and gain. Slice 22: cash correction. Later: Undo of a statement removal.
+
+**Verify by hand.** Blank brokerage; total $20,000 and 50 HOME at $100 with cash blank (draft, Household unchanged); Cancel draft question; Finish setup with cash $15,000 (Balance $20,000, Investments line); total $20,000, cash $100 and one $100 share (mismatch, Confirm off); the bad inputs; delete a draft then Undo; attach and remove a statement.
