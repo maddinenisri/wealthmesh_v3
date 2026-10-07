@@ -10,6 +10,7 @@ import { formatMoney, parseAmount } from '../../lib/money'
 import { isDebt } from '../accounts/accountTypes'
 import { balanceText, isCard } from '../accounts/cardBalance'
 import { OVERDRAFT_NOTICE } from '../accounts/Overdrawn'
+import { Dated } from '../values/Dated'
 import { EnteredBy } from './EnteredBy'
 
 type Values = { requested: string; asOn: string; reason: string; balanceSide: 'owed' | 'credit' }
@@ -86,6 +87,10 @@ export function BalanceCorrection({
   const money = (value: string | number) => balanceText(account.type, String(value))
   const [key] = useState(newKey)
   useEffect(() => onReviewing?.(reviewing !== null), [reviewing, onReviewing])
+  // The review replaces the form in place, so its heading takes focus.
+  useEffect(() => {
+    if (reviewing) document.getElementById('correction-heading')?.focus({ preventScroll: true })
+  }, [reviewing])
   const save = useSaveCorrection(account.id)
   const { control, handleSubmit, setValue, getFieldState, formState } = useForm<Values>({
     defaultValues: {
@@ -152,7 +157,7 @@ export function BalanceCorrection({
     return (
       <div id="correction-review" className="scroll-mt-4">
         <Card aria-labelledby="correction-heading">
-          <CardTitle id="correction-heading" className="text-lg">
+          <CardTitle id="correction-heading" tabIndex={-1} className="text-lg outline-none">
             {editing ? 'Review correction change' : 'Review balance update'}
           </CardTitle>
           <FormAlert
@@ -169,9 +174,13 @@ export function BalanceCorrection({
                 {editing?.reason && <Item label="Original reason">{editing.reason}</Item>}
                 <Item
                   label={
-                    editing
-                      ? `${debt ? 'Balance owed' : 'Balance'} without this correction`
-                      : `Current ${word} on ${figures.asOn}`
+                    editing ? (
+                      `${debt ? 'Balance owed' : 'Balance'} without this correction`
+                    ) : (
+                      <>
+                        Current {word} on <Dated on={figures.asOn} />
+                      </>
+                    )
                   }
                 >
                   {money(figures.balanceOnDate)}
@@ -194,7 +203,9 @@ export function BalanceCorrection({
                 </Item>
               </dl>
               <p className="mt-3 max-w-md text-sm text-ink-muted">
-                This correction is excluded from Income and spending. It changes the Balance only.
+                {debt
+                  ? 'This correction is excluded from income and spending. It changes only the balance owed.'
+                  : 'This correction is excluded from Income and spending. It changes the Balance only.'}
               </p>
               {figures.overdraft && (
                 <p
@@ -301,7 +312,7 @@ export function BalanceCorrection({
   )
 }
 
-function Item({ label, children }: { label: string; children: React.ReactNode }) {
+function Item({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
       <dt className="text-caption text-ink-muted">{label}</dt>

@@ -96,6 +96,7 @@ for (const width of [710, 1280] as const) {
       await form.getByRole('button', { name: 'Review' }).click()
 
       const review = page.getByRole('region', { name: 'Review initial amount owed correction' })
+      await expectFocusInside(review)
       await expect(review).toContainText(
         'Balance owed will change from $20,000.00 owed to $19,800.00 owed.',
       )
@@ -139,12 +140,13 @@ for (const width of [710, 1280] as const) {
       await form.getByLabel('Date').fill('2026-09-30')
       await form.getByRole('button', { name: 'Review' }).click()
       const review = page.getByRole('region', { name: 'Review balance update' })
+      await expectFocusInside(review)
       await expect(review).toContainText('Difference$300.00 decrease in debt')
       await review.getByLabel('Reason').fill('Lender statement')
       await review.getByRole('button', { name: 'Confirm correction' }).click()
       const row = page.getByRole('row').filter({ hasText: 'Balance correction: Lender statement' })
       await expect(row).toBeVisible()
-      await expect(row).toContainText('-$300.00')
+      await expect(row).toContainText('$300.00 less owed')
       expect(await balanceOf(page, loanId)).toBe('-19500.00')
 
       await row.getByRole('button', { name: /^Remove correction of/ }).click()

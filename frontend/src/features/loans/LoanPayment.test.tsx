@@ -142,6 +142,8 @@ describe('paying a loan from checking', () => {
     await fill(user, form, '500.00', '450.00', '40.00')
     await user.click(within(form).getByRole('button', { name: 'Review' }))
     expect(await within(form).findByText('$10.00 remains unassigned')).toBeInTheDocument()
+    // The same words are not repeated as a second line under the field.
+    expect(within(form).getAllByText(/remains unassigned|still to assign/)).toHaveLength(1)
     const interest = within(form).getByLabelText('Interest')
     await user.clear(interest)
     await user.type(interest, '60.00')
@@ -198,7 +200,7 @@ describe('a loan page', () => {
     const { user } = renderRoute(`/accounts/${LOAN}`)
     const row = (await screen.findByText('Payment from', { exact: false })).closest('tr')!
     expect(row).toHaveTextContent('Everyday Checking')
-    expect(row).toHaveTextContent('-$450.00')
+    expect(row).toHaveTextContent('$450.00 paid')
     expect(row).toHaveTextContent('Principal')
     expect(screen.queryByRole('button', { name: 'Add money in' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Update balance' })).not.toBeInTheDocument()
@@ -287,7 +289,7 @@ describe('a loan page', () => {
     expect(await within(effect).findByText('Everyday Checking Balance')).toBeInTheDocument()
     expect(effect).toHaveTextContent('Everyday Checking Balance$4,500.00')
     expect(effect).toHaveTextContent('Car Loan Balance owed$19,600.00 owed')
-    await user.click(screen.getByRole('button', { name: 'Confirm payment' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm change' }))
     await screen.findByText('Includes interest')
     expect(posts(api.requests)).toEqual(['POST /api/v1/loan-payments/' + MOVEMENT + '/replacement'])
     expect(api.accounts.find((a) => a.id === LOAN)?.balance.amount).toBe('-19600.00')

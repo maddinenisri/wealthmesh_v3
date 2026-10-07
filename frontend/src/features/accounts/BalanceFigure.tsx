@@ -27,7 +27,7 @@ export function BalanceFigure({
     )
   }
   return (
-    <span>
+    <span className="whitespace-nowrap">
       <Amount value={Math.abs(value)} className={className} />{' '}
       <span className="text-sm text-ink-muted">{balanceSide(type, value)}</span>
     </span>

@@ -55,6 +55,10 @@ export function StartingBalanceCorrection({
   })
   const preview = useOpeningPreview(account.id, reviewing?.amount ?? '', reviewing?.on ?? '')
   useEffect(() => onReviewing?.(reviewing !== null), [reviewing, onReviewing])
+  useEffect(() => {
+    if (reviewing)
+      document.getElementById('starting-review-heading')?.focus({ preventScroll: true })
+  }, [reviewing])
 
   const confirm = handleSubmit((values) => {
     if (!reviewing || !member) return
@@ -76,7 +80,7 @@ export function StartingBalanceCorrection({
     const figures = preview.data
     return (
       <Card aria-labelledby="starting-review-heading">
-        <CardTitle id="starting-review-heading" className="text-lg">
+        <CardTitle id="starting-review-heading" tabIndex={-1} className="text-lg outline-none">
           {debt ? 'Review initial amount owed correction' : 'Review starting balance correction'}
         </CardTitle>
         <FormAlert
@@ -98,8 +102,9 @@ export function StartingBalanceCorrection({
               to {shown(figures.currentBalanceAfter)}.
             </p>
             <p className="mt-2 max-w-md text-sm text-ink-muted">
-              This correction is not income or spending, and your entries stay on their own dates.
-              The original starting balance stays in history.
+              {debt
+                ? 'This correction is not income or spending, and your payments stay on their own dates. The original initial amount owed stays in history.'
+                : 'This correction is not income or spending, and your entries stay on their own dates. The original starting balance stays in history.'}
             </p>
             {figures.overdraft && (
               <p

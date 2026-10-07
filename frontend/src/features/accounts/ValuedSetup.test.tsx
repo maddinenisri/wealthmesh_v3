@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mockApi } from '../../test/mockApi'
 import { renderRoute } from '../../test/render'
 
+const para = (text: string) => (_: string, element: Element | null) =>
+  element?.tagName === 'P' && element.textContent === text
+
 const household = { id: '11111111-1111-4111-8111-111111111111', name: 'Maya and Sam' }
 const maya = {
   id: '22222222-2222-4222-8222-222222222222',
@@ -45,7 +48,7 @@ describe.each([
     await user.click(screen.getByRole('button', { name: 'Review' }))
 
     expect(
-      await screen.findByText(`${name} will start at $0.00 on 2026-09-01.`),
+      await screen.findByText(para(`${name} will start at $0.00 on 2026-09-01.`)),
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: `Review new ${label.toLowerCase()}` })).toBeVisible()
     expect(api.requests.some((r) => r.startsWith('POST'))).toBe(false)
@@ -64,7 +67,9 @@ describe.each([
 
     await fill(user, type, name, '$25,000.00')
     await user.click(screen.getByRole('button', { name: 'Review' }))
-    expect(await screen.findByText(`${name} will start at $25,000.00 on 2026-09-01.`)).toBeVisible()
+    expect(
+      await screen.findByText(para(`${name} will start at $25,000.00 on 2026-09-01.`)),
+    ).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Back' }))
 
     expect(screen.getByLabelText('Account name')).toHaveValue(name)

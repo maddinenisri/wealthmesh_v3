@@ -4,11 +4,17 @@ import { Amount, Button, Table, Td, Th } from '../../design-system'
 import { useAccountHistory } from '../../hooks/useActivity'
 import { useOpeningRevisions } from '../../hooks/useStartingBalance'
 import { formatMoney } from '../../lib/money'
+import { Stamped } from '../values/Dated'
 import { stamp } from '../../lib/stamp'
 import { BalanceFigure } from '../accounts/BalanceFigure'
 import { PortionList } from './PortionList'
+import { loanChangeText } from '../loans/loanWords'
 import { shownAmount } from './signedAmount'
 import { isMovement, movementName } from './transferRows'
+
+/** What a payment's portions are called: a loan payment includes interest, any other payment is split. */
+const splitWord = (kind: string): string =>
+  kind === 'loan_payment' ? 'Includes interest' : 'Split'
 
 const STATUS = { effective: 'Effective', replaced: 'Replaced', removed: 'Removed' } as const
 const ACTION = { replaced: 'Replaced', removed: 'Removed', restored: 'Restored' } as const
@@ -73,7 +79,7 @@ export function EntryHistory({
             <Fragment key={entry.id}>
               <tr>
                 <Td className="whitespace-nowrap">{entry.occurredOn}</Td>
-                <Td>
+                <Td className={opening?.type === 'loan' ? 'min-w-32' : undefined}>
                   {entry.kind === 'correction'
                     ? 'Balance correction'
                     : isMovement(entry)
@@ -81,7 +87,9 @@ export function EntryHistory({
                       : (entry.description ?? (entry.portions.length > 0 ? 'Split expense' : ''))}
                   {entry.portions.length > 0 ? (
                     <span className="block lg:hidden">
-                      <span className="block text-caption text-ink-muted">Split</span>
+                      <span className="block text-caption text-ink-muted">
+                        {splitWord(entry.kind)}
+                      </span>
                       <PortionList portions={entry.portions} />
                     </span>
                   ) : (
@@ -93,9 +101,11 @@ export function EntryHistory({
                   )}
                 </Td>
                 <Td className="hidden lg:table-cell">
-                  {entry.portions.length > 0 ? (
+                  {entry.kind === 'loan_payment_in' ? (
+                    'Principal'
+                  ) : entry.portions.length > 0 ? (
                     <>
-                      Split
+                      {splitWord(entry.kind)}
                       <PortionList portions={entry.portions} />
                     </>
                   ) : (
@@ -103,7 +113,11 @@ export function EntryHistory({
                   )}
                 </Td>
                 <Td className="text-right whitespace-nowrap">
-                  <Amount value={shownAmount(entry, opening?.type)} />
+                  {opening?.type === 'loan' ? (
+                    loanChangeText(entry)
+                  ) : (
+                    <Amount value={shownAmount(entry, opening?.type)} />
+                  )}
                 </Td>
                 <Td>
                   {STATUS[entry.status]}
@@ -140,7 +154,9 @@ export function EntryHistory({
                 </Td>
                 <Td>
                   {entry.enteredByName ?? ''}
-                  <div className="text-caption text-ink-muted">{stamp(entry.createdAt)}</div>
+                  <div className="text-caption text-ink-muted">
+                    <Stamped at={entry.createdAt} />
+                  </div>
                   {entry.reason && (
                     <div className="text-caption text-ink-muted [overflow-wrap:anywhere] lg:hidden">
                       Reason: {entry.reason}
@@ -199,7 +215,11 @@ export function EntryHistory({
               </Td>
               <Td className="hidden lg:table-cell" />
               <Td className="text-right whitespace-nowrap">
-                <Amount value={Number(correction.openingAmount)} />
+                {opening?.type === 'loan' ? (
+                  <BalanceFigure type="loan" amount={correction.openingAmount} overdraft={false} />
+                ) : (
+                  <Amount value={Number(correction.openingAmount)} />
+                )}
               </Td>
               <Td>
                 {index === 0 ? 'Effective' : 'Replaced'}
@@ -223,7 +243,7 @@ export function EntryHistory({
           {original && (
             <tr>
               <Td className="whitespace-nowrap">{original.on}</Td>
-              <Td>Initial Balance</Td>
+              <Td>{opening?.type === 'loan' ? 'Initial amount owed' : 'Initial Balance'}</Td>
               <Td className="hidden lg:table-cell" />
               <Td className="text-right whitespace-nowrap">
                 <BalanceFigure

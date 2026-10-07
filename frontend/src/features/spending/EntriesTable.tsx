@@ -41,19 +41,27 @@ export function Entries({
             <tr key={entry.id}>
               <Td>
                 <Button variant="ghost" size="sm" onClick={() => setOpenId(entry.id)}>
-                  {entry.description ??
-                    (entry.portions.length > 0 ? 'Split expense' : entry.categoryName) ??
-                    words.column}
+                  {entry.kind === 'loan_payment'
+                    ? `Interest on payment to ${entry.counterAccountName ?? 'a loan'}`
+                    : (entry.description ??
+                      (entry.portions.length > 0 ? 'Split expense' : entry.categoryName) ??
+                      words.column)}
                 </Button>
               </Td>
               <Td>{entry.occurredOn}</Td>
               <Td>{entry.accountName}</Td>
               <Td className="text-right">
                 <Amount value={listedAmount(entry, categoryId)} />
-                {entry.portions.length > 0 && (
+                {entry.kind === 'loan_payment' ? (
                   <span className="block text-caption text-ink-muted">
-                    of {formatMoney(Number(entry.amount))} payment
+                    Interest part of a payment
                   </span>
+                ) : (
+                  entry.portions.length > 0 && (
+                    <span className="block text-caption text-ink-muted">
+                      of {formatMoney(Number(entry.amount))} payment
+                    </span>
+                  )
                 )}
                 {entry.kind === 'refund' && (
                   <span className="block text-caption text-ink-muted">Refund</span>
@@ -71,8 +79,13 @@ export function Entries({
             <Amount value={open.kind === 'refund' ? -Number(open.amount) : Number(open.amount)} />
             {open.kind === 'refund' && ' (refund)'}
           </Detail>
+          {open.kind === 'loan_payment' && (
+            <Detail label="Payment">Loan payment to {open.counterAccountName}</Detail>
+          )}
           <Detail label="Category">
-            {open.portions.length > 0 ? (
+            {open.kind === 'loan_payment' ? (
+              <>{open.portions[0]?.categoryName ?? 'Loan interest'}</>
+            ) : open.portions.length > 0 ? (
               <>
                 Split
                 <PortionList portions={open.portions} />

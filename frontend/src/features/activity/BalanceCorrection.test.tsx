@@ -60,7 +60,12 @@ describe('updating the balance', () => {
     await user.click(screen.getByRole('button', { name: 'Review' }))
 
     const review = await screen.findByRole('region', { name: 'Review balance update' })
-    expect(await within(review).findByText('Current Balance on 2026-09-30')).toBeInTheDocument()
+    expect(
+      await within(review).findByText(
+        (_, element) =>
+          element?.tagName === 'DT' && element.textContent === 'Current Balance on 2026-09-30',
+      ),
+    ).toBeInTheDocument()
     expect(review).toHaveTextContent('$4,900.00')
     expect(review).toHaveTextContent('$5,000.00')
     expect(review).toHaveTextContent('$100.00 increase')
@@ -150,7 +155,12 @@ describe('updating the balance', () => {
     await user.type(date, '2026-09-30')
     await user.click(screen.getByRole('button', { name: 'Review' }))
     const review = await screen.findByRole('region', { name: 'Review balance update' })
-    expect(await within(review).findByText('Current Balance on 2026-09-30')).toBeInTheDocument()
+    expect(
+      await within(review).findByText(
+        (_, element) =>
+          element?.tagName === 'DT' && element.textContent === 'Current Balance on 2026-09-30',
+      ),
+    ).toBeInTheDocument()
     expect(review).toHaveTextContent('$4,900.00')
     expect(review).toHaveTextContent('$100.00 increase')
     expect(review).toHaveTextContent('Everyday Checking Balance after')

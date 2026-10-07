@@ -139,8 +139,12 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
           </h2>
           <FormAlert message={create.error?.message} />
           <p>
-            {review.name.trim()} will start at {formatMoney(amount)}
-            {owing ? ' owed' : ''} on {review.openedOn}.
+            {review.name.trim()} will start at{' '}
+            <span className="whitespace-nowrap">
+              {formatMoney(amount)}
+              {owing ? ' owed' : ''}
+            </span>{' '}
+            on <span className="whitespace-nowrap">{review.openedOn}</span>.
           </p>
           {review.balance.trim() === '' && (
             <p className="text-sm text-ink-muted">

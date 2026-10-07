@@ -7,6 +7,7 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { formatMoney } from '../../lib/money'
 import { isDebt } from '../accounts/accountTypes'
 import { balanceText } from '../accounts/cardBalance'
+import { loanChangeText } from '../loans/loanWords'
 import { useRecurringPayments } from '../../hooks/useRecurring'
 import { EnteredBy } from './EnteredBy'
 import { PortionList } from './PortionList'
@@ -94,7 +95,7 @@ export function ChangeEntry({
       <dl className="mt-3 grid max-w-md gap-x-8 gap-y-3 sm:grid-cols-2">
         <Item label="Entry">
           {correction
-            ? 'Balance correction'
+            ? 'Correction'
             : split
               ? entry.description
                 ? `${entry.description} (split)`
@@ -107,7 +108,11 @@ export function ChangeEntry({
           </Item>
         )}
         <Item label="Date">{entry.occurredOn}</Item>
-        <Item label="Amount">{formatMoney(Number(entry.amount))}</Item>
+        <Item label="Amount">
+          {correction && isDebt(account.type)
+            ? loanChangeText(entry)
+            : formatMoney(Number(entry.amount))}
+        </Item>
         <Item
           label={`${account.name} ${isDebt(account.type) ? 'Balance owed' : 'Balance'} after ${mode === 'remove' ? 'removal' : 'Undo'}`}
         >

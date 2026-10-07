@@ -9,6 +9,7 @@ import { EntryHistory } from './EntryHistory'
 import { PortionList } from './PortionList'
 import { useRecurringPayments } from '../../hooks/useRecurring'
 import { classText } from './classes'
+import { loanChangeText } from '../loans/loanWords'
 import { shownAmount } from './signedAmount'
 import { givesMoney, isMovement, movementWord, rowName } from './transferRows'
 
@@ -136,7 +137,11 @@ export function ActivityList({
                     {entry.enteredByMemberId ? ownerNames([entry.enteredByMemberId], members) : ''}
                   </Td>
                   <Td className="text-right whitespace-nowrap">
-                    <Amount value={shownAmount(entry, accountType)} />
+                    {accountType === 'loan' ? (
+                      loanChangeText(entry)
+                    ) : (
+                      <Amount value={shownAmount(entry, accountType)} />
+                    )}
                     {entry.kind === 'refund' && (
                       <span className="block text-caption text-ink-muted">Refund</span>
                     )}

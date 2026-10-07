@@ -353,7 +353,7 @@ for (const [width, name] of [
       await expect(change.getByRole('list', { name: 'Value changes' })).toContainText(
         `${name} value increase of $20,000.00`,
       )
-      await expect(change).toContainText('Transfers and card payments cancel out')
+      await expect(change).toContainText('Transfers, card payments and loan principal cancel out')
       await expectNoSidewaysScroll(page)
     })
 

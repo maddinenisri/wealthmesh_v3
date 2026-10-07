@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mockApi, type MockAccount, type MockActivity } from '../../test/mockApi'
 import { renderRoute } from '../../test/render'
@@ -56,6 +56,11 @@ describe('correcting the initial amount owed', () => {
     const review = await screen.findByRole('region', {
       name: 'Review initial amount owed correction',
     })
+    await waitFor(() =>
+      expect(
+        within(review).getByRole('heading', { name: 'Review initial amount owed correction' }),
+      ).toHaveFocus(),
+    )
     expect(await within(review).findByText(/Balance owed will change/)).toHaveTextContent(
       'Balance owed will change from $20,000.00 owed to $19,800.00 owed.',
     )
@@ -104,12 +109,15 @@ describe('a dated correction of the balance owed', () => {
     await user.click(within(form).getByRole('button', { name: 'Review' }))
 
     const review = await screen.findByRole('region', { name: 'Review balance update' })
+    await waitFor(() =>
+      expect(within(review).getByRole('heading', { name: 'Review balance update' })).toHaveFocus(),
+    )
     expect(await within(review).findByText('Requested balance owed')).toBeInTheDocument()
     expect(review).toHaveTextContent('Current balance owed on 2026-09-30$20,000.00 owed')
     expect(review).toHaveTextContent('Requested balance owed$19,800.00 owed')
     expect(review).toHaveTextContent('Difference$200.00 decrease in debt')
     expect(review).toHaveTextContent('Car Loan balance owed after$19,800.00 owed')
-    expect(review).toHaveTextContent('excluded from Income and spending')
+    expect(review).toHaveTextContent('excluded from income and spending')
     expect(posts(api.requests)).toHaveLength(0)
 
     await user.type(within(review).getByLabelText('Reason'), 'Lender statement')
@@ -142,7 +150,7 @@ describe('a dated correction of the balance owed', () => {
     })
     const { user } = renderRoute(`/accounts/${LOAN}`)
     const row = (await screen.findByText(/Balance correction: Lender statement/)).closest('tr')!
-    expect(row).toHaveTextContent('-$200.00')
+    expect(row).toHaveTextContent('$200.00 less owed')
     await user.click(within(row).getByRole('button', { name: /^Remove correction of 2026-09-30/ }))
     const review = await screen.findByRole('region', { name: 'Review removal' })
     expect(review).toHaveTextContent('Car Loan Balance owed after removal$20,000.00 owed')
@@ -154,6 +162,11 @@ describe('a dated correction of the balance owed', () => {
     expect(api.accounts[0].balance.amount).toBe('-20000.00')
 
     await user.click(screen.getByRole('button', { name: 'Show history' }))
+    const history = await screen.findByRole('table', { name: 'History' })
+    expect(history).toHaveTextContent('Initial amount owed')
+    expect(history).not.toHaveTextContent('Initial Balance')
+    expect(history).toHaveTextContent('$200.00 less owed')
+    expect(history).not.toHaveTextContent('-$')
     await user.click(await screen.findByRole('button', { name: /^Undo/ }))
     const undo = await screen.findByRole('region', { name: 'Review Undo' })
     expect(undo).toHaveTextContent('Car Loan Balance owed after Undo$19,800.00 owed')

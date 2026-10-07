@@ -129,7 +129,7 @@ describe('what changed', () => {
     expect(moves).toHaveTextContent(
       'Family Home value increase of $20,000.00 ($300,000.00 to $320,000.00), an asset value change rather than income or spending.',
     )
-    expect(change).toHaveTextContent('Transfers and card payments cancel out')
+    expect(change).toHaveTextContent('Transfers, card payments and loan principal cancel out')
     expect(change).not.toHaveTextContent('Not explained')
   })
 
@@ -264,7 +264,7 @@ describe('what changed', () => {
       'Car Loan: a $200.00 debt correction, lowering what is owed (Lender statement), dated 2026-09-30.',
     )
     expect(corrections).toHaveTextContent(
-      'Car Loan: the initial amount owed was corrected from $20,000.00 owed to $19,800.00 owed on 2026-10-03 (Copied the lender amount incorrectly): a $200.00 debt correction. Wealth on every date already uses the corrected amount.',
+      'Car Loan: the initial amount owed was corrected from $20,000.00 owed to $19,800.00 owed on 2026-10-03 (Copied the lender amount incorrectly): a $200.00 debt correction, lowering what is owed. Wealth on every date already uses the corrected amount.',
     )
     expect(change).not.toHaveTextContent('Not explained')
   })

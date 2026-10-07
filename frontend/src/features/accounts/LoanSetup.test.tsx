@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mockApi, type MockAccount } from '../../test/mockApi'
 import { renderRoute } from '../../test/render'
 
+const para = (text: string) => (_: string, element: Element | null) =>
+  element?.tagName === 'P' && element.textContent === text
+
 const household = { id: '11111111-1111-4111-8111-111111111111', name: 'Maya and Sam' }
 const maya = {
   id: '22222222-2222-4222-8222-222222222222',
@@ -54,7 +57,7 @@ describe('adding a loan', () => {
     await user.click(screen.getByRole('button', { name: 'Review' }))
 
     expect(
-      await screen.findByText('Car Loan will start at $20,000.00 owed on 2026-09-01.'),
+      await screen.findByText(para('Car Loan will start at $20,000.00 owed on 2026-09-01.')),
     ).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Review new loan' })).toBeVisible()
     expect(screen.getByText('Lender: Maple Credit. Owners: Maya, Sam.')).toBeVisible()
@@ -76,7 +79,7 @@ describe('adding a loan', () => {
     await user.click(screen.getByRole('button', { name: 'Review' }))
 
     expect(
-      await screen.findByText('Personal Loan will start at $0.00 owed on 2026-09-01.'),
+      await screen.findByText(para('Personal Loan will start at $0.00 owed on 2026-09-01.')),
     ).toBeVisible()
     expect(
       screen.getByText(/The amount owed was left blank, so it starts at \$0\.00 owed/),

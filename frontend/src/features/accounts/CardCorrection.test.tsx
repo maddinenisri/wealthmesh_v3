@@ -122,7 +122,12 @@ describe('Update balance on a card', () => {
     await user.click(screen.getByRole('button', { name: 'Review' }))
 
     const review = await screen.findByRole('region', { name: 'Review balance update' })
-    expect(await within(review).findByText('Current Balance on 2026-09-30')).toBeInTheDocument()
+    expect(
+      await within(review).findByText(
+        (_, element) =>
+          element?.tagName === 'DT' && element.textContent === 'Current Balance on 2026-09-30',
+      ),
+    ).toBeInTheDocument()
     expect(review).toHaveTextContent('Current Balance on 2026-09-30$580.00 owed')
     expect(review).toHaveTextContent('Requested Balance$600.00 owed')
     expect(review).toHaveTextContent('Difference$20.00 increase in debt')

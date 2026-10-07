@@ -1,6 +1,7 @@
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
 import type { ValueRow } from '../../api/values'
+import { Dated } from './Dated'
 import { Button, Card, CardTitle, FormAlert } from '../../design-system'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useChangeValue, useRemovalReview } from '../../hooks/useValues'
@@ -47,13 +48,14 @@ export function ValueChange({
         {mode === 'remove' && removal.data && !plan && (
           <p className="mt-2 max-w-md text-sm">
             The latest effective value will return to{' '}
-            {formatMoney(Number(removal.data.balanceAfter))}, dated {removal.data.balanceAfterOn}.
+            {formatMoney(Number(removal.data.balanceAfter))}, dated{' '}
+            <Dated on={removal.data.balanceAfterOn} />.
           </p>
         )}
         <p className="mt-2 max-w-md text-sm text-ink-muted">
           {mode === 'remove'
             ? `The ${plan ? 'plan' : 'value'} stays in history, where Undo restores it. No cash or spending changes.`
-            : 'It returns under its original date. The value is the latest one.'}
+            : 'It returns under its original date. The value with the latest date is the one that counts.'}
         </p>
         <EnteredBy members={members} member={member} setMemberId={setMemberId} />
         <div className="mt-4 flex gap-2">

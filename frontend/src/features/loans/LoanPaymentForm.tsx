@@ -94,7 +94,11 @@ function LoanPaymentFields({
   const { member, setMemberId } = useEnteringAs(members)
   const [reviewing, setReviewing] = useState<Values | null>(null)
   const [key] = useState(newKey)
-  const { control, handleSubmit } = useForm<Values>({
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<Values>({
     defaultValues: {
       fromAccountId: editing ? editing.from.accountId : fromLoan ? '' : account.id,
       toAccountId: editing ? editing.to.accountId : fromLoan ? account.id : '',
@@ -202,14 +206,20 @@ function LoanPaymentFields({
           >
             <p className="font-medium">After you confirm</p>
             <dl className="mt-2 grid gap-x-8 gap-y-3 sm:grid-cols-2">
-              {effect.data.accounts.map((entry) => (
-                <div key={entry.id} className="min-w-0">
-                  <dt className="text-caption text-ink-muted [overflow-wrap:anywhere]">
-                    {entry.name} {isDebt(byId(entry.id)?.type ?? '') ? 'Balance owed' : 'Balance'}
-                  </dt>
-                  <dd>{balanceText(byId(entry.id)?.type ?? '', entry.balanceAfter)}</dd>
-                </div>
-              ))}
+              {[...effect.data.accounts]
+                .sort(
+                  (a, b) =>
+                    Number(b.id === reviewing.fromAccountId) -
+                    Number(a.id === reviewing.fromAccountId),
+                )
+                .map((entry) => (
+                  <div key={entry.id} className="min-w-0">
+                    <dt className="text-caption text-ink-muted [overflow-wrap:anywhere]">
+                      {entry.name} {isDebt(byId(entry.id)?.type ?? '') ? 'Balance owed' : 'Balance'}
+                    </dt>
+                    <dd>{balanceText(byId(entry.id)?.type ?? '', entry.balanceAfter)}</dd>
+                  </div>
+                ))}
             </dl>
             <p className="mt-3 text-caption text-ink-muted">
               Only the interest is spending. The principal lowers what you owe: it is not income or
@@ -220,7 +230,7 @@ function LoanPaymentFields({
         <EnteredBy members={members} member={member} setMemberId={setMemberId} />
         <div className="mt-4 flex gap-2">
           <Button onClick={confirm} disabled={save.isPending || !member || !effect.data}>
-            {save.isPending ? 'Saving' : 'Confirm payment'}
+            {save.isPending ? 'Saving' : editing ? 'Confirm change' : 'Confirm payment'}
           </Button>
           <Button variant="secondary" onClick={() => setReviewing(null)} disabled={save.isPending}>
             Back
@@ -294,7 +304,8 @@ function LoanPaymentFields({
           rules={{
             validate: (value: string) => {
               const parsed = parseAmount(value)
-              if (parsed === null) return 'Enter a valid amount'
+              if (parsed === null)
+                return value.trim() === '' ? 'Enter the payment amount' : 'Enter a valid amount'
               return Number(parsed) > 0 || 'Enter an amount greater than zero'
             },
           }}
@@ -309,7 +320,8 @@ function LoanPaymentFields({
           rules={{
             validate: (value: string) => {
               const parsed = parseAmount(value)
-              if (parsed === null) return 'Enter a valid amount'
+              if (parsed === null)
+                return value.trim() === '' ? 'Enter the principal' : 'Enter a valid amount'
               return Number(parsed) > 0 || 'Enter a principal above $0.00'
             },
           }}
@@ -336,7 +348,7 @@ function LoanPaymentFields({
             },
           }}
         />
-        {left !== null && left !== 0 && (
+        {left !== null && left !== 0 && !errors.interest && (
           <p role="status" className="text-sm text-ink-muted">
             {left > 0
               ? `${formatMoney(left / 100)} still to assign to principal or interest.`

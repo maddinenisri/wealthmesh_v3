@@ -187,7 +187,7 @@ function AccountsAndWealth() {
                         <Badge>{STATUS_LABEL[line.status] ?? line.status}</Badge>
                       )}
                     </span>
-                    <span className="text-right">
+                    <span className="text-right whitespace-nowrap">
                       <Amount value={Math.abs(Number(line.balance))} />{' '}
                       <span className="text-sm text-ink-muted">
                         {isCard(line.type) || isDebt(line.type) ? 'owed' : 'overdrawn'}
@@ -238,7 +238,7 @@ function AccountGroup({
         </h3>
         {total !== undefined &&
           (card ? (
-            <span>
+            <span className="whitespace-nowrap">
               <Amount value={Math.abs(Number(total))} />{' '}
               <span className="text-sm text-ink-muted">{owed ? 'owed' : cardSide(total)}</span>
             </span>

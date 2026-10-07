@@ -127,6 +127,25 @@ next session reads), and mark the answer and date in both places when resolved.
 
 ## Cowork findings
 
+Count against 8, 8, 5, 5, 5, 7, 9 and 9. The owner's pass is pending (Checkpoint 2). The `visual-reviewer` ran first, after Prove and the validator, on about 60 states at 710px and 1280px: **22 faults**, none a data fault, none a sideways scroll. All but the three minor ones below were fixed with a Vitest or e2e line (red first where noted); 16 of the 22 were wording or line breaks, 3 were signs, 1 focus, 1 duplicate message, 1 wrong sentence.
+
+| # | Screen | Fault seen | Fix |
+| --- | --- | --- | --- |
+| 1 | Spending, Loan interest entries | A loan payment read "Split expense", "of $50.00 payment", no loan named | "Interest on payment to <loan>", "Interest part of a payment", a Payment and Category detail (e2e) |
+| 2 | Update balance owed review, initial amount review | Focus on the page body | The review heading takes focus (Vitest and e2e, seen red) |
+| 3, 4, 12 | Loan list, history, Undo review | Bare minus signs meaning "debt went down" in one list and the opposite in another | "$450.00 paid", "$200.00 less owed" (`loanChangeText`), history opening shows "$20,200.00 owed" (Vitest) |
+| 5, 6, 7, 8, 16 | Dates and "owed" broke over lines | Review sentence, review label, removal sentence, history Saved by, Household "owed" | `whitespace-nowrap` / `Dated` / `Stamped` |
+| 9 | Property Undo | "The value is the latest one" was false | "The value with the latest date is the one that counts" |
+| 10, 11 | Correction reviews | "the Balance", "entries", "starting balance" on a loan | Loan wording |
+| 13, 14 | History "Initial Balance"; Accounts header "Bank" | Ledger words | "Initial amount owed" (Vitest, seen red); "Bank or lender" |
+| 15 | List "Includes interest" vs history "Split" | Two words | One word (Vitest) |
+| 17, 22 | Record payment | Unassigned message twice; blank amount said "valid amount" | One message (Vitest, seen red); "Enter the payment amount" / "Enter the principal" |
+| 18 | Wealth on a date | Restated line had no direction, a dense run of lines | "lowering/raising what is owed", bulleted, "loan principal cancels" |
+| 19 | Edit payment | "Confirm payment", accounts in another order | "Confirm change", payer first |
+| 20, 21 | Interest note wraps at 1280px; "Entered by" header wraps | Minor | Not fixed |
+
+Not reached by the reviewer: the success messages after Confirm, the Restore review of a loan with payments, a payment on a $0.00 loan, a long loan name in the chooser, the Edit correction review, and 1280px pictures of about 30 states (no claim made).
+
 | # | Check | Result | Fault seen | Test added |
 | --- | --- | --- | --- | --- |
 

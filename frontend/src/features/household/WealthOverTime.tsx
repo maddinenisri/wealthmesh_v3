@@ -187,10 +187,10 @@ function Explanation({
           ))}
       </ul>
       <p className="text-sm text-ink-muted">
-        Transfers and card payments cancel out, so they change nothing here.
+        Transfers, card payments and loan principal cancel out, so they change nothing here.
       </p>
       {(change.correctionLines.length > 0 || change.restatements.length > 0) && (
-        <ul className="text-sm" aria-label="Corrections">
+        <ul className="list-disc pl-5 text-sm" aria-label="Corrections">
           {change.correctionLines.map((line, index) => (
             <li key={`${line.accountId}-${line.on}-${index}`}>
               {line.name}:{' '}
@@ -211,7 +211,9 @@ function Explanation({
               on <Dated on={line.madeOn} />
               {line.reason ? ` (${line.reason})` : ''}
               {isDebt(line.type)
-                ? `: a ${formatMoney(Math.abs(Number(line.change)))} debt correction`
+                ? `: a ${formatMoney(Math.abs(Number(line.change)))} debt correction, ${
+                    Number(line.change) > 0 ? 'lowering' : 'raising'
+                  } what is owed`
                 : ''}
               . Wealth on every date already uses the corrected amount.
             </li>

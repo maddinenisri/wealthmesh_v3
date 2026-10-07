@@ -140,6 +140,11 @@ for (const width of [710, 1280] as const) {
         '$50.00',
       )
       await expect(page.getByRole('main')).toContainText('Spending $50.00')
+      await line.getByRole('button', { name: 'Loan interest' }).click()
+      const entries = page.getByRole('table', { name: 'Expenses in this category' })
+      await expect(entries).toContainText(`Interest on payment to ${loan}`)
+      await expect(entries).toContainText('Interest part of a payment')
+      await expect(entries).not.toContainText('Split expense')
     })
 
     test(`V2_LOAN_003 the loan lists the payment as its principal and opens it with both portions (${width}px)`, async ({
@@ -148,7 +153,7 @@ for (const width of [710, 1280] as const) {
       await page.goto(`/accounts/${loanId}`)
       await expect(page.getByLabel('Account details')).toContainText('$19,550.00 owed')
       const row = page.getByRole('row').filter({ hasText: `Payment from ${bank}` })
-      await expect(row).toContainText('-$450.00')
+      await expect(row).toContainText('$450.00 paid')
       await expect(row).toContainText('Principal')
       await row.getByRole('button', { name: /^Edit payment from/ }).click()
       const form = page.getByRole('region', { name: 'Edit payment' })
