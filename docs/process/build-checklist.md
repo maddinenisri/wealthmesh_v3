@@ -58,6 +58,8 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
       panel opens. Assert the computed colour of each Button variant once (slice 14: `cn` dropped a label colour).
 - [ ] A rule that picks "the latest" or an order has a tie test: two writes on one date, with the clock moved between them (slice 15: a system row outranked a saved value; the shared test clock is fixed).
 - [ ] A form or page for a new account type is read against that type's own words before Cowork does (slice 15: Bank, Opened on, Balance and joint on a property); a review that Confirm can refuse is told by the server first.
+- [ ] Every Confirm, removal and Undo ends with a sentence saying what changed and focus on the section heading; every Back returns focus to the form's heading and clears the save error (slice 16a, fifth slice with this fault in Cowork).
+- [ ] A rule the save refuses is refused in the review too: the preview endpoint runs the same check, and Confirm stays off (slice 16a: a new initial amount below what was paid).
 - [ ] Every Decision written in the notes is built with a test, or struck out, before the validator runs.
 - [ ] Anything new that distinguishes accounts or entries (type, status, owner) shows in the lists, not only on the
       detail page.

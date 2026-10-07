@@ -4,8 +4,8 @@ Copy this file to `docs/features/slice-NN-<name>.md` at the start of the session
 the session working it. Keep it short; it exists so the next session needs no memory of this one.
 
 - Slice: 16 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `docs/requirements/v2/accounts/loans/manage-loans.feature`, `accounts/mortgage/manage-mortgage.feature`, `accounts/lifecycle/dated-values.feature` (001, 003)
-- Status: in-progress
-- Started: 2026-10-06 21:40 EDT (session clock)  Finished:  Commit:
+- Status: done for 16a (loans, groups 0 to 3); 16b (mortgages) is the next session
+- Started: 2026-10-06 21:40 EDT (session clock)  Finished: 2026-10-07  Commit: `cd473cc` (local, not pushed)
 
 ## Prompts and directions
 
@@ -168,15 +168,28 @@ Not reached by the reviewer: the success messages after Confirm, the Restore rev
 
 ## How it works
 
-Written after Land by a read-only agent and checked against the code (brief in `docs/process/prompts.md`): what the
-user can do now, what changed, how the main path works, decisions and open items, how to verify.
+(Written by a read-only agent from the diff and these notes; its claims were checked against the code: the verify commands and the button names were wrong and are corrected here.)
+
+**What you can do.** Add account now offers **Loan**: name, lender, owners, an optional amount owed (blank is $0.00 owed) and an "As of" date, reviewed before saving. -1.00 and `abc` give the scenario messages. A loan shows one "Balance owed" figure and counts once in wealth under a new Loans group. From checking or savings, **Pay a loan** (or **Record payment** on the loan's page) takes the whole payment, a principal and an interest; the review shows both Balances after, and refuses principal above the debt. The payment opens from either account as one payment with its portions; **Edit** corrects the portions, **Remove** and **Undo** move both sides and the interest together. On the loan, **Update balance owed** either corrects the initial amount owed or makes a dated correction, each with a reason and a review; any Balance correction can now be removed and restored. A property says "Value", not "Balance", in its reviews.
+
+**What changed.** `V25__loan_payments.sql` (kinds, principal portions, the two interest categories); `AccountType.Kind.DEBT`; `account/service/DebtRules.java`; `activity/LoanPaymentController.java` and `MovementService` (per-leg amounts); `ActivityStore`, `WealthStore` and `WealthService` (interest as spending, principal as a cancelling transfer, correction and restatement lines); `frontend/src/features/loans/`, plus accounts, activity, values, household and spending screens; tests `Loan*ApiTests`, `LoanPayment*`, `Loan*.test.tsx`, `e2e/tests/17` to `19`.
+
+**A payment.** (1) The review asks the server for both Balances after; an overpayment is refused there. (2) Confirm locks both accounts (lowest id first), re-reads the loan's debt and refuses an overpayment, saves the paying row (whole amount, principal and interest portions) and the loan's row (principal), and then checks the loan holds no credit on any date. (3) Only the interest counts as spending, in "Loan interest"; the principal is a transfer that cancels in the wealth explanation. (4) A repeated key returns the stored payment; the same key with other figures is 409.
+
+**Decisions.** D-053 (a loan is a debt; a debt never becomes an asset; corrections; any correction removable), D-054 (the payment shape; interest categories cannot be archived or merged away). Open: Q-055 (a dated correction is stored as a change), the as-of wealth lines leave loans out, the opening-revision lock has no race test that fails without it. Mortgages and DATED_VALUE_001 are slice 16b.
+
+**Verify.** `npm test` (backend and frontend, with the dev stack stopped), `npm run e2e`, `npm run coverage -- --require --slice 16a`; then Accounts > Add account > Loan, a loan's page, Household and Spending at 710px and 1280px.
 
 ## Handoff
 
-What the next session must know that is not in the code: what is half-built, what to watch for, what v1 showed.
+- Built: groups 0 to 3 (slice 16a), V25, D-053 and D-054, Q-054 (yes) and Q-055 (open). Eleven local commits on `main`, **not pushed** (the owner has not said to push, D-002). Frontend 318, e2e 247, backend suite green (stop the dev stack first, pitfall 35).
+- 16b (groups 4 to 8, next session): `AccountType.MORTGAGE` as a second `Kind.DEBT` type (setup, Lender, wealth group "Mortgages", `MovementKind` for mortgage payments with `MORTGAGE_INTEREST` id `a16a0000-0000-4000-8000-000000000002`, already seeded and protected), the mortgage scenarios `MORTGAGE_001` to `008`, and `DATED_VALUE_001` (a future-dated correction on a debt saves a planned value no reader counts: owner approved; where it lives is open, `account_value` is refused for a loan today, so the plan needs its own table or a widened gate, and slice 15's exclusion test is reused).
+- Watch for: every writer that changes a loan's Balance must call `DebtRules.requireNotCredit` after the change under the lock (payment create and replace, correction save, removal and Undo of a correction, the Undo of a payment, a new initial amount); a new reader of spending must read `activity_part`; ledger words on a debt page (Bank, Balance, entries, transfer) are what Cowork finds, read the new type's pages in its own words before Cowork; Confirm, removal, Undo and Back each need a sentence and focus; run Gradle test classes one pattern per invocation.
+- Left open (logged): the as-of wealth lines on the Household page leave loans out; the opening-revision lock race test is green without the lock; no state-matrix cell for a payment on a closed loan or a removal on an archived one; two minor wraps at 1280px; Q-055.
+- v1 showed: not consulted.
 
 ## Retro (3 lines, also appended to `docs/process/retro.md`)
 
-- What slowed this session:
-- What went well:
-- Process change to try:
+- What slowed this session: the payment shape (portions or a separate interest row) took a design review to settle; the full backend suite failed twice because the dev stack was running; the screenshot step and Cowork between them found 30 mostly wording and focus faults on a slice whose numbers were right.
+- What went well: every rule, lock and refusal was planted away and seen red; the identity test over five periods stayed whole through the new kinds; the owner's count (8) is the lowest so far.
+- Process change to try: the two checklist lines added (Confirm, removal, Undo and Back end with a sentence and focus; a refusal at save is also refused in the review).

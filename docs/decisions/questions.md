@@ -54,3 +54,5 @@
 | Q-051 | 2026-10-06 | Slice 15: flag a manually valued account's value as old when it is more than 30 days before the wealth date? | resolved | Yes, 30 days as one named constant (owner, 2026-10-06) | D-051 |
 | Q-052 | 2026-10-06 | Slice 15: Reschedule or Resume onto a due date that is already paid or dismissed: refuse or allow? | resolved | Refuse with 409 and a clear message (owner, 2026-10-06) | D-052 |
 | Q-053 | 2026-10-06 | Slice 15 (size L plus group 0): keep group 5 (wealth as of a date, change explanation) in scope, marking `partial` only if a stop rule hits? | resolved | Yes (owner, 2026-10-06) | D-051 |
+| Q-054 | 2026-10-07 | Slice 16a: should a checking or savings Balance correction be removable with Undo like a loan's? | resolved | Yes (owner, 2026-10-07) | D-053 |
+| Q-055 | 2026-10-07 | Slice 16a: a dated correction is stored as a signed change plus the requested figure (slice 03), so a later change to an earlier amount moves the figure on that date. Keep, or store a fixed figure? The form says "Enter what was owed at the end of that day". Same as Q-031 | open | | D-053 |
