@@ -2,6 +2,8 @@ package com.mdstech.wealthmesh;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -100,6 +102,31 @@ class InvestmentDeleteApiTests extends InvestmentTestBase {
         int status = afterUncommitted(other, "UPDATE wealthmesh.account SET status = 'active' WHERE id = $1",
                 () -> discard(other));
         assertThat(status).isEqualTo(409);
+    }
+
+    @Order(9)
+    @Test
+    @DisplayName("V2_BROKERAGE_003 V2_ACCOUNT_LIFECYCLE_007 Finish setup and delete of one draft wait for the lock "
+            + "and end in one legal order")
+    void finishAndDeleteTakeTurns() throws Exception {
+        for (int round = 1; round <= 4; round++) {
+            String id = investment(TYPE, "Race Turns " + round, "2026-09-01", COMPONENTS);
+            String complete = opening("20000.00", "15000.00", holding("HOME", "50", "100.00", "2026-09-01"));
+            java.util.List<Integer> statuses = both(id, () -> finishSetup(id, complete), () -> act(id, "delete"));
+            int finish = statuses.get(0);
+            int delete = statuses.get(1);
+            if (finish == 200) {
+                assertThat(delete).as("round %d: delete after Finish finds an account with money".formatted(round))
+                        .isEqualTo(409);
+                assertStatus(id, "active");
+            } else {
+                assertThat(List.of(finish, delete)).as("round %d: delete first, Finish finds it gone".formatted(round))
+                        .containsExactly(404, 200);
+                act(id, "undo-delete").expectStatus().isOk().expectBody().jsonPath("$.status").isEqualTo("draft");
+                webTestClient.get().uri("/api/v1/accounts/{id}/opening", id).exchange().expectBody()
+                        .jsonPath("$.cash").doesNotExist();
+            }
+        }
     }
 
     @Order(8)
