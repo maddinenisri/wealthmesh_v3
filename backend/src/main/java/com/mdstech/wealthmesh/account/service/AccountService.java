@@ -108,11 +108,25 @@ public class AccountService {
                         .then(owners.ownersOf(existing.id()))
                         .flatMap(current -> checkOwners(existing.householdId(), request.ownerMemberIds(), current,
                                 AccountType.fromWire(existing.type()).orElseThrow()))
-                        .flatMap(ownerIds -> accounts.save(mapper.toUpdatedEntity(request, existing))
+                        .flatMap(ownerIds -> editor(existing.householdId(), request.enteredByMemberId())
+                                .flatMap(editor -> accounts.save(mapper.toUpdatedEntity(request, existing))
                                 .flatMap(saved -> owners.replace(saved.householdId(), saved.id(), ownerIds)
+                                        .then(renamed(existing, saved, editor))
                                         .thenReturn(saved))
                                 .flatMap(saved -> activity.deltaOf(saved.id()).map(delta -> mapper.toResponse(
-                                        saved, ownerIds, mapper.balance(saved, delta))))));
+                                        saved, ownerIds, mapper.balance(saved, delta)))))));
+    }
+
+    /** The member who made an edit (read FOR SHARE, so an inactive or foreign member is refused), else nobody. */
+    private Mono<java.util.Optional<UUID>> editor(UUID householdId, UUID memberId) {
+        return memberId == null ? Mono.just(java.util.Optional.empty())
+                : validator.memberLocked(householdId, memberId).map(java.util.Optional::of);
+    }
+
+    /** A rename adds one history row naming the name it replaced (Q-062); any other edit adds none. */
+    private Mono<Void> renamed(Account before, Account after, java.util.Optional<UUID> editor) {
+        return before.name().equals(after.name()) ? Mono.empty()
+                : usage.recordEvent(after.id(), "renamed", editor.orElse(null), clock.instant(), before.name());
     }
 
     /** The validated parts of a create request. */

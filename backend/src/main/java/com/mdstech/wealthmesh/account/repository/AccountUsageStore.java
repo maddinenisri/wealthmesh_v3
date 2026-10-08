@@ -59,21 +59,27 @@ public class AccountUsageStore {
 
     /** Records a change of state; the caller runs it in the same transaction as the change. */
     public Mono<Void> recordEvent(UUID accountId, String action, UUID memberId, Instant at) {
+        return recordEvent(accountId, action, memberId, at, null);
+    }
+
+    /** Records a change of state with a detail (a rename names the old name). */
+    public Mono<Void> recordEvent(UUID accountId, String action, UUID memberId, Instant at, String detail) {
         DatabaseClient.GenericExecuteSpec spec = client.sql(
-                        "INSERT INTO account_event (account_id, action, member_id, at) "
-                                + "VALUES (:id, :action, :member, :at)")
+                        "INSERT INTO account_event (account_id, action, member_id, at, detail) "
+                                + "VALUES (:id, :action, :member, :at, :detail)")
                 .bind("id", accountId).bind("action", action).bind("at", at);
         spec = memberId == null ? spec.bindNull("member", UUID.class) : spec.bind("member", memberId);
+        spec = detail == null ? spec.bindNull("detail", String.class) : spec.bind("detail", detail);
         return spec.then();
     }
 
     /** The account's changes of state, newest first. */
     public Flux<AccountEvent> eventsOf(UUID accountId) {
-        return client.sql("SELECT action, member_id, at FROM account_event WHERE account_id = :id "
+        return client.sql("SELECT action, member_id, at, detail FROM account_event WHERE account_id = :id "
                         + "ORDER BY at DESC, seq DESC")
                 .bind("id", accountId)
                 .map((row, meta) -> new AccountEvent(row.get("action", String.class), row.get("member_id", UUID.class),
-                        row.get("at", Instant.class)))
+                        row.get("at", Instant.class), row.get("detail", String.class)))
                 .all();
     }
 

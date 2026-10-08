@@ -20,10 +20,10 @@ public enum AccountType {
     LOAN(Kind.DEBT, WealthGroup.LOANS),
     MORTGAGE(Kind.DEBT, WealthGroup.MORTGAGES),
     BROKERAGE(Kind.INVESTMENT, WealthGroup.INVESTMENTS),
-    K401(Kind.INVESTMENT, WealthGroup.INVESTMENTS, false, "401k"),
-    TRADITIONAL_IRA(Kind.INVESTMENT, WealthGroup.INVESTMENTS),
-    ROTH_IRA(Kind.INVESTMENT, WealthGroup.INVESTMENTS),
-    HSA(Kind.INVESTMENT, WealthGroup.INVESTMENTS);
+    K401(Kind.INVESTMENT, WealthGroup.RETIREMENT, false, "401k"),
+    TRADITIONAL_IRA(Kind.INVESTMENT, WealthGroup.RETIREMENT),
+    ROTH_IRA(Kind.INVESTMENT, WealthGroup.RETIREMENT),
+    HSA(Kind.INVESTMENT, WealthGroup.HEALTH_SAVINGS);
 
     /**
      * How a type's Balance is read: opening plus signed activity (ledger), the latest dated value (valued), or the
@@ -56,14 +56,22 @@ public enum AccountType {
         this.wire = wire == null ? name().toLowerCase(java.util.Locale.ROOT) : wire;
     }
 
-    /** The one group that counts this type in wealth totals; the base groups partition every account. */
+    /** The one group this type belongs to: a partition tag (D-067), not the only group that lists it. */
     public WealthGroup baseGroup() {
         return baseGroup;
     }
 
-    /** Every group that lists this type: its base group and any overlapping view (none yet; slice 18b). */
+    /**
+     * Every group that lists this type, in display order: its base group and the overlapping view. Every investment
+     * account is also in Investments (D-067), so a 401(k) is in Investments and Retirement and an HSA in Investments
+     * and Health savings; a defined benefit is in Retirement only. A group is a view and is never added to wealth.
+     */
     public java.util.Set<WealthGroup> groups() {
-        return java.util.EnumSet.of(baseGroup);
+        java.util.Set<WealthGroup> groups = java.util.EnumSet.of(baseGroup);
+        if (kind == Kind.INVESTMENT) {
+            groups.add(WealthGroup.INVESTMENTS);
+        }
+        return groups;
     }
 
     /** True when the type is listed in the group: the one place wealth decides group membership. */

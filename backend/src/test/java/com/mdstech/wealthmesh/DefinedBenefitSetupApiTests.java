@@ -62,9 +62,13 @@ class DefinedBenefitSetupApiTests extends DefinedBenefitTestBase {
     @Test
     @DisplayName("V2_DB_001 who set it up is recorded as the member who entered it, and a setup without one is refused")
     void creatorRecorded() {
+        // The earlier edit of this class renamed the plan, so its history is the rename and then the setup.
         webTestClient.get().uri("/api/v1/accounts/{id}/events", plan).exchange().expectBody()
-                .jsonPath("$.length()").isEqualTo(1).jsonPath("$[0].action").isEqualTo("set_up")
-                .jsonPath("$[0].memberId").isEqualTo(samId);
+                .jsonPath("$[*].action").value(java.util.List.class,
+                        found -> org.assertj.core.api.Assertions.assertThat(found)
+                                .containsExactly("renamed", "set_up"))
+                .jsonPath("$[?(@.action=='set_up')].memberId").value(java.util.List.class,
+                        found -> org.assertj.core.api.Assertions.assertThat(found).containsExactly(samId));
         webTestClient.post().uri("/api/v1/accounts").contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(planBody("Other Plan", "Harbor Benefits", quoted(samId), "1.00", "2026-09-01", null))
                 .exchange().expectStatus().isBadRequest().expectBody().jsonPath("$.message")

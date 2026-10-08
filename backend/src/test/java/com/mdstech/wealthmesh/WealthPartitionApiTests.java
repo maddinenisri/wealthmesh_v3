@@ -17,8 +17,8 @@ import org.junit.jupiter.api.Test;
  */
 class WealthPartitionApiTests extends DefinedBenefitTestBase {
 
-    private static final List<String> BASE_GROUPS = List.of("bankMoney", "cards", "loans", "mortgages",
-            "investments", "retirement", "propertyAndOther");
+    private static final List<String> GROUPS = List.of("bankMoney", "cards", "loans", "mortgages", "investments",
+            "retirement", "healthSavings", "propertyAndOther");
 
     @Order(0)
     @Test
@@ -53,20 +53,29 @@ class WealthPartitionApiTests extends DefinedBenefitTestBase {
                 .map(line -> String.valueOf(line.get("name"))).toList();
     }
 
-    private static BigDecimal baseSum(Map<String, Object> wealth) {
-        return BASE_GROUPS.stream().map(group -> total(wealth, group)).reduce(BigDecimal.ZERO, BigDecimal::add);
+    /** Every account once (D-067): the groups overlap, so they are never summed; the lines are. */
+    @SuppressWarnings("unchecked")
+    private static BigDecimal countedOnce(Map<String, Object> wealth) {
+        Map<String, BigDecimal> byId = new java.util.HashMap<>();
+        for (String group : GROUPS) {
+            for (Map<String, Object> line : (List<Map<String, Object>>) ((Map<String, Object>) wealth.get(group))
+                    .get("accounts")) {
+                byId.put(String.valueOf(line.get("accountId")), new BigDecimal(String.valueOf(line.get("balance"))));
+            }
+        }
+        return byId.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     @Order(1)
     @Test
-    @DisplayName("V2_DB_001 Q-055 the base groups add up to net worth, which comes from the lines: assets "
-            + "$408,500.00, debts $3,780.00, net worth $404,720.00")
+    @DisplayName("V2_DB_001 Q-055 every account counts once and they add up to net worth, which comes from the "
+            + "lines: assets $408,500.00, debts $3,780.00, net worth $404,720.00")
     void baseGroupsAddUp() {
         Map<String, Object> wealth = wealth("");
         assertThat(wealth.get("financialAssets")).isEqualTo("408500.00");
         assertThat(wealth.get("debts")).isEqualTo("3780.00");
         assertThat(wealth.get("netWorth")).isEqualTo("404720.00");
-        assertThat(baseSum(wealth)).isEqualByComparingTo("404720.00");
+        assertThat(countedOnce(wealth)).isEqualByComparingTo("404720.00");
     }
 
     @Order(2)
@@ -85,10 +94,10 @@ class WealthPartitionApiTests extends DefinedBenefitTestBase {
 
     @Order(3)
     @Test
-    @DisplayName("Q-055 the same lines hold on an earlier date: as of 2026-09-01 the base groups still add up "
+    @DisplayName("Q-055 the same lines hold on an earlier date: as of 2026-09-01 every account still counts once "
             + "to net worth")
     void asOfAddsUp() {
         Map<String, Object> wealth = wealth("?asOf=2026-09-01");
-        assertThat(baseSum(wealth)).isEqualByComparingTo(String.valueOf(wealth.get("netWorth")));
+        assertThat(countedOnce(wealth)).isEqualByComparingTo(String.valueOf(wealth.get("netWorth")));
     }
 }

@@ -134,7 +134,10 @@ public class WealthService {
         boolean valued = AccountType.isValued(b.type());
         LocalDate valueDate = !valued ? null : b.valueOn() == null ? b.openedOn() : b.valueOn();
         boolean stale = valued && valueDate.isBefore(asOf.minusDays(STALE_AFTER_DAYS));
-        return new Line(b.id().toString(), b.name(), b.type(), b.status(), Money.format(balance(b)), valueDate, stale);
+        List<String> groups = AccountType.fromWire(b.type()).map(type -> type.groups().stream()
+                .map(WealthGroup::key).toList()).orElse(List.of());
+        return new Line(b.id().toString(), b.name(), b.type(), b.status(), Money.format(balance(b)), valueDate, stale,
+                groups);
     }
 
     private static WealthSummary summarize(LocalDate asOf, List<Line> lines, List<NotTracked> missing) {
@@ -145,14 +148,15 @@ public class WealthService {
         List<Line> valued = in(lines, WealthGroup.PROPERTY_AND_OTHER);
         List<Line> investments = in(lines, WealthGroup.INVESTMENTS);
         List<Line> retirement = in(lines, WealthGroup.RETIREMENT);
-        // Financial assets and debts come from the lines, never from a group total (a group is a view, D-064).
+        List<Line> health = in(lines, WealthGroup.HEALTH_SAVINGS);
+        // Financial assets and debts come from the lines, never from a group total (a group is a view, D-065).
         BigDecimal assets = lines.stream().map(WealthService::amount).filter(b -> b.signum() > 0)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         List<Line> debtLines = lines.stream().filter(l -> amount(l).signum() < 0).toList();
         BigDecimal debts = debtLines.stream().map(l -> amount(l).negate()).reduce(BigDecimal.ZERO, BigDecimal::add);
         return new WealthSummary(asOf, Money.format(assets), Money.format(debts), Money.format(assets.subtract(debts)),
                 group(bank), group(cards), group(loans), group(mortgages), group(investments), group(retirement),
-                group(valued), debtLines, missing);
+                group(health), group(valued), debtLines, missing);
     }
 
     private static List<Line> in(List<Line> lines, WealthGroup group) {
