@@ -33,6 +33,12 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
 - [ ] A race test for a row lock (account, member) holds only that row. Holding the account lock too hides whether the
       member row is read `FOR SHARE`; the test must fail when the lock or the `FOR SHARE` is removed.
 - [ ] Every test cites its scenario ID, including race, guard and replay tests (grep the titles of each new test class).
+- [ ] A race test's "both wait" check can pass for another reason (an FK or the later UPDATE of the same row waits too).
+      Name the outcome that only the lock produces, assert it, and plant the lock away to see it red. A plant counts
+      only when the method it names goes red (slice 17b: a plant on `move()` stayed green because delete is another
+      method). Restore a plant from a copy, never with `git checkout` on a file that holds uncommitted work.
+- [ ] A removed UI state or option (a "coming soon" type, a flag) is grepped in `e2e/tests` and `docs` as well as
+      `frontend/src` before the full e2e run (slice 17b: `04-income.spec.ts` still expected it).
 
 ## UI
 

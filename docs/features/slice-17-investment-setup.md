@@ -1,7 +1,7 @@
 # Slice 17: Investment accounts, generic setup
 
 - Slice: 17 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `accounts/{401k,brokerage,hsa,roth-ira,traditional-ira}/setup.feature`, `accounts/lifecycle/manage-accounts.feature` (007), `investments/corrections.feature` (005)
-- Status: 17a built and proven, waiting for Checkpoint 2 (17b next)
+- Status: 17a and 17b built, proven and through Cowork (17a: 6 faults, 17b: 2); landing 17b
 - Started: 2026-10-07 14:43 EDT (session clock)  Finished: 2026-10-07 (17a)  Commit: `ee8247f` to `0e8b514`
 
 ## Prompts and directions
@@ -250,3 +250,25 @@ Ten full Vitest runs with the dev stack stopped: **3 of 10 failed**, each with o
 
 
 Advisor: used on this list (2026-10-07: coming-soon, coverage matching, names, lean e2e, flake order); due again before Land.
+
+## Handoff (17b)
+
+- Built: 401(k), Traditional IRA, Roth IRA and HSA as investment types (`AccountType` `K401` with wire `401k`, `TRADITIONAL_IRA`, `ROTH_IRA`, `HSA`), all 16 IDs covered (`npm run coverage -- --require --slice 17`: 22 of 22 with 17a); the 17a gaps of group 0 (0a to 0g); D-062 (who set up an account, V29) and D-063 (the four types, `ready` flag removed). Commits `f37401f` to `c70a9f6` plus the Land commit (no attribution trailer). **Not pushed** (D-002; the owner says when).
+- Proof: backend 753 tests (7m), Vitest 403, e2e 305, `npm run check`, lint, format and typecheck pass; `scripts/flake-check.sh 3`: see the flake section; validator (4 low defects, closed), visual-reviewer (9 faults, 5 fixed, 4 logged), Cowork 2 faults (both fixed). Counts against 8, 8, 5, 5, 5, 7, 9, 9, 8, 5, 6: **2**.
+- Slice 18 (next in the map): the one-owner rule for retirement and health types, the Investments / Retirement / Health split of the wealth group (D-061), the per-person view. The Owners hint still says "joint account" on these types until then.
+- Open, logged (not built): two reviews can be open at once; Finish setup's review layout (bare background, Entered by below its buttons); ISO date in the early-date text against the browser format of the date field; "Health savings account (HSA)" wraps in the Accounts list at 710px; Add account subtitle says "first date"; no long-list e2e seed and no `wasDiscarded` tie test (both from 17a); creation records no creator for other account types; `scripts/flake-check.sh` covers the backend only (offer: add a Vitest loop).
+- Advisor: used on the 17b task list (checkpoint 1) and before Land (below).
+
+## How it works (17b)
+
+Written by a read-only agent over the diff and the notes; I checked each claim against the code and tests and corrected two (the type gate covers all four new types, not three; per-type Vitest covers the zero-share and early-date rows, the other bad-input rows are per-type in the API tests only).
+
+**What a person can now do.** Add account offers 401(k), Traditional IRA, Roth IRA and Health savings account (HSA) with nothing "coming soon". Each is set up exactly like the brokerage: name, institution, setup date, owners, optional opening total, cash and holdings, and an "Entered by" line (the remembered member, or a chooser). Review shows complete, draft or mismatch; Confirm saves an active account, Save draft keeps a draft out of wealth, a mismatch cannot be confirmed and Back returns to Opening total. A draft can be finished, cancelled (one question first, no Undo) or deleted after a review (with Undo). History reads "Set up by Maya · stamp" or "Draft saved by ...", naming the person entering, not the owner.
+
+**What changed.** `AccountType` (four values, kind investment), `AccountRequest.enteredByMemberId`, V29 (history actions `set_up`, `drafted`), `OpeningComponents` (early-date and draft messages), `InvestmentSetupService` (member check, event), the front end's `accountTypes.ts` (no `ready` flag, `typeNoun`), `AccountForms`, `InvestmentAccount`, `EnteredBy`, `useStateChangeFocus`; tests `InvestmentTypesApiTests`, `InvestmentTypes.test.tsx`, `22-investment-types.spec.ts` and the changed 17a classes.
+
+**Where each rule is enforced.** Fields in the browser and the server's review (same judgement), the save refuses a mismatch, the entering member must be an active member of this household (read `FOR SHARE` in the create transaction), the account lock covers Finish setup, discard, delete and statement attach and removal (race tests that fail when each lock is removed), and the type gate refuses entries, transfers, reminders and corrections on all five investment types until slices 20 to 23 (on a draft the type sentence usually comes first).
+
+**Left.** Slice 18 (owner rule, groups), 19 (prices, cost and gain), 22 (cash correction).
+
+**Verify by hand.** Each type at 710px and 1280px: blank setup; total and shares with cash blank (draft), Cancel draft question; Finish with cash; delete a draft and Undo; cash $100 and one $100 share against a bigger total (mismatch, Back); the early value date row; Set up by in the history.
