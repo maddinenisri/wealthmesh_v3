@@ -13,8 +13,10 @@ import {
   TextField,
 } from '../../design-system'
 import { useCreateAccount, useUpdateAccount } from '../../hooks/useAccounts'
+import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { usePreviewOpening } from '../../hooks/useInvestments'
 import { formatMoney, parseAmount } from '../../lib/money'
+import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
 import { OpeningFields } from '../investments/OpeningFields'
 import { OpeningReview } from '../investments/OpeningReview'
@@ -100,6 +102,9 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
     },
   })
   const typeValue = useWatch({ control, name: 'type' })
+  // Who is setting up an investment account goes into its history (D-025): the person at the keyboard, not an owner.
+  const { member, setMemberId } = useEnteringAs(members)
+  const [memberMissing, setMemberMissing] = useState(false)
   const traits = typeTraits(typeValue)
   const investment = traits.kind === 'investment'
   const card = isCard(typeValue)
@@ -149,6 +154,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
     openedOn: values.openedOn,
     openingBalance: null,
     opening: toOpening(values, values.openedOn),
+    enteredByMemberId: member?.id,
   })
   // Review asks the server first. Cash left unanswered keeps a draft at once (V2_BROKERAGE_003): its own page says what
   // it needs; a complete or mismatched opening is reviewed here and saved only by Confirm.
@@ -174,7 +180,16 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
     }
   }
   const onSubmit = handleSubmit((values) => {
-    if (investment) return reviewInvestment(values)
+    if (investment) {
+      if (!member) {
+        setMemberMissing(true)
+        requestAnimationFrame(() =>
+          document.querySelector<HTMLSelectElement>('[data-entered-by] select')?.focus(),
+        )
+        return undefined
+      }
+      return reviewInvestment(values)
+    }
     if (valuedNoun(values.type) || isDebt(values.type)) {
       create.reset()
       setReview(values)
@@ -199,6 +214,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
             <>
               {values.institution.trim() !== '' && `Institution: ${values.institution.trim()}. `}
               Owners: {owners(values.ownerMemberIds)}.
+              {member && ` Set up by: ${memberLabel(member)}.`}
             </>
           }
           error={create.error?.message}
@@ -348,6 +364,16 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
           <option value="owed">Owed</option>
           <option value="credit">Card credit</option>
         </SelectField>
+      )}
+      {investment && (
+        <div data-entered-by>
+          <EnteredBy members={members} member={member} setMemberId={setMemberId} />
+          {memberMissing && !member && (
+            <p role="alert" className="mt-1 text-sm text-danger">
+              Choose who is setting up this account
+            </p>
+          )}
+        </div>
       )}
       <div className="flex gap-2">
         <Button type="submit" disabled={create.isPending || preview.isPending}>

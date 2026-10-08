@@ -116,7 +116,19 @@ for (const width of [710, 1280] as const) {
       await expect(status).toBeFocused()
       await expect(page.getByText(/No starting amount was entered/)).toBeVisible()
       await expect(page.getByLabel('Account details')).toContainText('Institution')
+      await expect(page.getByText(/^Set up by .+ · /)).toBeVisible()
       await expectNoSidewaysScroll(page)
+    })
+
+    test(`V2_BROKERAGE_002 Review with nobody chosen as entering asks who is setting up and takes focus there (${width}px)`, async ({
+      page,
+    }) => {
+      await page.addInitScript(() => window.localStorage.removeItem('wealthmesh.enteringAs'))
+      await fillSetup(page, `Nobody Brokerage ${width}`)
+      await page.getByRole('button', { name: 'Review' }).click()
+      await expect(page.getByText('Choose who is setting up this account')).toBeVisible()
+      await expect(page.getByLabel('Entered by')).toBeFocused()
+      await expect(page.getByRole('heading', { name: 'Review new brokerage' })).toHaveCount(0)
     })
 
     for (const [input, fields, label, message] of [
@@ -311,6 +323,7 @@ for (const width of [710, 1280] as const) {
           institution: 'Harbor Benefits',
           ownerMemberIds: [owner],
           openedOn: '2026-09-01',
+          enteredByMemberId: owner,
           opening: {
             total: '20000.00',
             cash: '15000.00',

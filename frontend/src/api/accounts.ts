@@ -25,6 +25,8 @@ export type NewAccount = {
   balanceSide?: 'owed' | 'credit' | null
   /** An investment account's opening cash and holdings, instead of one balance (slice 17). */
   opening?: OpeningInput
+  /** Who is setting up an investment account: recorded in its history (required there, refused elsewhere). */
+  enteredByMemberId?: string
 }
 
 export type HoldingInput = {
@@ -93,6 +95,7 @@ export const createAccount = (account: NewAccount) =>
       openingBalance: account.openingBalance,
       ...(account.balanceSide ? { balanceSide: account.balanceSide } : {}),
       ...(account.opening ? { opening: account.opening } : {}),
+      ...(account.enteredByMemberId ? { enteredByMemberId: account.enteredByMemberId } : {}),
     },
     parse: parseAccount,
   })

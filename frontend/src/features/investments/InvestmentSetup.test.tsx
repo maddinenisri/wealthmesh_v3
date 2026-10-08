@@ -98,6 +98,35 @@ describe('setting up a brokerage', () => {
     expect(screen.queryByLabelText('Opened on')).not.toBeInTheDocument()
   })
 
+  it('V2_BROKERAGE_002 Review with nobody chosen as entering asks who is setting up and sends nothing', async () => {
+    window.localStorage.removeItem('wealthmesh.enteringAs')
+    const api = mockApi(seed)
+    const { user } = renderRoute('/accounts/new')
+    await fill(user)
+    expect(screen.getByLabelText('Entered by')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    const alert = await screen.findByText('Choose who is setting up this account')
+    expect(alert).toHaveAttribute('role', 'alert')
+    await vi_waitFocus(screen.getByLabelText('Entered by'))
+    expect(api.requests).not.toContain('POST /api/v1/accounts/opening-preview')
+    await user.selectOptions(screen.getByLabelText('Entered by'), 'Maya')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    expect(await screen.findByRole('heading', { name: 'Review new brokerage' })).toBeVisible()
+  })
+
+  it('V2_BROKERAGE_002 history says who set it up and when: the member who entered it, not the owner', async () => {
+    const api = mockApi(seed)
+    const { user } = renderRoute('/accounts/new')
+    await fill(user)
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    expect(await screen.findByText(/Set up by: Maya\./)).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    const history = await screen.findByText(/Set up by Maya/)
+    expect(history).toBeVisible()
+    expect(history.textContent).not.toMatch(/Sam/)
+    expect(api.accounts[0].ownerMemberIds).toEqual([sam.id])
+  })
+
   it('V2_BROKERAGE_002 a blank starting amount is reviewed as cash $0.00 with no holdings, then saved by Confirm', async () => {
     const api = mockApi(seed)
     const { user } = renderRoute('/accounts/new')

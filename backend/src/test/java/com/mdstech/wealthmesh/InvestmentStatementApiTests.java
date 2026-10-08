@@ -221,7 +221,7 @@ class InvestmentStatementApiTests extends InvestmentTestBase {
 
     @Order(14)
     @Test
-    @DisplayName("V2_INV_CORRECTION_005 two attaches that both back the opening wait for the lock; the second is refused")
+    @DisplayName("V2_INV_CORRECTION_005 two attaches backing the opening wait for the lock; the second is refused")
     void concurrentOpeningAttachesTakeTheLock() throws Exception {
         String id = investment(TYPE, "Race Attach", "2026-09-01", opening(null, "100.00"));
         java.util.List<Integer> statuses = both(id,

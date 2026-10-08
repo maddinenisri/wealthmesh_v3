@@ -535,6 +535,7 @@ export function mockApi(
     return 'error' in judged ? problem(400, judged.error) : judged.opening
   }
   const createInvestment = (body: NewAccountBody & { opening?: unknown }) => {
+    if (!body.enteredByMemberId) return problem(400, 'Choose who entered this')
     const judged = judgeSetup(body)
     if (judged instanceof Response) return judged
     if (stateOf(judged) === 'mismatch') return problem(400, mismatchMessage(judged))
@@ -553,6 +554,7 @@ export function mockApi(
     }
     state.accounts.push(account)
     state.openings.set(account.id, judged)
+    noteAccountEvent(account.id, draft ? 'drafted' : 'set_up', body.enteredByMemberId)
     return HttpResponse.json(account, { status: 201 })
   }
   const saveStatement = async (request: Request, accountId: string, replaces: string | null) => {
@@ -2939,6 +2941,7 @@ type NewAccountBody = {
   openedOn: string
   openingBalance: string | null
   balanceSide?: string
+  enteredByMemberId?: string
 }
 
 function amountOrZero(value: string | null) {

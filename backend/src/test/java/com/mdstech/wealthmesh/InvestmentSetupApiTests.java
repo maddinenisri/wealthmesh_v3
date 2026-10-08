@@ -229,6 +229,45 @@ class InvestmentSetupApiTests extends InvestmentTestBase {
                 .jsonPath("$.financialAssets").isEqualTo("20702.00");
     }
 
+    @Order(14)
+    @Test
+    @DisplayName("V2_BROKERAGE_002 a create without who is setting up is refused; with it, history says who and when")
+    void setupRecordsWhoAndWhen() {
+        webTestClient.post().uri("/api/v1/accounts").contentType(MediaType.APPLICATION_JSON).bodyValue("""
+                {"type": "brokerage", "name": "No Member", "institution": "Harbor Benefits",
+                 "ownerMemberIds": ["%s"], "openedOn": "2026-09-01"}""".formatted(samId))
+                .exchange().expectStatus().isBadRequest().expectBody().jsonPath("$.message")
+                .isEqualTo("Choose who entered this");
+        assertAccountNamed("No Member", false);
+        String id = investment(TYPE, "Who And When", "2026-09-01", opening(null, "50.00"));
+        webTestClient.get().uri("/api/v1/accounts/{id}/events", id).exchange().expectBody()
+                .jsonPath("$.length()").isEqualTo(1).jsonPath("$[0].action").isEqualTo("set_up")
+                .jsonPath("$[0].memberId").isEqualTo(mayaId).jsonPath("$[0].at").isNotEmpty();
+        String draftId = investment(TYPE, "Who Drafted", "2026-09-01", opening("100.00", null));
+        webTestClient.get().uri("/api/v1/accounts/{id}/events", draftId).exchange().expectBody()
+                .jsonPath("$.length()").isEqualTo(1).jsonPath("$[0].action").isEqualTo("drafted")
+                .jsonPath("$[0].memberId").isEqualTo(mayaId);
+    }
+
+    @Order(15)
+    @Test
+    @DisplayName("V2_BROKERAGE_002 the person setting up must be an active member of this household, and only an "
+            + "investment account takes the field")
+    void setupMemberRules() {
+        webTestClient.post().uri("/api/v1/accounts").contentType(MediaType.APPLICATION_JSON).bodyValue("""
+                {"type": "brokerage", "name": "Stranger", "institution": "Harbor Benefits",
+                 "ownerMemberIds": ["%s"], "openedOn": "2026-09-01",
+                 "enteredByMemberId": "00000000-0000-0000-0000-000000000001"}""".formatted(samId))
+                .exchange().expectStatus().isBadRequest().expectBody().jsonPath("$.message")
+                .isEqualTo("Choose who entered this from this household");
+        webTestClient.post().uri("/api/v1/accounts").contentType(MediaType.APPLICATION_JSON).bodyValue("""
+                {"type": "checking", "name": "Plain", "institution": "Bank", "ownerMemberIds": ["%s"],
+                 "openedOn": "2026-09-01", "openingBalance": "10.00", "enteredByMemberId": "%s"}"""
+                .formatted(samId, mayaId)).exchange().expectStatus().isBadRequest().expectBody()
+                .jsonPath("$.message").isEqualTo("Who set it up applies to an investment account only");
+        assertAccountNamed("Plain", false);
+    }
+
     private int accountCount() {
         AtomicReference<Integer> count = new AtomicReference<>();
         webTestClient.get().uri("/api/v1/accounts").exchange().expectBody().jsonPath("$.length()")

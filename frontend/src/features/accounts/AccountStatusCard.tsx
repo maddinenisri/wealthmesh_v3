@@ -26,6 +26,8 @@ const EVENT_LABEL: Record<string, string> = {
   reopened: 'Reopened',
   deleted: 'Deleted',
   undeleted: 'Deleted, then brought back',
+  set_up: 'Set up',
+  drafted: 'Draft saved',
   setup_finished: 'Setup finished',
   discarded: 'Draft cancelled',
 }

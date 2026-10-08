@@ -41,7 +41,8 @@ abstract class InvestmentTestBase extends DebtTestBase {
         String components = opening == null ? "" : ", \"opening\": " + opening;
         return """
                 {"type": "%s", "name": "%s", "institution": "Harbor Benefits", "ownerMemberIds": ["%s"],
-                 "openedOn": "%s"%s}""".formatted(type, name, samId, openedOn, components);
+                 "openedOn": "%s", "enteredByMemberId": "%s"%s}""".formatted(type, name, samId, openedOn, mayaId,
+                components);
     }
 
     protected WebTestClient.ResponseSpec createInvestment(String type, String name, String openedOn,

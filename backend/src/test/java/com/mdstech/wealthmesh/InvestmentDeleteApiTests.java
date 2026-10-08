@@ -63,7 +63,7 @@ class InvestmentDeleteApiTests extends InvestmentTestBase {
                 .jsonPath("$.holdings.length()").isEqualTo(1);
         act(draft, "undo-delete").expectStatus().isOk();
         webTestClient.get().uri("/api/v1/accounts/{id}/events", draft).exchange().expectBody()
-                .jsonPath("$.length()").isEqualTo(2);
+                .jsonPath("$.length()").isEqualTo(3);
     }
 
     @Order(4)

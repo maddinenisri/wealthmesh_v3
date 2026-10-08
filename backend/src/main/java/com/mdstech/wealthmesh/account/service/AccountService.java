@@ -108,6 +108,9 @@ public class AccountService {
         if (request.opening() != null) {
             throw bad("Cash and holdings apply to an investment account only");
         }
+        if (request.enteredByMemberId() != null) {
+            throw bad("Who set it up applies to an investment account only");
+        }
         opening = signed(type, opening, request.balanceSide());
         if (type.valued() && opening.signum() < 0) {
             throw bad(type == AccountType.PROPERTY ? "Enter zero or a positive property value"

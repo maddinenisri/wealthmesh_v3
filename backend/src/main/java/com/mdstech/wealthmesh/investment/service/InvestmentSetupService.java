@@ -112,14 +112,18 @@ public class InvestmentSetupService {
                         return Mono.<AccountResponse>error(bad(components.mismatchMessage()));
                     }
                     boolean draft = components.state() == OpeningComponents.State.DRAFT;
-                    return accountService.checkOwners(household.id(), request.ownerMemberIds(), List.of())
+                    return validator.memberLocked(household.id(), request.enteredByMemberId())
+                            .flatMap(memberId -> accountService.checkOwners(household.id(),
+                                    request.ownerMemberIds(), List.of())
                             .flatMap(ownerIds -> accounts.save(new Account(null, household.id(),
                                     head.type().wire(), head.name(), head.institution(), head.openedOn(),
                                     openingAmount(components), draft ? "draft" : AccountState.ACTIVE,
                                     clock.instant(), clock.instant()))
                                     .flatMap(saved -> owners.replace(household.id(), saved.id(), ownerIds)
                                             .then(store.save(saved.id(), components, clock.instant()))
-                                            .then(Mono.defer(() -> accountService.findById(saved.id())))));
+                                            .then(usage.recordEvent(saved.id(), draft ? "drafted" : "set_up",
+                                                    memberId, clock.instant()))
+                                            .then(Mono.defer(() -> accountService.findById(saved.id()))))));
                 })));
     }
 

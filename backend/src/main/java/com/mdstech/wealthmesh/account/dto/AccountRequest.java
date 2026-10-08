@@ -10,7 +10,8 @@ import com.mdstech.wealthmesh.investment.dto.OpeningRequest;
  * Create body. {@code openingBalance} is typed as Object so a JSON number is seen and refused instead of being
  * silently turned into text; only a string (or null) is valid. {@code balanceSide} ("owed" or "credit") says what a
  * card's positive amount means; it is refused for any other type. `opening` carries the cash and holdings of an
- * investment account (slice 17) and is refused for any other type.
+ * investment account (slice 17) and is refused for any other type. `enteredByMemberId` is who is setting up an
+ * investment account (recorded in its history, 17b); it is required there and refused for any other type.
  */
 public record AccountRequest(
         String type,
@@ -20,5 +21,6 @@ public record AccountRequest(
         LocalDate openedOn,
         Object openingBalance,
         String balanceSide,
-        OpeningRequest opening) {
+        OpeningRequest opening,
+        UUID enteredByMemberId) {
 }
