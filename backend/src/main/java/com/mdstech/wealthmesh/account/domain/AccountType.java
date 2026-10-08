@@ -5,10 +5,10 @@ import java.util.Optional;
 /**
  * Account types the app can set up so far (T1: savings has the checking shape; T2: a card keeps one Balance that is
  * owed or Card credit; T3: property and other assets hold dated values, no activity; T4: a loan, and T5: a mortgage,
- * are debts owed, set
- * up with an amount and changed by payments and reviewed corrections; T7: a brokerage is set up from opening cash and
- * holdings and, until slices 20 to 23, takes no activity). The table allows every type in the
- * foundations; add one per feature. A type's {@link Kind} decides how its Balance is read (foundations 3, 5).
+ * are debts owed, set up with an amount and changed by payments and reviewed corrections; T7: a brokerage, 401(k), IRA
+ * or HSA is set up from opening cash and holdings and, until slices 20 to 23, takes no activity). The table allows
+ * every type in the foundations; add one per feature. A type's {@link Kind} decides how its Balance is read
+ * (foundations 3, 5).
  */
 public enum AccountType {
     CHECKING(Kind.LEDGER),
@@ -18,7 +18,11 @@ public enum AccountType {
     OTHER_ASSET(Kind.VALUED),
     LOAN(Kind.DEBT),
     MORTGAGE(Kind.DEBT),
-    BROKERAGE(Kind.INVESTMENT);
+    BROKERAGE(Kind.INVESTMENT),
+    K401(Kind.INVESTMENT, "401k"),
+    TRADITIONAL_IRA(Kind.INVESTMENT),
+    ROTH_IRA(Kind.INVESTMENT),
+    HSA(Kind.INVESTMENT);
 
     /**
      * How a type's Balance is read: opening plus signed activity (ledger), the latest dated value (valued), or the
@@ -31,9 +35,16 @@ public enum AccountType {
     }
 
     private final Kind kind;
+    private final String wire;
 
     AccountType(Kind kind) {
+        this(kind, null);
+    }
+
+    /** `wire` is the JSON and database name when it is not the lowercase enum name (a name cannot start with 4). */
+    AccountType(Kind kind, String wire) {
         this.kind = kind;
+        this.wire = wire == null ? name().toLowerCase(java.util.Locale.ROOT) : wire;
     }
 
     /** How this type's Balance is read. */
@@ -48,7 +59,7 @@ public enum AccountType {
 
     /** The lowercase name used in JSON and the database. */
     public String wire() {
-        return name().toLowerCase(java.util.Locale.ROOT);
+        return wire;
     }
 
     /** True for a type whose money in and out, Balance updates and entries the ledger records: the one gate. */
