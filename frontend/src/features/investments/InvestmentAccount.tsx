@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
@@ -69,15 +69,26 @@ function OpeningCard({ account }: { account: Account }) {
 export function InvestmentAccount({
   account,
   members,
+  reviewsOpened = 0,
 }: {
   account: Account
   members: Member[] | undefined
+  /** Counts the reviews opened on the status card; the sentence the page arrived with goes when one opens. */
+  reviewsOpened?: number
 }) {
   const navigate = useNavigate()
   const arrived = (useLocation().state as { notice?: string } | null)?.notice
   const [finishing, setFinishing] = useState(false)
   const [asking, setAsking] = useState(false)
-  const { message, statusRef, begin, changed } = useStateChangeFocus(finishing || asking, arrived)
+  const { message, statusRef, begin, changed, clear } = useStateChangeFocus(
+    finishing || asking,
+    arrived,
+  )
+  useEffect(() => {
+    if (reviewsOpened > 0) clear()
+    // `clear` is a fresh function each render; only a new review should run this.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewsOpened])
   const today = useToday()
   const { member } = useEnteringAs(members)
   const discard = useDiscardDraft(account.id, member?.id ?? '')

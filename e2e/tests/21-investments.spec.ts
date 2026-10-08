@@ -297,6 +297,8 @@ for (const width of [710, 1280] as const) {
       const before = await financialAssets(page)
       await page.getByRole('button', { name: 'Delete account' }).click()
       await expect(page.getByText(/has no saved history, so it can be deleted/)).toBeVisible()
+      // The arrival sentence ("saved as a draft") is gone while the review is open.
+      await expect(page.getByText(`${name} is saved as a draft.`)).toHaveCount(0)
       await page.getByRole('button', { name: `Delete ${name}` }).click()
       const status = page
         .getByRole('status')

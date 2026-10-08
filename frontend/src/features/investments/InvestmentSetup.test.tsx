@@ -493,6 +493,21 @@ describe('Cowork pass faults', () => {
     expect(screen.getAllByText(/adds nothing to household wealth/)).toHaveLength(1)
   })
 
+  it('V2_ACCOUNT_LIFECYCLE_007 the arrival sentence goes when a review of the status card opens', async () => {
+    mockApi(seed)
+    const { user } = renderRoute('/accounts/new')
+    await fill(user, { holdings: [['HOME', '1', '100']] })
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    await user.click(await screen.findByRole('button', { name: 'Save draft' }))
+    expect(await screen.findByText(/is saved as a draft/)).toBeVisible()
+
+    await user.click(await screen.findByRole('button', { name: 'Delete account' }))
+    expect(await screen.findByText(/has no saved history, so it can be deleted/)).toBeVisible()
+    expect(screen.queryByText(/is saved as a draft/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByText(/is saved as a draft/)).not.toBeInTheDocument()
+  })
+
   it('V2_BROKERAGE_002 Household lists the brokerage under Investments with a total that adds up', async () => {
     mockApi({ ...seed, accounts: [brokerage()], openings: { [ID]: { ...opened } } })
     renderRoute('/')

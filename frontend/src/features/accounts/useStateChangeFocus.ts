@@ -28,6 +28,9 @@ export function useStateChangeFocus(reviewOpen: boolean, arrivedWith?: string) {
     returnFocus()
   }
 
+  /** Drops the arrival text when another card on the page starts its own review. */
+  const clear = () => setMessage(null)
+
   const changed = (text: string) => {
     returnFocus.cancel()
     setMessage(text)
@@ -37,5 +40,5 @@ export function useStateChangeFocus(reviewOpen: boolean, arrivedWith?: string) {
     })
   }
 
-  return { message, statusRef, begin, changed }
+  return { message, statusRef, begin, changed, clear }
 }

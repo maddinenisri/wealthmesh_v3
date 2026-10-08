@@ -35,9 +35,20 @@ const EVENT_LABEL: Record<string, string> = {
 type Review = 'archive' | 'restore' | 'close' | 'reopen' | 'delete'
 
 /** Archive, restore, close or reopen: each reviewed first, and none of them changes money (A1, A2). */
-export function AccountStatusCard({ account }: { account: Account }) {
+export function AccountStatusCard({
+  account,
+  onReview,
+}: {
+  account: Account
+  /** Called when a review opens, so a sentence another card still shows from an earlier page can go. */
+  onReview?: () => void
+}) {
   const [review, setReview] = useState<Review | null>(null)
-  const { message, statusRef, begin, changed } = useStateChangeFocus(review !== null)
+  const { message, statusRef, begin: beginFocus, changed } = useStateChangeFocus(review !== null)
+  const begin = () => {
+    beginFocus()
+    onReview?.()
+  }
   const { members } = useAccountContext()
   const { member, setMemberId } = useEnteringAs(members)
   const change = useChangeAccountStatus(account.id, member?.id)

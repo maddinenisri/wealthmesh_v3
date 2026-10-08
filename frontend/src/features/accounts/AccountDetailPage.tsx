@@ -43,6 +43,7 @@ export function AccountDetailPage() {
   const { id = '' } = useParams()
   const account = useAccount(id)
   const { members } = useAccountContext()
+  const [reviewsOpened, setReviewsOpened] = useState(0)
 
   return (
     <div className="flex flex-col gap-6">
@@ -82,11 +83,18 @@ export function AccountDetailPage() {
             account={account.data}
             owners={ownerNames(account.data.ownerMemberIds, members)}
           />
-          <AccountStatusCard account={account.data} />
+          <AccountStatusCard
+            account={account.data}
+            onReview={() => setReviewsOpened((count) => count + 1)}
+          />
           {isValued(account.data.type) ? (
             <ValuedAccount account={account.data} members={members} />
           ) : typeTraits(account.data.type).kind === 'investment' ? (
-            <InvestmentAccount account={account.data} members={members} />
+            <InvestmentAccount
+              account={account.data}
+              members={members}
+              reviewsOpened={reviewsOpened}
+            />
           ) : (
             <Activity account={account.data} members={members} />
           )}
