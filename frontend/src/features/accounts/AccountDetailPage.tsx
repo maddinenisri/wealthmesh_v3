@@ -30,7 +30,7 @@ import { TransferForm } from '../transfers/TransferForm'
 import { ValueChange } from '../values/ValueChange'
 import { ValuedAccount } from '../values/ValuedAccount'
 import { InvestmentAccount } from '../investments/InvestmentAccount'
-import { accountTypeLabel, debtNounOf, isDebt, isValued, typeTraits } from './accountTypes'
+import { capitalNoun, debtNounOf, isDebt, isValued, typeNoun, typeTraits } from './accountTypes'
 import { AccountStatusCard } from './AccountStatusCard'
 import { STATUS_LABEL } from './statusLabel'
 import { BalanceFigure } from './BalanceFigure'
@@ -63,7 +63,7 @@ export function AccountDetailPage() {
         <>
           <PageHeader
             title={account.data.name}
-            description={`${accountTypeLabel(account.data.type)} account${
+            description={`${capitalNoun(typeNoun(account.data.type))} account${
               account.data.status === 'active'
                 ? ''
                 : ` · ${STATUS_LABEL[account.data.status] ?? account.data.status}`

@@ -1,24 +1,25 @@
 /**
- * Account types in their final order. `ready` types can be set up (a ledger type also holds money activity, the
- * server's `AccountType.holdsActivity`); the rest show as "coming soon" until their feature is built.
+ * Account types in their final order; every one can be set up (a ledger type also holds money activity, the server's
+ * `AccountType.holdsActivity`). `noun` is what a type is called in a sentence when its label would read badly there
+ * ("Review new HSA"); it defaults to the lowercase label.
  */
 export const ACCOUNT_TYPES = [
-  { value: 'checking', label: 'Checking', ready: true },
-  { value: 'savings', label: 'Savings', ready: true },
-  { value: 'credit_card', label: 'Credit card', ready: true },
-  { value: 'property', label: 'Property', ready: true, valued: 'property' },
-  { value: 'other_asset', label: 'Other asset', ready: true, valued: 'asset' },
-  { value: 'brokerage', label: 'Brokerage', ready: true, investment: true },
-  { value: '401k', label: '401(k)', ready: false, investment: true },
-  { value: 'traditional_ira', label: 'Traditional IRA', ready: false, investment: true },
-  { value: 'roth_ira', label: 'Roth IRA', ready: false, investment: true },
-  { value: 'hsa', label: 'Health savings account (HSA)', ready: false, investment: true },
-  { value: 'loan', label: 'Loan', ready: true, debt: true },
-  { value: 'mortgage', label: 'Mortgage', ready: true, debt: true },
+  { value: 'checking', label: 'Checking' },
+  { value: 'savings', label: 'Savings' },
+  { value: 'credit_card', label: 'Credit card' },
+  { value: 'property', label: 'Property', valued: 'property' },
+  { value: 'other_asset', label: 'Other asset', valued: 'asset' },
+  { value: 'brokerage', label: 'Brokerage', investment: true },
+  { value: '401k', label: '401(k)', noun: '401(k)', investment: true },
+  { value: 'traditional_ira', label: 'Traditional IRA', noun: 'Traditional IRA', investment: true },
+  { value: 'roth_ira', label: 'Roth IRA', noun: 'Roth IRA', investment: true },
+  { value: 'hsa', label: 'Health savings account (HSA)', noun: 'HSA', investment: true },
+  { value: 'loan', label: 'Loan', debt: true },
+  { value: 'mortgage', label: 'Mortgage', debt: true },
 ] as const satisfies readonly {
   value: string
   label: string
-  ready: boolean
+  noun?: string
   valued?: 'property' | 'asset'
   debt?: true
   investment?: true
@@ -119,6 +120,13 @@ export const capitalNoun = (text: string): string => text.charAt(0).toUpperCase(
 export function valuedNoun(type: string): 'property' | 'asset' | null {
   const found = ACCOUNT_TYPES.find((candidate) => candidate.value === type)
   return found && 'valued' in found ? found.valued : null
+}
+
+/** What a type is called inside a sentence: "brokerage", "401(k)", "HSA". Unknown values are shown as they are. */
+export function typeNoun(value: string): string {
+  const found = ACCOUNT_TYPES.find((type) => type.value === value)
+  if (!found) return value
+  return 'noun' in found ? found.noun : found.label.toLowerCase()
 }
 
 /** The name of a type for headings, for example "Savings". Unknown values are shown as they are. */

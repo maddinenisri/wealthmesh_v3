@@ -44,12 +44,13 @@ async function fillSavings(
 }
 
 describe('adding a savings account', () => {
-  it('lets Savings be chosen and keeps the other types as coming soon', async () => {
+  it('lets Savings be chosen, and every type is offered', async () => {
     mockApi(seed)
     renderRoute('/accounts/new')
     const type = await screen.findByLabelText('Account type')
     expect(within(type).getByRole('option', { name: 'Savings' })).toBeEnabled()
-    expect(within(type).getByRole('option', { name: '401(k) (coming soon)' })).toBeDisabled()
+    expect(within(type).getByRole('option', { name: '401(k)' })).toBeEnabled()
+    expect(within(type).queryByRole('option', { name: /coming soon/ })).not.toBeInTheDocument()
   })
 
   it('V2_SAVINGS_001 follows Emergency Savings from the list to its detail and its actions', async () => {

@@ -21,7 +21,7 @@ import { Panel } from '../activity/Panel'
 import { OpeningFields } from '../investments/OpeningFields'
 import { OpeningReview } from '../investments/OpeningReview'
 import { toOpening, type OpeningValues } from '../investments/openingForm'
-import { ACCOUNT_TYPES, accountTypeLabel, isDebt, typeTraits, valuedNoun } from './accountTypes'
+import { ACCOUNT_TYPES, isDebt, typeNoun, typeTraits, valuedNoun } from './accountTypes'
 import { isCard } from './cardBalance'
 import { memberLabel } from './ownerNames'
 
@@ -205,7 +205,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
     return (
       <Panel>
         <OpeningReview
-          heading={`Review new ${accountTypeLabel(values.type).toLowerCase()}`}
+          heading={`Review new ${typeNoun(values.type)}`}
           name={values.name.trim()}
           openedOn={values.openedOn}
           preview={result}
@@ -245,7 +245,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       <Panel>
         <section aria-labelledby="setup-review-heading" className="flex max-w-md flex-col gap-3">
           <h2 id="setup-review-heading" className="text-lg font-semibold">
-            Review new {accountTypeLabel(review.type).toLowerCase()}
+            Review new {typeNoun(review.type)}
           </h2>
           <FormAlert message={create.error?.message} />
           <p>
@@ -296,8 +296,8 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       <FormAlert message={create.error?.message ?? preview.error?.message} />
       <SelectField control={control} name="type" label="Account type">
         {ACCOUNT_TYPES.map((type) => (
-          <option key={type.value} value={type.value} disabled={!type.ready}>
-            {type.ready ? type.label : `${type.label} (coming soon)`}
+          <option key={type.value} value={type.value}>
+            {type.label}
           </option>
         ))}
       </SelectField>
