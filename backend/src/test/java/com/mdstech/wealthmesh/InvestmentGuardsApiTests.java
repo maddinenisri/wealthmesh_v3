@@ -38,47 +38,81 @@ class InvestmentGuardsApiTests extends InvestmentTestBase {
         assertStatus(active, "active");
     }
 
-    private List<Function<String, WebTestClient.ResponseSpec>> writers() {
+    private static final String NO_MONEY = "Money in and out cannot be recorded on this type of account yet";
+    private static final String NO_MOVE = "Money cannot be moved to or from this type of account yet";
+    private static final String NO_CORRECTION = "The Balance of this type of account cannot be corrected yet";
+    private static final String NO_START = "An investment account's opening cash and holdings are corrected in a "
+            + "later release";
+    private static final String NO_VALUE = "Only a property or other asset has dated values";
+    private static final String NO_BILL = "A recurring bill is paid from a checking or savings account";
+
+    /** One writer and the sentence its refusal must carry on a draft and on an active investment account. */
+    private record Cell(String name, Function<String, WebTestClient.ResponseSpec> writer, String onDraft,
+            String onActive) {
+        Cell(String name, Function<String, WebTestClient.ResponseSpec> writer, String both) {
+            this(name, writer, both, both);
+        }
+    }
+
+    private List<Cell> writers() {
         return List.of(
-                id -> post(id, "expenses", "g-e-" + id, entry(mayaId, "Fee", "10.00", "2026-09-07", "Dining")),
-                id -> post(id, "income", "g-i-" + id, entry(mayaId, "Pay", "10.00", "2026-09-07", "Salary")),
-                id -> webTestClient.post().uri("/api/v1/accounts/{id}/expense-batches", id)
+                new Cell("expense", id -> post(id, "expenses", "g-e-" + id,
+                        entry(mayaId, "Fee", "10.00", "2026-09-07", "Dining")), NO_MONEY),
+                new Cell("income", id -> post(id, "income", "g-i-" + id,
+                        entry(mayaId, "Pay", "10.00", "2026-09-07", "Salary")), NO_MONEY),
+                new Cell("batch", id -> webTestClient.post().uri("/api/v1/accounts/{id}/expense-batches", id)
                         .contentType(MediaType.APPLICATION_JSON).header("Idempotency-Key", "g-b-" + id)
                         .bodyValue("""
                                 {"enteredByMemberId": "%s", "entries": [{"description": "Rent", "amount": "1.00",
                                  "occurredOn": "2026-09-05", "category": "Rent"}]}""".formatted(mayaId)).exchange(),
-                id -> webTestClient.post().uri("/api/v1/accounts/{id}/historical-entries", id)
+                        NO_MONEY),
+                new Cell("historical", id -> webTestClient.post()
+                        .uri("/api/v1/accounts/{id}/historical-entries", id)
                         .contentType(MediaType.APPLICATION_JSON).header("Idempotency-Key", "g-h-" + id)
                         .bodyValue("""
-                                {"kind": "expense", "openingAmount": "100.00", "openedOn": "2026-08-01",
-                                 "description": "Rent", "amount": "6.00", "occurredOn": "2026-08-03",
-                                 "category": "Rent", "enteredByMemberId": "%s"}""".formatted(mayaId)).exchange(),
-                id -> post(id, "reminders", "g-r-" + id, entry(mayaId, "Bill", "10.00", "2026-10-20", "Utilities")),
-                id -> post(id, "balance-corrections", "g-c-" + id, """
+                                {"kind": "expense", "entry": {"description": "Rent", "amount": "6.00",
+                                 "occurredOn": "2026-08-03", "category": "Rent", "enteredByMemberId": "%s"},
+                                 "startRevision": {"openingAmount": "100.00", "openedOn": "2026-08-01",
+                                 "reason": "Earlier", "enteredByMemberId": "%s"}}""".formatted(mayaId, mayaId))
+                        .exchange(), NO_MONEY),
+                new Cell("reminder", id -> post(id, "reminders", "g-r-" + id,
+                        entry(mayaId, "Bill", "10.00", "2026-10-20", "Utilities")),
+                        "Draft Brokerage is a draft. Finish setting it up first.", NO_MONEY),
+                new Cell("balance correction", id -> post(id, "balance-corrections", "g-c-" + id, """
                         {"requestedBalance": "1.00", "asOn": "2026-09-10", "reason": "Fee",
-                         "enteredByMemberId": "%s"}""".formatted(mayaId)),
-                id -> post(id, "starting-balance-corrections", "g-s-" + id, """
+                         "enteredByMemberId": "%s"}""".formatted(mayaId)), NO_CORRECTION),
+                new Cell("starting-balance correction", id -> post(id, "starting-balance-corrections",
+                        "g-s-" + id, """
                         {"openingAmount": "150.00", "openedOn": "2026-09-01", "reason": "Fix",
-                         "enteredByMemberId": "%s"}""".formatted(mayaId)),
-                id -> postTransfer("g-t1-" + id, id, checking, "5.00", "2026-09-10", mayaId),
-                id -> postTransfer("g-t2-" + id, checking, id, "5.00", "2026-09-10", mayaId),
-                id -> postPayment("g-p-" + id, id, card, "5.00", "2026-09-10", mayaId),
-                id -> postLoanPayment("g-l1-" + id, id, loan, "5.00", "4.00", "1.00", "2026-09-10", mayaId),
-                id -> postLoanPayment("g-l2-" + id, checking, id, "5.00", "4.00", "1.00", "2026-09-10", mayaId),
-                id -> createSchedule("g-sc-" + id, schedule("Fee", "10.00", "monthly", "2026-10-20", id, "Utilities")),
-                id -> saveValue(id, "g-v-" + id, valueBody(mayaId, "100.00", "2026-09-10", "Fix", false)),
-                id -> extendStart(id, "g-x-" + id, """
+                         "enteredByMemberId": "%s"}""".formatted(mayaId)), NO_START),
+                new Cell("transfer out", id -> postTransfer("g-t1-" + id, id, checking, "5.00", "2026-09-10",
+                        mayaId), NO_MOVE),
+                new Cell("transfer in", id -> postTransfer("g-t2-" + id, checking, id, "5.00", "2026-09-10",
+                        mayaId), NO_MOVE),
+                new Cell("card payment", id -> postPayment("g-p-" + id, id, card, "5.00", "2026-09-10", mayaId),
+                        NO_MOVE),
+                new Cell("loan payment from it", id -> postLoanPayment("g-l1-" + id, id, loan, "5.00", "4.00",
+                        "1.00", "2026-09-10", mayaId), NO_MOVE),
+                new Cell("loan payment into it", id -> postLoanPayment("g-l2-" + id, checking, id, "5.00", "4.00",
+                        "1.00", "2026-09-10", mayaId), NO_MOVE),
+                new Cell("recurring bill", id -> createSchedule("g-sc-" + id,
+                        schedule("Fee", "10.00", "monthly", "2026-10-20", id, "Utilities")), NO_BILL),
+                new Cell("dated value", id -> saveValue(id, "g-v-" + id,
+                        valueBody(mayaId, "100.00", "2026-09-10", "Fix", false)), NO_VALUE),
+                new Cell("earlier start", id -> extendStart(id, "g-x-" + id, """
                         {"openedOn": "2026-08-01", "reason": "Earlier", "enteredByMemberId": "%s"}"""
-                        .formatted(mayaId)));
+                        .formatted(mayaId)), NO_VALUE));
     }
 
-    private void everyWriterRefused(String account, String balance) {
-        int cell = 0;
-        for (Function<String, WebTestClient.ResponseSpec> writer : writers()) {
-            cell++;
-            int status = statusOf(writer.apply(account));
-            org.assertj.core.api.Assertions.assertThat(status).as("writer %d on %s".formatted(cell, account))
-                    .isBetween(400, 499);
+    /** Every writer is refused with its own sentence (a draft may be refused by the type gate first), nothing saved. */
+    private void everyWriterRefused(String account, String balance, boolean isDraft) {
+        for (Cell cell : writers()) {
+            byte[] body = cell.writer().apply(account).returnResult(byte[].class).getResponseBodyContent();
+            String text = new String(body == null ? new byte[0] : body);
+            org.assertj.core.api.Assertions.assertThat(text)
+                    .as("%s on %s: refused with %s".formatted(cell.name(), isDraft ? "a draft" : "an active account",
+                            isDraft ? cell.onDraft() : cell.onActive()))
+                    .contains("\"status\":4").contains(isDraft ? cell.onDraft() : cell.onActive());
         }
         assertNoMoneyRecords(account);
         assertBalance(account, balance);
@@ -88,14 +122,14 @@ class InvestmentGuardsApiTests extends InvestmentTestBase {
     @Test
     @DisplayName("V2_BROKERAGE_003 every writer of money, a statement-less record or a start is refused on a draft")
     void draftRefusesEveryWriter() {
-        everyWriterRefused(draft, "0.00");
+        everyWriterRefused(draft, "0.00", true);
     }
 
     @Order(2)
     @Test
     @DisplayName("V2_BROKERAGE_002 an active investment account takes no activity until purchases and funding exist")
     void activeRefusesEveryWriter() {
-        everyWriterRefused(active, "500.00");
+        everyWriterRefused(active, "500.00", false);
     }
 
     @Order(3)
