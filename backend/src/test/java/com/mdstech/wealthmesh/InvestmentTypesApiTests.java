@@ -164,6 +164,28 @@ class InvestmentTypesApiTests extends InvestmentTestBase {
         assertAccountNamed(kind.name() + " Mismatch", false);
     }
 
+    @Order(5)
+    @ParameterizedTest(name = "V2_401K_003 V2_HSA_003 V2_ROTH_IRA_003 V2_TRAD_IRA_003 {0}: Finish setup with the cash "
+            + "answered makes the draft active and the Balance joins the Investments group")
+    @MethodSource("kinds")
+    void finishWithMoney(Kind kind) {
+        String name = kind.name() + " Money";
+        AtomicReference<String> id = new AtomicReference<>();
+        post("/api/v1/accounts", kind, name, opening(kind.total(), null,
+                holding("HOME", "1", "100.00", "2026-09-01"))).expectStatus().isCreated().expectBody()
+                .jsonPath("$.id").value(String.class, id::set);
+        webTestClient.get().uri("/api/v1/wealth").exchange().expectBody().jsonPath("$.investments.accounts[?(@.name=='"
+                + name + "')]").doesNotExist();
+        finishSetup(id.get(), opening(null, "400.00", holding("HOME", "1", "100.00", "2026-09-01")))
+                .expectStatus().isOk().expectBody().jsonPath("$.status").isEqualTo("active")
+                .jsonPath("$.type").isEqualTo(kind.wire()).jsonPath("$.balance.amount").isEqualTo("500.00");
+        webTestClient.get().uri("/api/v1/wealth").exchange().expectBody()
+                .jsonPath("$.investments.accounts[?(@.name=='" + name + "')].type").isEqualTo(kind.wire())
+                .jsonPath("$.investments.accounts[?(@.name=='" + name + "')].balance").isEqualTo("500.00");
+        webTestClient.get().uri("/api/v1/accounts").exchange().expectBody()
+                .jsonPath("$[?(@.name=='" + name + "')].type").isEqualTo(kind.wire());
+    }
+
     private int accountCount() {
         AtomicReference<Integer> count = new AtomicReference<>();
         webTestClient.get().uri("/api/v1/accounts").exchange().expectBody().jsonPath("$.length()")

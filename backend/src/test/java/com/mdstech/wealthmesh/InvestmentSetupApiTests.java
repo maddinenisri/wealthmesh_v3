@@ -268,6 +268,56 @@ class InvestmentSetupApiTests extends InvestmentTestBase {
         assertAccountNamed("Plain", false);
     }
 
+    private String bodyEnteredBy(String enteredBy, String name) {
+        return """
+                {"type": "brokerage", "name": "%s", "institution": "Harbor Benefits", "ownerMemberIds": ["%s"],
+                 "openedOn": "2026-09-01", "enteredByMemberId": "%s"}""".formatted(name, mayaId, enteredBy);
+    }
+
+    @Order(16)
+    @Test
+    @DisplayName("V2_BROKERAGE_002 an inactive entering member is refused at create; the review ignores the field")
+    void inactiveEnteringMember() {
+        webTestClient.post().uri("/api/v1/household-members/{id}/deactivate", samId).exchange().expectStatus().isOk();
+        try {
+            webTestClient.post().uri("/api/v1/accounts").contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(bodyEnteredBy(samId, "Inactive Enterer")).exchange().expectStatus().isBadRequest()
+                    .expectBody().jsonPath("$.message").isEqualTo("Choose an active member");
+            assertAccountNamed("Inactive Enterer", false);
+        } finally {
+            webTestClient.post().uri("/api/v1/household-members/{id}/restore", samId).exchange().expectStatus()
+                    .isOk();
+        }
+        // The review never carries who is setting up: a body without the field is reviewed as usual.
+        webTestClient.post().uri("/api/v1/accounts/opening-preview").contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"type": "brokerage", "name": "Preview Only", "institution": "Harbor Benefits",
+                         "ownerMemberIds": ["%s"], "openedOn": "2026-09-01"}""".formatted(mayaId))
+                .exchange().expectStatus().isOk().expectBody().jsonPath("$.state").isEqualTo("complete");
+    }
+
+    @Order(17)
+    @Test
+    @DisplayName("V2_BROKERAGE_002 a create waits for a member being deactivated, then refuses that member")
+    void createWaitsForMemberRow() throws Exception {
+        io.r2dbc.spi.Connection other = holdUncommitted(
+                "UPDATE wealthmesh.household_member SET active = false WHERE id = $1", samId);
+        try {
+            java.util.concurrent.CompletableFuture<Integer> status = async(() -> statusOf(webTestClient.post()
+                    .uri("/api/v1/accounts").contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(bodyEnteredBy(samId, "Race Member")).exchange()));
+            Thread.sleep(600);
+            assertThat(status).as("the create waits for the member row").isNotDone();
+            commit(other);
+            assertThat(status.get(10, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(400);
+        } finally {
+            close(other);
+            webTestClient.post().uri("/api/v1/household-members/{id}/restore", samId).exchange().expectStatus()
+                    .isOk();
+        }
+        assertAccountNamed("Race Member", false);
+    }
+
     private int accountCount() {
         AtomicReference<Integer> count = new AtomicReference<>();
         webTestClient.get().uri("/api/v1/accounts").exchange().expectBody().jsonPath("$.length()")

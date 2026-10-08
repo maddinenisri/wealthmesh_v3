@@ -136,6 +136,7 @@ describe.each(types)('$option setup', (type) => {
       ),
     ).toBeVisible()
     expect(api.accounts[0]).toMatchObject({ type: type.wire, status: 'draft' })
+    expect(await screen.findByText(/Draft saved by Maya/)).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: 'Cancel draft' }))
     const ask = await screen.findByRole('region', { name: 'Cancel this draft?' })
@@ -177,5 +178,48 @@ describe.each(types)('$option setup', (type) => {
     )
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled()
     expect(api.accounts).toHaveLength(0)
+  })
+})
+
+describe('the four types in the lists', () => {
+  const accounts = types.map((type, index) => ({
+    id: `44444444-4444-4444-8444-44444444444${index}`,
+    type: type.wire,
+    name: type.name,
+    institution: type.institution,
+    ownerMemberIds: [maya.id],
+    openedOn: '2026-09-01',
+    openingAmount: '500.00',
+    balance: { amount: '500.00', asOf: '2026-09-01' },
+    status: 'active' as const,
+  }))
+  const openings = Object.fromEntries(
+    accounts.map((account) => [
+      account.id,
+      {
+        total: '500.00',
+        cash: '400.00',
+        blank: false,
+        holdings: [{ symbol: 'HOME', quantity: '1', price: '100.00', valueOn: '2026-09-01' }],
+        statementId: null,
+      },
+    ]),
+  )
+
+  it(`${types.map((type) => type.ids).join(' ')} the Accounts list names each type and the Household page counts them under Investments`, async () => {
+    mockApi({ ...seed, accounts, openings })
+    renderRoute('/accounts')
+    for (const type of types) {
+      const row = (await screen.findByRole('link', { name: type.name })).closest('tr')!
+      expect(row).toHaveTextContent(type.option)
+    }
+  })
+
+  it(`${types.map((type) => type.ids).join(' ')} the Household page lists the four under Investments with a total that adds up`, async () => {
+    mockApi({ ...seed, accounts, openings })
+    renderRoute('/')
+    const group = await screen.findByRole('region', { name: 'Investments' })
+    expect(group).toHaveTextContent('$2,000.00')
+    for (const type of types) expect(within(group).getByText(type.name)).toBeVisible()
   })
 })
