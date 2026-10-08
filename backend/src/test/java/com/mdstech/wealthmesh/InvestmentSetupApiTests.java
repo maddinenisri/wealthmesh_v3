@@ -264,7 +264,8 @@ class InvestmentSetupApiTests extends InvestmentTestBase {
                 {"type": "checking", "name": "Plain", "institution": "Bank", "ownerMemberIds": ["%s"],
                  "openedOn": "2026-09-01", "openingBalance": "10.00", "enteredByMemberId": "%s"}"""
                 .formatted(samId, mayaId)).exchange().expectStatus().isBadRequest().expectBody()
-                .jsonPath("$.message").isEqualTo("Who set it up applies to an investment account only");
+                .jsonPath("$.message")
+                .isEqualTo("Who set it up applies to an investment account or a defined benefit only");
         assertAccountNamed("Plain", false);
     }
 

@@ -255,6 +255,9 @@ public class AccountLifecycleService {
 
     /** "$1,000.00" or "-$30.00": the way a person reads an amount in a sentence. */
     private static String closeAdvice(Account account) {
+        if (AccountType.DEFINED_BENEFIT.wire().equals(account.type())) {
+            return "; record a $0.00 plan value first (for example when the plan ends).";
+        }
         if (AccountType.isValued(account.type())) {
             return "; record a $0.00 value first (for example when it is sold).";
         }

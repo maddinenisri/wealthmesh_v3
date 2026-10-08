@@ -32,6 +32,7 @@ import com.mdstech.wealthmesh.value.dto.ValueRow;
 import com.mdstech.wealthmesh.value.repository.ValueStore;
 import com.mdstech.wealthmesh.value.repository.ValueStore.Point;
 import com.mdstech.wealthmesh.value.repository.ValueStore.Row;
+import com.mdstech.wealthmesh.wealth.service.WealthService;
 
 import reactor.core.publisher.Mono;
 
@@ -58,10 +59,12 @@ public class ValueService {
     private final ActivityStore activity;
     private final EntryValidator validator;
     private final TransactionalOperator transactions;
+    private final WealthService wealth;
     private final Clock clock;
 
     public ValueService(AccountRepository accounts, ValueStore values, ActivityStore activity,
-            EntryValidator validator, TransactionalOperator transactions, Clock clock) {
+            EntryValidator validator, TransactionalOperator transactions, WealthService wealth, Clock clock) {
+        this.wealth = wealth;
         this.accounts = accounts;
         this.values = values;
         this.activity = activity;
@@ -85,7 +88,7 @@ public class ValueService {
                     if (!AccountType.isDebt(account.type())) {
                         shown.add(new ValueRow(null, account.openedOn(), Money.format(account.openingAmount()),
                                 "Initial value", initialIsCurrent ? "current" : "earlier", null, account.createdAt(),
-                                null, null, null, false, true));
+                                null, null, null, false, true, null, null));
                     }
                     shown.sort(Comparator.comparing(ValueRow::valueOn).reversed()
                             .thenComparing(ValueRow::initial));
@@ -99,19 +102,25 @@ public class ValueService {
             Mono<Row> replaced = replacesId == null ? Mono.empty() : correctable(account, replacesId);
             return replaced.map(java.util.Optional::of).defaultIfEmpty(java.util.Optional.empty())
                     .flatMap(old -> Mono.fromCallable(() -> parse(account, request, old.orElse(null)))
-                            .flatMap(parsed -> figures(account, parsed, old.map(Row::id).orElse(null))
-                                    .map(f -> new ValueReview(account.name(), account.type(), parsed.valueOn(),
-                                            Money.format(parsed.amount()), parsed.reason(), parsed.plan(),
-                                            f.earlier() == null || parsed.plan() ? null
-                                                    : Money.format(f.earlier().amount()),
-                                            f.earlier() == null || parsed.plan() ? null : f.earlier().on(),
-                                            f.earlier() == null || parsed.plan() ? null
-                                                    : Money.format(parsed.amount().subtract(f.earlier().amount())),
-                                            Money.format(f.nowBalance().amount()), f.nowBalance().on(),
-                                            Money.format(f.after().amount()), f.after().on(),
-                                            old.map(r -> Money.format(r.amount())).orElse(null),
-                                            old.map(Row::valueOn).orElse(null)))));
+                            .flatMap(typed -> resolve(account, typed, old.map(Row::id).orElse(null)))
+                            .flatMap(parsed -> Mono.zip(figures(account, parsed, old.map(Row::id).orElse(null)),
+                                    totals(account)).map(both -> reviewOf(account, parsed, old.orElse(null),
+                                            both.getT1(), both.getT2()))));
         });
+    }
+
+    private static ValueReview reviewOf(Account account, Parsed parsed, Row old, Figures f, Totals t) {
+        BigDecimal moved = f.after().amount().subtract(f.nowBalance().amount());
+        boolean noEarlier = f.earlier() == null || parsed.plan();
+        return new ValueReview(account.name(), account.type(), parsed.valueOn(), Money.format(parsed.amount()),
+                parsed.reason(), parsed.plan(), noEarlier ? null : Money.format(f.earlier().amount()),
+                noEarlier ? null : f.earlier().on(),
+                noEarlier ? null : Money.format(parsed.amount().subtract(f.earlier().amount())),
+                Money.format(f.nowBalance().amount()), f.nowBalance().on(), Money.format(f.after().amount()),
+                f.after().on(), old == null ? null : Money.format(old.amount()), old == null ? null : old.valueOn(),
+                money(parsed.payCredit()), money(parsed.interestCredit()), money(t.netWorth()),
+                t.netWorth() == null ? null : money(t.netWorth().add(moved)), money(t.retirement()),
+                t.retirement() == null ? null : money(t.retirement().add(moved)));
     }
 
     /** What removing a value would do: the Balance returns to the effective value before it. */
@@ -158,10 +167,11 @@ public class ValueService {
         Mono<Row> replaced = replacesId == null ? Mono.empty() : correctable(checked, replacesId);
         return replaced.map(java.util.Optional::of).defaultIfEmpty(java.util.Optional.empty())
                 .flatMap(old -> Mono.fromCallable(() -> parse(checked, request, old.orElse(null)))
-                        .flatMap(parsed -> validator.memberLocked(checked, request.enteredByMemberId())
-                                .flatMap(member -> figures(checked, parsed, old.map(Row::id).orElse(null))
+                        .flatMap(typed -> validator.memberLocked(checked, request.enteredByMemberId())
+                                .flatMap(member -> resolve(checked, typed, old.map(Row::id).orElse(null))
+                                .flatMap(parsed -> figures(checked, parsed, old.map(Row::id).orElse(null))
                                         .flatMap(f -> insert(checked, key, parsed, member, old.orElse(null), f,
-                                                now)))));
+                                                now))))));
     }
 
     private Mono<Saved> insert(Account account, String key, Parsed parsed, UUID member, Row old, Figures f,
@@ -171,7 +181,7 @@ public class ValueService {
                 .switchIfEmpty(Mono.error(conflict("This value was already changed.")))
                 .then(Mono.defer(() -> values.insert(account.id(), parsed.valueOn(), parsed.amount(), parsed.reason(),
                         parsed.plan(), member, old == null ? null : old.id(), key, fingerprint(parsed, member,
-                                old == null ? null : old.id()), now)))
+                                old == null ? null : old.id()), now, parsed.payCredit(), parsed.interestCredit())))
                 .flatMap(id -> values.recordEvent(account.id(), id, old != null ? "corrected"
                                 : parsed.plan() ? "planned" : "saved", member, now, detail(parsed, old))
                         .then(Mono.defer(() -> values.byId(id))))
@@ -316,7 +326,7 @@ public class ValueService {
                 // broken by the time of saving): moving the start never changes the Balance.
                 .then(Mono.defer(() -> values.insert(account.id(), account.openedOn(), account.openingAmount(),
                         "Value when tracking began", false, member, null, null,
-                        "start|" + account.id(), account.createdAt())))
+                        "start|" + account.id(), account.createdAt(), null, null)))
                 .flatMap(id -> values.recordEvent(account.id(), id, "start_moved", member, now,
                         "Start moved from " + account.openedOn() + " to " + parsed.valueOn() + ": "
                                 + parsed.reason()))
@@ -352,20 +362,66 @@ public class ValueService {
     // ---- rules ----
 
     /** A parsed request. */
-    private record Parsed(BigDecimal amount, LocalDate valueOn, String reason, boolean plan) {
+    private record Parsed(BigDecimal amount, LocalDate valueOn, String reason, boolean plan, BigDecimal payCredit,
+            BigDecimal interestCredit) {
+
+        Parsed(BigDecimal amount, LocalDate valueOn, String reason, boolean plan) {
+            this(amount, valueOn, reason, plan, null, null);
+        }
+
+        static Parsed of(BigDecimal amount, LocalDate valueOn, String reason, boolean plan,
+                PlanStatements.Credits credits) {
+            return credits == null ? new Parsed(amount, valueOn, reason, plan)
+                    : new Parsed(amount, valueOn, reason, plan, credits.pay(), credits.interest());
+        }
+
+        boolean credited() {
+            return payCredit != null;
+        }
+
+        Parsed withAmount(BigDecimal resolved) {
+            return new Parsed(resolved, valueOn, reason, plan, payCredit, interestCredit);
+        }
+    }
+
+    /** The household and Retirement totals now, for a defined benefit's review; both null for any other account. */
+    private record Totals(BigDecimal netWorth, BigDecimal retirement) {
+    }
+
+    private static final Totals NO_TOTALS = new Totals(null, null);
+
+    private Mono<Totals> totals(Account account) {
+        if (!AccountType.DEFINED_BENEFIT.wire().equals(account.type())) {
+            return Mono.just(NO_TOTALS);
+        }
+        return wealth.summary(null).map(summary -> new Totals(new BigDecimal(summary.netWorth()),
+                new BigDecimal(summary.retirement().total())));
+    }
+
+    private static String money(BigDecimal amount) {
+        return amount == null ? null : Money.format(amount);
+    }
+
+    /**
+     * A statement with credits has no typed amount: the plan value is the value in force on its date (leaving out
+     * the value it corrects) plus both credits. Any other request is already complete.
+     */
+    private Mono<Parsed> resolve(Account account, Parsed parsed, UUID excluding) {
+        if (!parsed.credited()) {
+            return Mono.just(parsed);
+        }
+        return effectiveOn(account, parsed.valueOn(), excluding).map(base -> parsed.withAmount(
+                base.amount().add(parsed.payCredit()).add(parsed.interestCredit())));
     }
 
     private Parsed parse(Account account, ValueRequest request, Row replaced) {
         if (request == null) {
             throw EntryValidator.bad("Enter a value");
         }
-        BigDecimal amount = amountOf(account, request);
-        LocalDate valueOn = request.valueOn() != null ? request.valueOn()
-                : replaced == null ? null : replaced.valueOn();
-        if (valueOn == null) {
-            throw EntryValidator.bad("Enter a date");
-        }
         boolean plan = Boolean.TRUE.equals(request.plan());
+        PlanStatements.Credits credits = PlanStatements.credits(account, request, plan, replaced != null);
+        BigDecimal amount = credits == null ? amountOf(account, request) : null;
+        LocalDate valueOn = dateOf(request, replaced);
         if (plan && replaced != null) {
             throw EntryValidator.bad("A plan is changed by removing it and saving a new one");
         }
@@ -374,7 +430,17 @@ public class ValueService {
             throw EntryValidator.bad("What is owed changes by a payment or Update balance owed. A future amount can "
                     + "be saved as a plan.");
         }
-        return new Parsed(amount, valueOn, reasonOf(request, replaced != null), plan);
+        return Parsed.of(amount, valueOn, reasonOf(request, replaced != null), plan, credits);
+    }
+
+    /** The date typed, else the date of the value being corrected. */
+    private static LocalDate dateOf(ValueRequest request, Row replaced) {
+        LocalDate valueOn = request.valueOn() != null ? request.valueOn()
+                : replaced == null ? null : replaced.valueOn();
+        if (valueOn == null) {
+            throw EntryValidator.bad("Enter a date");
+        }
+        return valueOn;
     }
 
     /** The reason, trimmed; null when blank. A correction must give one. */
@@ -402,8 +468,7 @@ public class ValueService {
             return amount.negate();
         }
         if (amount.signum() < 0) {
-            throw EntryValidator.bad(AccountType.PROPERTY.wire().equals(account.type())
-                    ? "Enter zero or a positive property value" : "Enter zero or a positive asset value");
+            throw EntryValidator.bad(PlanStatements.negativeMessage(account));
         }
         return amount;
     }
@@ -411,6 +476,7 @@ public class ValueService {
     /** A value is dated today or earlier and not before the account's start; a plan is dated after today. */
     private void checkDate(Account account, LocalDate valueOn, boolean plan) {
         LocalDate today = LocalDate.now(clock);
+        PlanStatements.checkDate(account, valueOn, plan, today);
         if (plan && !valueOn.isAfter(today)) {
             throw EntryValidator.bad("A plan is dated after today. Choose a date on or before today to record a "
                     + "value.");
@@ -488,10 +554,15 @@ public class ValueService {
                 : row.planned() ? "planned" : row.id().equals(currentId) ? "current" : "earlier";
         return new ValueRow(row.id(), row.valueOn(), Money.format(row.amount()), row.reason(), status,
                 row.enteredBy(), row.createdAt(), row.replacesId(), row.removedBy(), row.removedAt(), row.planned(),
-                false);
+                false, money(row.payCredit()), money(row.interestCredit()));
     }
 
     private static String detail(Parsed parsed, Row old) {
+        if (parsed.credited() && old == null) {
+            return "Statement for " + parsed.valueOn() + ": pay credit " + dollars(parsed.payCredit())
+                    + " and benefit interest " + dollars(parsed.interestCredit()) + ", plan value "
+                    + dollars(parsed.amount());
+        }
         return old == null ? (parsed.plan() ? "Plan for " : "Value for ") + parsed.valueOn() + ": "
                 + dollars(parsed.amount())
                 : "Replaces " + dollars(old.amount()) + " dated " + old.valueOn() + " with "
@@ -504,32 +575,41 @@ public class ValueService {
     }
 
     private static String fingerprint(Parsed parsed, UUID member, UUID replaces) {
-        return String.join("|", String.valueOf(member), String.valueOf(parsed.valueOn()),
-                Money.format(parsed.amount()), String.valueOf(parsed.reason()), String.valueOf(parsed.plan()),
-                String.valueOf(replaces));
+        String figure = parsed.credited() ? "credits:" + Money.format(parsed.payCredit()) + "/"
+                + Money.format(parsed.interestCredit()) : Money.format(parsed.amount());
+        return String.join("|", String.valueOf(member), String.valueOf(parsed.valueOn()), figure,
+                String.valueOf(parsed.reason()), String.valueOf(parsed.plan()), String.valueOf(replaces));
     }
 
     /** The fingerprint the request would have had, as sent (the date of a correction may be left out). */
     private String replayFingerprint(Account account, Row existing, ValueRequest request) {
         Parsed parsed;
         try {
-            if (!(request.amount() instanceof String text) || Money.parse(text).isEmpty()) {
-                throw EntryValidator.bad("Enter a valid amount");
-            }
             LocalDate on = request.valueOn() != null ? request.valueOn()
                     : existing.replacesId() != null ? existing.valueOn() : null;
             if (on == null) {
                 throw EntryValidator.bad("Enter a date");
             }
-            String reason = request.reason() == null || request.reason().isBlank() ? null : request.reason().strip();
-            BigDecimal typed = Money.parse(text).orElseThrow();
-            // A debt's figure is kept with the debt's sign (see amountOf).
-            parsed = new Parsed(AccountType.isDebt(account.type()) ? typed.negate() : typed, on, reason,
-                    Boolean.TRUE.equals(request.plan()));
+            parsed = replayParsed(account, request, on);
         } catch (ResponseStatusException e) {
             return "";
         }
         return fingerprint(parsed, request.enteredByMemberId(), existing.replacesId());
+    }
+
+    private static Parsed replayParsed(Account account, ValueRequest request, LocalDate on) {
+        String reason = request.reason() == null || request.reason().isBlank() ? null : request.reason().strip();
+        boolean plan = Boolean.TRUE.equals(request.plan());
+        if (request.payCredit() != null || request.interestCredit() != null) {
+            return new Parsed(null, on, reason, plan, PlanStatements.credit(request.payCredit(), "Pay credit"),
+                    PlanStatements.credit(request.interestCredit(), "Benefit interest"));
+        }
+        if (!(request.amount() instanceof String text) || Money.parse(text).isEmpty()) {
+            throw EntryValidator.bad("Enter a valid amount");
+        }
+        BigDecimal typed = Money.parse(text).orElseThrow();
+        // A debt's figure is kept with the debt's sign (see amountOf).
+        return new Parsed(AccountType.isDebt(account.type()) ? typed.negate() : typed, on, reason, plan);
     }
 
     private Mono<Account> lockedValued(UUID accountId) {

@@ -11,18 +11,19 @@ import java.util.Optional;
  * (foundations 3, 5).
  */
 public enum AccountType {
-    CHECKING(Kind.LEDGER),
-    SAVINGS(Kind.LEDGER),
-    CREDIT_CARD(Kind.LEDGER),
-    PROPERTY(Kind.VALUED),
-    OTHER_ASSET(Kind.VALUED),
-    LOAN(Kind.DEBT),
-    MORTGAGE(Kind.DEBT),
-    BROKERAGE(Kind.INVESTMENT),
-    K401(Kind.INVESTMENT, "401k"),
-    TRADITIONAL_IRA(Kind.INVESTMENT),
-    ROTH_IRA(Kind.INVESTMENT),
-    HSA(Kind.INVESTMENT);
+    CHECKING(Kind.LEDGER, WealthGroup.BANK_MONEY),
+    SAVINGS(Kind.LEDGER, WealthGroup.BANK_MONEY),
+    CREDIT_CARD(Kind.LEDGER, WealthGroup.CARDS),
+    PROPERTY(Kind.VALUED, WealthGroup.PROPERTY_AND_OTHER),
+    OTHER_ASSET(Kind.VALUED, WealthGroup.PROPERTY_AND_OTHER),
+    DEFINED_BENEFIT(Kind.VALUED, WealthGroup.RETIREMENT, true),
+    LOAN(Kind.DEBT, WealthGroup.LOANS),
+    MORTGAGE(Kind.DEBT, WealthGroup.MORTGAGES),
+    BROKERAGE(Kind.INVESTMENT, WealthGroup.INVESTMENTS),
+    K401(Kind.INVESTMENT, WealthGroup.INVESTMENTS, false, "401k"),
+    TRADITIONAL_IRA(Kind.INVESTMENT, WealthGroup.INVESTMENTS),
+    ROTH_IRA(Kind.INVESTMENT, WealthGroup.INVESTMENTS),
+    HSA(Kind.INVESTMENT, WealthGroup.INVESTMENTS);
 
     /**
      * How a type's Balance is read: opening plus signed activity (ledger), the latest dated value (valued), or the
@@ -35,16 +36,54 @@ public enum AccountType {
     }
 
     private final Kind kind;
+    private final WealthGroup baseGroup;
+    private final boolean singleOwner;
     private final String wire;
 
-    AccountType(Kind kind) {
-        this(kind, null);
+    AccountType(Kind kind, WealthGroup baseGroup) {
+        this(kind, baseGroup, false, null);
+    }
+
+    AccountType(Kind kind, WealthGroup baseGroup, boolean singleOwner) {
+        this(kind, baseGroup, singleOwner, null);
     }
 
     /** `wire` is the JSON and database name when it is not the lowercase enum name (a name cannot start with 4). */
-    AccountType(Kind kind, String wire) {
+    AccountType(Kind kind, WealthGroup baseGroup, boolean singleOwner, String wire) {
         this.kind = kind;
+        this.baseGroup = baseGroup;
+        this.singleOwner = singleOwner;
         this.wire = wire == null ? name().toLowerCase(java.util.Locale.ROOT) : wire;
+    }
+
+    /** The one group that counts this type in wealth totals; the base groups partition every account. */
+    public WealthGroup baseGroup() {
+        return baseGroup;
+    }
+
+    /** Every group that lists this type: its base group and any overlapping view (none yet; slice 18b). */
+    public java.util.Set<WealthGroup> groups() {
+        return java.util.EnumSet.of(baseGroup);
+    }
+
+    /** True when the type is listed in the group: the one place wealth decides group membership. */
+    public static boolean inGroup(String wire, WealthGroup group) {
+        return fromWire(wire).filter(type -> type.groups().contains(group)).isPresent();
+    }
+
+    /** True for a type held by exactly one member (a defined benefit's participant); the rule is enforced on save. */
+    public boolean singleOwner() {
+        return singleOwner;
+    }
+
+    /** True for a type whose setup records the member who entered it (D-062): an investment or a defined benefit. */
+    public boolean recordsCreator() {
+        return kind == Kind.INVESTMENT || this == DEFINED_BENEFIT;
+    }
+
+    /** The refusal when a one-owner type is given several owners. */
+    public String singleOwnerMessage() {
+        return "A defined benefit has one participant. Choose one member.";
     }
 
     /** How this type's Balance is read. */

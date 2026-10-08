@@ -10,9 +10,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mdstech.wealthmesh.account.domain.AccountType;
+import com.mdstech.wealthmesh.account.domain.WealthGroup;
 import com.mdstech.wealthmesh.money.Money;
 import com.mdstech.wealthmesh.wealth.dto.WealthChange;
 import com.mdstech.wealthmesh.wealth.dto.WealthChange.CorrectionLine;
+import com.mdstech.wealthmesh.wealth.dto.WealthChange.CreditLine;
 import com.mdstech.wealthmesh.wealth.dto.WealthChange.Restatement;
 import com.mdstech.wealthmesh.wealth.dto.WealthChange.ValueMove;
 import com.mdstech.wealthmesh.wealth.dto.WealthSummary;
@@ -67,14 +69,15 @@ public class WealthService {
         }).flatMap(dates -> Mono.zip(store.balancesAsOf(dates[0]).collectList(), store.balancesAsOf(dates[1])
                 .collectList(), store.flowsBetween(dates[0], dates[1]),
                 store.correctionsBetween(dates[0], dates[1]).collectList(),
-                store.restatementsBetween(dates[0], dates[1], clock.getZone().getId()).collectList())
+                store.restatementsBetween(dates[0], dates[1], clock.getZone().getId()).collectList(),
+                store.creditsBetween(dates[0], dates[1]).collectList())
                 .map(all -> explain(dates[0], dates[1], all.getT1(), all.getT2(), all.getT3(), all.getT4(),
-                        all.getT5())));
+                        all.getT5(), all.getT6())));
     }
 
     private static WealthChange explain(LocalDate from, LocalDate to, List<Balance> start, List<Balance> end,
             WealthStore.Flows flows, List<WealthStore.CorrectionRow> corrected,
-            List<WealthStore.RestatementRow> restated) {
+            List<WealthStore.RestatementRow> restated, List<WealthStore.CreditRow> credited) {
         BigDecimal startWealth = start.stream().map(WealthService::balance).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal endWealth = end.stream().map(WealthService::balance).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal valueChange = BigDecimal.ZERO;
@@ -87,7 +90,10 @@ public class WealthService {
             }
             if (AccountType.isValued(now.type())) {
                 BigDecimal base = before == null ? now.opening() : balance(before);
-                BigDecimal moved = balance(now).subtract(base);
+                // A statement's credits are their own terms of the identity, not an asset value change.
+                BigDecimal credits = credited.stream().filter(c -> c.accountId().equals(now.id()))
+                        .map(c -> c.payCredit().add(c.interestCredit())).reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal moved = balance(now).subtract(base).subtract(credits);
                 valueChange = valueChange.add(moved);
                 if (moved.signum() != 0) {
                     moves.add(new ValueMove(now.id().toString(), now.name(), now.type(), Money.format(base),
@@ -96,8 +102,12 @@ public class WealthService {
             }
         }
         BigDecimal change = endWealth.subtract(startWealth);
+        BigDecimal pay = credited.stream().map(WealthStore.CreditRow::payCredit).reduce(BigDecimal.ZERO,
+                BigDecimal::add);
+        BigDecimal interest = credited.stream().map(WealthStore.CreditRow::interestCredit).reduce(BigDecimal.ZERO,
+                BigDecimal::add);
         BigDecimal explained = flows.income().subtract(flows.spending()).add(flows.corrections())
-                .add(flows.transfers()).add(valueChange).add(added);
+                .add(flows.transfers()).add(valueChange).add(added).add(pay).add(interest);
         return new WealthChange(from, to, Money.format(startWealth), Money.format(endWealth), Money.format(change),
                 Money.format(flows.income()), Money.format(flows.spending()), Money.format(valueChange),
                 Money.format(flows.corrections()), Money.format(added), Money.format(flows.transfers()),
@@ -106,7 +116,10 @@ public class WealthService {
                         Money.format(c.amount()), c.reason(), c.on())).toList(),
                 restated.stream().map(r -> new Restatement(r.accountId().toString(), r.name(), r.type(),
                         Money.format(r.previous()), Money.format(r.amount()),
-                        Money.format(r.amount().subtract(r.previous())), r.reason(), r.madeOn())).toList());
+                        Money.format(r.amount().subtract(r.previous())), r.reason(), r.madeOn())).toList(),
+                Money.format(pay), Money.format(interest),
+                credited.stream().map(c -> new CreditLine(c.accountId().toString(), c.name(),
+                        Money.format(c.payCredit()), Money.format(c.interestCredit()), c.on())).toList());
     }
 
     /** The Balance on the date: a valued account's effective value (else its opening), or opening plus activity. */
@@ -125,19 +138,25 @@ public class WealthService {
     }
 
     private static WealthSummary summarize(LocalDate asOf, List<Line> lines, List<NotTracked> missing) {
-        List<Line> bank = lines.stream().filter(l -> AccountType.paysCards(l.type())).toList();
-        List<Line> cards = lines.stream().filter(l -> AccountType.isCard(l.type())).toList();
-        List<Line> loans = lines.stream().filter(l -> AccountType.LOAN.wire().equals(l.type())).toList();
-        List<Line> mortgages = lines.stream().filter(l -> AccountType.MORTGAGE.wire().equals(l.type())).toList();
-        List<Line> valued = lines.stream().filter(l -> AccountType.isValued(l.type())).toList();
-        List<Line> investments = lines.stream().filter(l -> AccountType.isInvestment(l.type())).toList();
+        List<Line> bank = in(lines, WealthGroup.BANK_MONEY);
+        List<Line> cards = in(lines, WealthGroup.CARDS);
+        List<Line> loans = in(lines, WealthGroup.LOANS);
+        List<Line> mortgages = in(lines, WealthGroup.MORTGAGES);
+        List<Line> valued = in(lines, WealthGroup.PROPERTY_AND_OTHER);
+        List<Line> investments = in(lines, WealthGroup.INVESTMENTS);
+        List<Line> retirement = in(lines, WealthGroup.RETIREMENT);
+        // Financial assets and debts come from the lines, never from a group total (a group is a view, D-064).
         BigDecimal assets = lines.stream().map(WealthService::amount).filter(b -> b.signum() > 0)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         List<Line> debtLines = lines.stream().filter(l -> amount(l).signum() < 0).toList();
         BigDecimal debts = debtLines.stream().map(l -> amount(l).negate()).reduce(BigDecimal.ZERO, BigDecimal::add);
         return new WealthSummary(asOf, Money.format(assets), Money.format(debts), Money.format(assets.subtract(debts)),
-                group(bank), group(cards), group(loans), group(mortgages), group(investments), group(valued),
-                debtLines, missing);
+                group(bank), group(cards), group(loans), group(mortgages), group(investments), group(retirement),
+                group(valued), debtLines, missing);
+    }
+
+    private static List<Line> in(List<Line> lines, WealthGroup group) {
+        return lines.stream().filter(l -> AccountType.inGroup(l.type(), group)).toList();
     }
 
     private static Group group(List<Line> lines) {

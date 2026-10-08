@@ -19,7 +19,9 @@ import com.mdstech.wealthmesh.account.dto.AccountUpdateRequest;
 import com.mdstech.wealthmesh.account.mapper.AccountMapper;
 import com.mdstech.wealthmesh.account.repository.AccountOwnerStore;
 import com.mdstech.wealthmesh.account.repository.AccountRepository;
+import com.mdstech.wealthmesh.account.repository.AccountUsageStore;
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
+import com.mdstech.wealthmesh.activity.service.EntryValidator;
 import com.mdstech.wealthmesh.household.domain.HouseholdMember;
 import com.mdstech.wealthmesh.household.repository.HouseholdMemberRepository;
 import com.mdstech.wealthmesh.household.repository.HouseholdRepository;
@@ -38,10 +40,15 @@ public class AccountService {
     private final HouseholdMemberRepository members;
     private final AccountMapper mapper;
     private final ActivityStore activity;
+    private final EntryValidator validator;
+    private final AccountUsageStore usage;
     private final Clock clock;
 
     public AccountService(AccountRepository accounts, AccountOwnerStore owners, HouseholdRepository households,
-            HouseholdMemberRepository members, AccountMapper mapper, ActivityStore activity, Clock clock) {
+            HouseholdMemberRepository members, AccountMapper mapper, ActivityStore activity, EntryValidator validator,
+            AccountUsageStore usage, Clock clock) {
+        this.validator = validator;
+        this.usage = usage;
         this.accounts = accounts;
         this.owners = owners;
         this.households = households;
@@ -68,14 +75,26 @@ public class AccountService {
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
                         "Create the household first")))
                 .flatMap(household -> Mono.fromCallable(() -> parse(request, LocalDate.now(clock)))
-                        .flatMap(parsed -> checkOwners(household.id(), request.ownerMemberIds(), List.of())
-                                .flatMap(ownerIds -> accounts.save(mapper.toNewEntity(household.id(),
+                        .flatMap(parsed -> checkOwners(household.id(), request.ownerMemberIds(), List.of(),
+                                parsed.type())
+                                .flatMap(ownerIds -> creator(household.id(), parsed.type(), request)
+                                .flatMap(creatorId -> accounts.save(mapper.toNewEntity(household.id(),
                                         parsed.type().wire(), parsed.name(), parsed.institution(), parsed.openedOn(),
                                         parsed.openingAmount()))
                                         .flatMap(saved -> owners.replace(household.id(), saved.id(), ownerIds)
+                                                .then(parsed.type().recordsCreator()
+                                                        ? usage.recordEvent(saved.id(), "set_up", creatorId.get(),
+                                                                clock.instant())
+                                                        : Mono.<Void>empty())
                                                 .thenReturn(saved))
                                         .map(saved -> mapper.toResponse(saved, ownerIds,
-                                                mapper.balance(saved, ActivityStore.Delta.NONE))))));
+                                                mapper.balance(saved, ActivityStore.Delta.NONE)))))));
+    }
+
+    /** The member who entered a type that records its creator (read FOR SHARE), else nobody. */
+    private Mono<java.util.Optional<UUID>> creator(UUID householdId, AccountType type, AccountRequest request) {
+        return type.recordsCreator() ? validator.memberLocked(householdId, request.enteredByMemberId())
+                .map(java.util.Optional::of) : Mono.just(java.util.Optional.empty());
     }
 
     @Transactional
@@ -87,7 +106,8 @@ public class AccountService {
                 .flatMap(existing -> Mono.fromRunnable(() -> requireInstitution(request.institution(),
                         AccountType.fromWire(existing.type()).orElseThrow()))
                         .then(owners.ownersOf(existing.id()))
-                        .flatMap(current -> checkOwners(existing.householdId(), request.ownerMemberIds(), current))
+                        .flatMap(current -> checkOwners(existing.householdId(), request.ownerMemberIds(), current,
+                                AccountType.fromWire(existing.type()).orElseThrow()))
                         .flatMap(ownerIds -> accounts.save(mapper.toUpdatedEntity(request, existing))
                                 .flatMap(saved -> owners.replace(saved.householdId(), saved.id(), ownerIds)
                                         .thenReturn(saved))
@@ -108,12 +128,13 @@ public class AccountService {
         if (request.opening() != null) {
             throw bad("Cash and holdings apply to an investment account only");
         }
-        if (request.enteredByMemberId() != null) {
-            throw bad("Who set it up applies to an investment account only");
+        if (request.enteredByMemberId() != null && !type.recordsCreator()) {
+            throw bad("Who set it up applies to an investment account or a defined benefit only");
         }
         opening = signed(type, opening, request.balanceSide());
         if (type.valued() && opening.signum() < 0) {
             throw bad(type == AccountType.PROPERTY ? "Enter zero or a positive property value"
+                    : type == AccountType.DEFINED_BENEFIT ? "Plan value must be zero or greater"
                     : "Enter zero or a positive asset value");
         }
         LocalDate openedOn = request.openedOn() == null ? today : request.openedOn();
@@ -217,11 +238,15 @@ public class AccountService {
      * on an account they already own. The member rows are read FOR SHARE so a deactivate cannot slip in between
      * this check and the save.
      */
-    public Mono<List<UUID>> checkOwners(UUID householdId, List<UUID> requested, List<UUID> current) {
+    public Mono<List<UUID>> checkOwners(UUID householdId, List<UUID> requested, List<UUID> current,
+            AccountType type) {
         if (requested == null || requested.isEmpty()) {
             return Mono.error(bad("Choose an owner"));
         }
         List<UUID> distinct = requested.stream().distinct().sorted().toList();
+        if (type.singleOwner() && distinct.size() > 1) {
+            return Mono.error(bad(type.singleOwnerMessage()));
+        }
         return members.findByHouseholdIdForShare(householdId).collectList()
                 .flatMap(inHousehold -> {
                     List<UUID> ids = inHousehold.stream().map(HouseholdMember::id).toList();

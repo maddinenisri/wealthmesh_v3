@@ -83,6 +83,30 @@ public class WealthStore {
             String reason, LocalDate madeOn) {
     }
 
+    /** One defined benefit statement in a period: the credits it reported and the date they are for. */
+    public record CreditRow(UUID accountId, String name, String type, BigDecimal payCredit,
+            BigDecimal interestCredit, LocalDate on) {
+    }
+
+    /**
+     * The pay and interest credits of the statements dated after `from` and up to `to` that still count (not removed,
+     * not replaced by a correction), oldest first. A credit is not income: it is part of a plan value.
+     */
+    public Flux<CreditRow> creditsBetween(LocalDate from, LocalDate to) {
+        return client.sql("""
+                        SELECT v.account_id, ac.name, ac.type, v.pay_credit, v.interest_credit, v.value_on
+                        FROM account_value v
+                        JOIN account ac ON ac.id = v.account_id AND ac.deleted_at IS NULL AND ac.status <> 'draft'
+                        WHERE v.pay_credit IS NOT NULL AND v.removed_at IS NULL AND v.replaced_at IS NULL
+                          AND NOT v.planned AND v.value_on > :from AND v.value_on <= :to
+                        ORDER BY v.value_on, v.created_at""")
+                .bind("from", from).bind("to", to)
+                .map((row, meta) -> new CreditRow(row.get("account_id", UUID.class), row.get("name", String.class),
+                        row.get("type", String.class), row.get("pay_credit", BigDecimal.class),
+                        row.get("interest_credit", BigDecimal.class), row.get("value_on", LocalDate.class)))
+                .all();
+    }
+
     /** The Balance corrections dated after `from` and up to `to` that still count, oldest first. */
     public Flux<CorrectionRow> correctionsBetween(LocalDate from, LocalDate to) {
         return client.sql("""

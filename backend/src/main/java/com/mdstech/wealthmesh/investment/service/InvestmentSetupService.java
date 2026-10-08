@@ -100,7 +100,7 @@ public class InvestmentSetupService {
         Mono<List<UUID>> current = accountId == null ? Mono.just(List.<UUID>of()) : owners.ownersOf(accountId);
         return household().flatMap(household -> Mono.fromCallable(() -> header(request))
                 .flatMap(head -> current.flatMap(kept -> accountService.checkOwners(household.id(),
-                        request.ownerMemberIds(), kept)).thenReturn(head.components().preview())));
+                        request.ownerMemberIds(), kept, head.type())).thenReturn(head.components().preview())));
     }
 
     /** Saves a complete setup as an active account, or an incomplete one as a draft; a mismatch is refused. */
@@ -114,7 +114,7 @@ public class InvestmentSetupService {
                     boolean draft = components.state() == OpeningComponents.State.DRAFT;
                     return validator.memberLocked(household.id(), request.enteredByMemberId())
                             .flatMap(memberId -> accountService.checkOwners(household.id(),
-                                    request.ownerMemberIds(), List.of())
+                                    request.ownerMemberIds(), List.of(), head.type())
                             .flatMap(ownerIds -> accounts.save(new Account(null, household.id(),
                                     head.type().wire(), head.name(), head.institution(), head.openedOn(),
                                     openingAmount(components), draft ? "draft" : AccountState.ACTIVE,

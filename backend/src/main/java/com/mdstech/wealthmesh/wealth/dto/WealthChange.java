@@ -5,18 +5,25 @@ import java.util.List;
 
 /**
  * What explains the change in wealth between two dates, for the rows dated after `from` and up to `to`:
- * `change = income - spending + valueChange + corrections + accountsAdded + transfers + other`, where `change` is
+ * `change = income - spending + valueChange + payCredits + benefitInterest + corrections + accountsAdded +
+ * transfers + other`, where `change` is
  * `endWealth - startWealth`. Transfers and card payments cancel (`transfers` is zero), an asset value change is never
  * income, a Balance correction never income or spending, and `other` discloses anything not explained (zero when the
- * parts add up). `correctionLines` names each Balance correction in the period (the loan's "debt correction" is one),
- * and `restatements` names each starting amount corrected in the period: the figures on every date already use the
- * corrected amount, so a restatement explains a difference with earlier reports and is not a term of the identity.
+ * parts add up). A defined benefit's pay and interest credits are their own terms, never income and never inside
+ * `valueChange` (`creditLines` names each statement). `correctionLines` names each Balance correction in the period
+ * (the loan's "debt correction" is one), and `restatements` names each starting amount corrected in the period: the
+ * figures on every date already use the corrected amount, so a restatement explains a difference with earlier
+ * reports and is not a term of the identity.
  * Every figure is a money string.
  */
 public record WealthChange(LocalDate from, LocalDate to, String startWealth, String endWealth, String change,
         String income, String spending, String valueChange, String corrections, String accountsAdded,
         String transfers, String other, List<ValueMove> valueMoves, List<CorrectionLine> correctionLines,
-        List<Restatement> restatements) {
+        List<Restatement> restatements, String payCredits, String benefitInterest, List<CreditLine> creditLines) {
+
+    /** One defined benefit statement dated in the period: its pay credit and benefit interest credit. */
+    public record CreditLine(String accountId, String name, String payCredit, String interestCredit, LocalDate on) {
+    }
 
     /** One Balance correction dated in the period: its signed effect on the account's Balance and why. */
     public record CorrectionLine(String accountId, String name, String type, String amount, String reason,

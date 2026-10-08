@@ -24,7 +24,7 @@ public class ValueStore {
     /** A stored value, with the names the history shows. */
     public record Row(UUID id, UUID accountId, LocalDate valueOn, BigDecimal amount, String reason, boolean planned,
             UUID enteredByMemberId, String enteredBy, UUID replacesId, Instant replacedAt, Instant removedAt,
-            String removedBy, String fingerprint, Instant createdAt) {
+            String removedBy, String fingerprint, Instant createdAt, BigDecimal payCredit, BigDecimal interestCredit) {
 
         public boolean effective() {
             return removedAt == null && replacedAt == null && !planned;
@@ -38,7 +38,7 @@ public class ValueStore {
     private static final String ROWS = """
             SELECT v.id, v.account_id, v.value_on, v.amount, v.reason, v.planned, v.entered_by_member_id,
                    m.name AS entered_by, v.replaces_id, v.replaced_at, v.removed_at, rm.name AS removed_by,
-                   v.fingerprint, v.created_at
+                   v.fingerprint, v.created_at, v.pay_credit, v.interest_credit
             FROM account_value v JOIN household_member m ON m.id = v.entered_by_member_id
             LEFT JOIN household_member rm ON rm.id = v.removed_by_member_id""";
 
@@ -55,7 +55,8 @@ public class ValueStore {
                 r.get("entered_by", String.class), r.get("replaces_id", UUID.class),
                 r.get("replaced_at", Instant.class), r.get("removed_at", Instant.class),
                 r.get("removed_by", String.class), r.get("fingerprint", String.class),
-                r.get("created_at", Instant.class));
+                r.get("created_at", Instant.class), r.get("pay_credit", BigDecimal.class),
+                r.get("interest_credit", BigDecimal.class));
     }
 
     public Flux<Row> rowsOf(UUID accountId) {
@@ -139,16 +140,20 @@ public class ValueStore {
     }
 
     public Mono<UUID> insert(UUID accountId, LocalDate valueOn, BigDecimal amount, String reason, boolean planned,
-            UUID memberId, UUID replacesId, String key, String fingerprint, Instant now) {
+            UUID memberId, UUID replacesId, String key, String fingerprint, Instant now, BigDecimal payCredit,
+            BigDecimal interestCredit) {
         DatabaseClient.GenericExecuteSpec spec = client.sql("INSERT INTO account_value (account_id, value_on, amount, "
                         + "reason, planned, entered_by_member_id, replaces_id, idempotency_key, fingerprint, "
-                        + "created_at) VALUES (:account, :on, :amount, :reason, :planned, :member, :replaces, :key, "
-                        + ":fingerprint, :now) RETURNING id")
+                        + "created_at, pay_credit, interest_credit) VALUES (:account, :on, :amount, :reason, "
+                        + ":planned, :member, :replaces, :key, :fingerprint, :now, :pay, :interest) RETURNING id")
                 .bind("account", accountId).bind("on", valueOn).bind("amount", amount).bind("planned", planned)
                 .bind("member", memberId).bind("fingerprint", fingerprint).bind("now", now);
         spec = reason == null ? spec.bindNull("reason", String.class) : spec.bind("reason", reason);
         spec = replacesId == null ? spec.bindNull("replaces", UUID.class) : spec.bind("replaces", replacesId);
         spec = key == null ? spec.bindNull("key", String.class) : spec.bind("key", key);
+        spec = payCredit == null ? spec.bindNull("pay", BigDecimal.class) : spec.bind("pay", payCredit);
+        spec = interestCredit == null ? spec.bindNull("interest", BigDecimal.class)
+                : spec.bind("interest", interestCredit);
         return spec.map((r, meta) -> r.get("id", UUID.class)).one();
     }
 
