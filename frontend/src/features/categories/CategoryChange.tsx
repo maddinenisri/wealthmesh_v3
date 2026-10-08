@@ -371,7 +371,7 @@ export function MergeCategories({
           </SelectField>
           {!target && <TextField control={control} name="newName" label="New category name" />}
           {problem && (
-            <p role="alert" className="text-sm text-danger">
+            <p role="alert" className="text-sm text-negative">
               {problem}
             </p>
           )}

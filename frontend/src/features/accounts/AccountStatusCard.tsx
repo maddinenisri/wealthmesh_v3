@@ -214,8 +214,9 @@ export function AccountStatusCard({
                 {facts.isError && <FormAlert message={facts.error.message} />}
                 {facts.data?.canDelete && (
                   <p className="text-sm">
-                    {account.name} has no saved history, so it can be deleted. It leaves the account
-                    list and wealth does not change. You can Undo right after.
+                    {account.name} has no saved entries, reminders or statements, so it can be
+                    deleted. It leaves the account list and wealth does not change. You can Undo
+                    right after.
                   </p>
                 )}
                 {facts.data && !facts.data.canDelete && (

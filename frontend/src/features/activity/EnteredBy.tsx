@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { Member } from '../../api/household'
 import { Button, Select } from '../../design-system'
 import { memberLabel } from '../accounts/ownerNames'
@@ -14,8 +14,9 @@ export function EnteredBy({
   setMemberId: (id: string) => void
 }) {
   const [changing, setChanging] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
   return (
-    <div className="mt-3 max-w-md text-sm">
+    <div ref={root} className="mt-3 max-w-md text-sm">
       {changing || !member ? (
         <Select
           label="Entered by"
@@ -23,6 +24,8 @@ export function EnteredBy({
           onChange={(event) => {
             setMemberId(event.target.value)
             setChanging(false)
+            // The chooser is replaced by "Entered by: Maya (Change)"; focus goes to Change, not the body.
+            requestAnimationFrame(() => root.current?.querySelector('button')?.focus())
           }}
         >
           <option value="">Choose who is entering this</option>

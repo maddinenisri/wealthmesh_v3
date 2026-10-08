@@ -226,7 +226,11 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
             setOpeningReview(null)
             // The form is back on the page. A mismatch is about the typed total, so focus goes there (it can sit
             // below the fold); any other review returns to the first field, not the body.
-            requestAnimationFrame(() => setFocus(result.state === 'mismatch' ? 'total' : 'name'))
+            requestAnimationFrame(() => {
+              setFocus(result.state === 'mismatch' ? 'total' : 'name')
+              // The field can land on the bottom edge of a short window; bring it to the middle.
+              ;(document.activeElement as HTMLElement | null)?.scrollIntoView?.({ block: 'center' })
+            })
           }}
           cancel={
             <Link to="/accounts" className={buttonStyles({ variant: 'ghost' })}>
@@ -370,7 +374,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         <div data-entered-by>
           <EnteredBy members={members} member={member} setMemberId={setMemberId} />
           {memberMissing && !member && (
-            <p role="alert" className="mt-1 text-sm text-danger">
+            <p role="alert" className="mt-1 text-sm text-negative">
               Choose who is setting up this account
             </p>
           )}

@@ -287,7 +287,7 @@ for (const width of [710, 1280]) {
       await opener.click()
       const review = page.getByRole('region', { name: `Review deleting ${name}` })
       await expectFocusInside(review)
-      await expect(review).toContainText('no saved history')
+      await expect(review).toContainText('no saved entries, reminders or statements')
       await review.getByRole('button', { name: 'Cancel' }).click()
       await expect(opener).toBeFocused()
 

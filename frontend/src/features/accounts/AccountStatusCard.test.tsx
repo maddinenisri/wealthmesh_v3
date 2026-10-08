@@ -122,7 +122,9 @@ describe('Archive and restore an account', () => {
     const opener = await screen.findByRole('button', { name: 'Delete account' })
     await user.click(opener)
     const review = await screen.findByRole('region', { name: 'Review deleting Test Savings' })
-    expect(await within(review).findByText(/no saved history/)).toBeInTheDocument()
+    expect(
+      await within(review).findByText(/no saved entries, reminders or statements/),
+    ).toBeInTheDocument()
     await user.click(within(review).getByRole('button', { name: 'Cancel' }))
     expect(opener).toHaveFocus()
     await user.click(opener)

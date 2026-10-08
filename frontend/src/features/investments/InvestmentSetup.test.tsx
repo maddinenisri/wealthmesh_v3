@@ -1,5 +1,5 @@
 import { fireEvent, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockApi, type MockAccount } from '../../test/mockApi'
 import type { MockOpening } from '../../test/mockInvestments'
 import { renderRoute } from '../../test/render'
@@ -109,9 +109,24 @@ describe('setting up a brokerage', () => {
     expect(alert).toHaveAttribute('role', 'alert')
     await vi_waitFocus(screen.getByLabelText('Entered by'))
     expect(api.requests).not.toContain('POST /api/v1/accounts/opening-preview')
+    // The message reads as an error (red), like every other refusal.
+    expect(alert).toHaveClass('text-negative')
     await user.selectOptions(screen.getByLabelText('Entered by'), 'Maya')
+    // The chooser turns into "Entered by: Maya (Change)": focus goes to Change, not the body.
+    await vi_waitFocus(screen.getByRole('button', { name: 'Change' }))
     await user.click(screen.getByRole('button', { name: 'Review' }))
     expect(await screen.findByRole('heading', { name: 'Review new brokerage' })).toBeVisible()
+  })
+
+  it('V2_BROKERAGE_003 with nobody entering, the draft page offers the chooser and Cancel draft waits for a choice', async () => {
+    window.localStorage.removeItem('wealthmesh.enteringAs')
+    mockApi({ ...seed, accounts: [draftAccount()], openings: { [ID]: { ...draftOpening } } })
+    const { user } = renderRoute(`/accounts/${ID}`)
+    const cancel = await screen.findByRole('button', { name: 'Cancel draft' })
+    expect(cancel).toBeDisabled()
+    // The reason is on the page, not only in a tooltip.
+    await user.selectOptions(await screen.findByLabelText('Entered by'), 'Maya')
+    expect(screen.getByRole('button', { name: 'Cancel draft' })).toBeEnabled()
   })
 
   it('V2_BROKERAGE_002 history says who set it up and when: the member who entered it, not the owner', async () => {
@@ -176,9 +191,13 @@ describe('setting up a brokerage', () => {
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled()
     expect(screen.getByText('$100.00', { selector: 'dd' })).toBeVisible()
 
+    const scrolled = vi.fn()
+    Element.prototype.scrollIntoView = scrolled
     await user.click(screen.getByRole('button', { name: 'Back' }))
     // The mismatch is about the total, so Back lands on it (it can sit below the fold on a narrow window).
     await vi_waitFocus(screen.getByLabelText('Opening total'))
+    // Not left on the bottom edge: the field is brought to the middle so its hint and the Cash below it show.
+    expect(scrolled).toHaveBeenCalledWith({ block: 'center' })
     expect(screen.getByLabelText('Cash')).toHaveValue('100')
     const total = screen.getByLabelText('Opening total')
     await user.clear(total)
@@ -503,7 +522,11 @@ describe('Cowork pass faults', () => {
     expect(await screen.findByText(/is saved as a draft/)).toBeVisible()
 
     await user.click(await screen.findByRole('button', { name: 'Delete account' }))
-    expect(await screen.findByText(/has no saved history, so it can be deleted/)).toBeVisible()
+    expect(
+      await screen.findByText(
+        /has no saved entries, reminders or statements, so it can be deleted/,
+      ),
+    ).toBeVisible()
     expect(screen.queryByText(/is saved as a draft/)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByText(/is saved as a draft/)).not.toBeInTheDocument()
@@ -527,7 +550,11 @@ describe('deleting a draft', () => {
     })
     const { user } = renderRoute(`/accounts/${ID}`)
     await user.click(await screen.findByRole('button', { name: 'Delete account' }))
-    expect(await screen.findByText(/has no saved history, so it can be deleted/)).toBeVisible()
+    expect(
+      await screen.findByText(
+        /has no saved entries, reminders or statements, so it can be deleted/,
+      ),
+    ).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Delete Redwood Brokerage' }))
 
     const status = await screen.findByText('Redwood Brokerage is deleted. Wealth does not change.')

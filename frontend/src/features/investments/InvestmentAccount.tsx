@@ -8,6 +8,7 @@ import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { useDiscardDraft, useOpening } from '../../hooks/useInvestments'
 import { formatMoney } from '../../lib/money'
 import { useStateChangeFocus } from '../accounts/useStateChangeFocus'
+import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
 import { StatementsCard } from '../statements/StatementsCard'
 import { FinishSetup } from './FinishSetup'
@@ -90,7 +91,7 @@ export function InvestmentAccount({
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewsOpened])
   const today = useToday()
-  const { member } = useEnteringAs(members)
+  const { member, setMemberId } = useEnteringAs(members)
   const discard = useDiscardDraft(account.id, member?.id ?? '')
   const opening = useOpening(account.id)
   const draft = account.status === 'draft'
@@ -180,7 +181,7 @@ export function InvestmentAccount({
             <Button
               variant="secondary"
               disabled={finishing || asking || !member}
-              title={member ? undefined : 'Choose who is entering (Entering as) to cancel'}
+              title={member ? undefined : 'Choose who is entering to cancel'}
               onClick={() => {
                 begin()
                 setAsking(true)
@@ -189,6 +190,9 @@ export function InvestmentAccount({
               Cancel draft
             </Button>
           </div>
+          {members && !member && (
+            <EnteredBy members={members} member={member} setMemberId={setMemberId} />
+          )}
         </Card>
       )}
       <OpeningCard account={account} />

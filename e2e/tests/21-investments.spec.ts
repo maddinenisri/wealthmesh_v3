@@ -129,6 +129,25 @@ for (const width of [710, 1280] as const) {
       await expect(page.getByText('Choose who is setting up this account')).toBeVisible()
       await expect(page.getByLabel('Entered by')).toBeFocused()
       await expect(page.getByRole('heading', { name: 'Review new brokerage' })).toHaveCount(0)
+      // Choosing turns the chooser into "Entered by: ... (Change)"; focus goes to Change, not the body.
+      await page.getByLabel('Entered by').selectOption({ index: 1 })
+      await expect(page.getByRole('button', { name: 'Change' })).toBeFocused()
+    })
+
+    test(`V2_BROKERAGE_003 with nobody entering, the draft page offers the chooser and Cancel draft waits (${width}px)`, async ({
+      page,
+    }) => {
+      const name = `Chooser Draft ${width}`
+      await fillSetup(page, name, { total: '500', holdings: [['HOME', '5', '100', '']] })
+      await page.getByRole('button', { name: 'Review' }).click()
+      await page.getByRole('button', { name: 'Save draft' }).click()
+      await expect(page.getByRole('button', { name: 'Finish setup' })).toBeVisible()
+      // The init script that sets the member runs again on reload; a later one clears it.
+      await page.addInitScript(() => window.localStorage.removeItem('wealthmesh.enteringAs'))
+      await page.reload()
+      await expect(page.getByRole('button', { name: 'Cancel draft' })).toBeDisabled()
+      await page.getByLabel('Entered by').selectOption({ index: 1 })
+      await expect(page.getByRole('button', { name: 'Cancel draft' })).toBeEnabled()
     })
 
     for (const [input, fields, label, message] of [
@@ -297,7 +316,9 @@ for (const width of [710, 1280] as const) {
       await expect(page.getByRole('button', { name: 'Finish setup' })).toBeVisible()
       const before = await financialAssets(page)
       await page.getByRole('button', { name: 'Delete account' }).click()
-      await expect(page.getByText(/has no saved history, so it can be deleted/)).toBeVisible()
+      await expect(
+        page.getByText(/has no saved entries, reminders or statements, so it can be deleted/),
+      ).toBeVisible()
       // The arrival sentence ("saved as a draft") is gone while the review is open.
       await expect(page.getByText(`${name} is saved as a draft.`)).toHaveCount(0)
       await page.getByRole('button', { name: `Delete ${name}` }).click()
