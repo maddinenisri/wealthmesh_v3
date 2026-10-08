@@ -39,6 +39,11 @@ class InvestmentDraftApiTests extends InvestmentTestBase {
                 .jsonPath("$.openingTotal").isEqualTo("80000.00")
                 .jsonPath("$.message").value(text -> assertThat(String.valueOf(text)).contains("opening cash"));
         assertAccountNamed("Redwood Brokerage", false);
+        // With no total typed, the message does not speak of a total that was never entered.
+        previewInvestment(TYPE, "Redwood Brokerage", "2026-09-01",
+                opening(null, null, holding("HOME", "1", "100.00", "2026-09-01"))).expectStatus().isOk()
+                .expectBody().jsonPath("$.state").isEqualTo("draft").jsonPath("$.message")
+                .value(text -> assertThat(String.valueOf(text)).contains("opening cash").doesNotContain("total"));
     }
 
     @Order(2)

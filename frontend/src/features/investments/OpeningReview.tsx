@@ -93,8 +93,9 @@ export function OpeningReview({
         </>
       ) : draft ? (
         <p>
-          {name} will be saved as a draft. Cash has not been answered, and it is not worked out from
-          the total. It adds nothing to household wealth until setup is finished.
+          {name} will be saved as a draft. Cash has not been answered
+          {preview.openingTotal !== null && ', and it is not worked out from the total'}. It adds
+          nothing to household wealth until setup is finished.
         </p>
       ) : (
         <p>

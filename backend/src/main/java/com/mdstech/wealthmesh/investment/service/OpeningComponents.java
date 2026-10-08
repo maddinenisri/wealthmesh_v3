@@ -176,8 +176,9 @@ public record OpeningComponents(BigDecimal total, BigDecimal cash, List<Line> li
 
     private String message(State state) {
         if (state == State.DRAFT) {
-            return "Enter the opening cash. It is not worked out from the total, so this account stays a draft and "
-                    + "adds nothing to household wealth.";
+            return "Enter the opening cash. " + (total == null ? "" : "It is not worked out from the total, so ")
+                    + (total == null ? "This account" : "this account") + " stays a draft and adds nothing to "
+                    + "household wealth.";
         }
         return state == State.MISMATCH ? mismatchMessage() : null;
     }

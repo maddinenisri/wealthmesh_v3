@@ -181,7 +181,7 @@ export function InvestmentAccount({
             <Button
               variant="secondary"
               disabled={finishing || asking || !member}
-              title={member ? undefined : 'Choose who is entering to cancel'}
+              aria-describedby={member ? undefined : 'cancel-needs-member'}
               onClick={() => {
                 begin()
                 setAsking(true)
@@ -191,7 +191,12 @@ export function InvestmentAccount({
             </Button>
           </div>
           {members && !member && (
-            <EnteredBy members={members} member={member} setMemberId={setMemberId} />
+            <>
+              <p id="cancel-needs-member" className="mt-2 text-sm text-ink-muted">
+                Choose who is entering to cancel this draft.
+              </p>
+              <EnteredBy members={members} member={member} setMemberId={setMemberId} />
+            </>
           )}
         </Card>
       )}

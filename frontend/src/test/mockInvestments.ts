@@ -114,7 +114,7 @@ export function previewBody(opening: MockOpening) {
     missing: state === 'draft' ? ['cash'] : [],
     message:
       state === 'draft'
-        ? 'Enter the opening cash. It is not worked out from the total, so this account stays a draft and adds nothing to household wealth.'
+        ? `Enter the opening cash. ${opening.total === null ? 'This account' : 'It is not worked out from the total, so this account'} stays a draft and adds nothing to household wealth.`
         : state === 'mismatch'
           ? mismatchMessage(opening)
           : null,

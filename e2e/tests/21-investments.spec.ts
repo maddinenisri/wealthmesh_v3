@@ -146,6 +146,7 @@ for (const width of [710, 1280] as const) {
       await page.addInitScript(() => window.localStorage.removeItem('wealthmesh.enteringAs'))
       await page.reload()
       await expect(page.getByRole('button', { name: 'Cancel draft' })).toBeDisabled()
+      await expect(page.getByText('Choose who is entering to cancel this draft.')).toBeVisible()
       await page.getByLabel('Entered by').selectOption({ index: 1 })
       await expect(page.getByRole('button', { name: 'Cancel draft' })).toBeEnabled()
     })

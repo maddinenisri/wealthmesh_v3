@@ -124,7 +124,9 @@ describe('setting up a brokerage', () => {
     const { user } = renderRoute(`/accounts/${ID}`)
     const cancel = await screen.findByRole('button', { name: 'Cancel draft' })
     expect(cancel).toBeDisabled()
-    // The reason is on the page, not only in a tooltip.
+    // The reason is on the page, not only in a tooltip (Cowork fault 1).
+    expect(screen.getByText('Choose who is entering to cancel this draft.')).toBeVisible()
+    expect(cancel).toHaveAccessibleDescription('Choose who is entering to cancel this draft.')
     await user.selectOptions(await screen.findByLabelText('Entered by'), 'Maya')
     expect(screen.getByRole('button', { name: 'Cancel draft' })).toBeEnabled()
   })
@@ -507,6 +509,8 @@ describe('Cowork pass faults', () => {
     const { user } = renderRoute('/accounts/new')
     await fill(user, { holdings: [['HOME', '1', '100']] })
     await user.click(screen.getByRole('button', { name: 'Review' }))
+    // The review says "worked out from the total" only when a total was typed (Cowork fault 2).
+    expect(await screen.findByText(/will be saved as a draft/)).not.toHaveTextContent('total')
     await user.click(await screen.findByRole('button', { name: 'Save draft' }))
     const status = await screen.findByText(/is saved as a draft/)
     expect(status).not.toHaveTextContent('worked out from the total')
