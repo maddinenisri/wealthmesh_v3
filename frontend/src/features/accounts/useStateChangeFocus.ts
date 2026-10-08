@@ -31,13 +31,22 @@ export function useStateChangeFocus(reviewOpen: boolean, arrivedWith?: string) {
   /** Drops the arrival text when another card on the page starts its own review. */
   const clear = () => setMessage(null)
 
-  const changed = (text: string) => {
-    returnFocus.cancel()
-    setMessage(text)
-    requestAnimationFrame(() => {
+  // Focus moves in an effect after the line is on the page. Asking for it in a frame callback right after the state
+  // change could run before React committed the line (the ref was still empty) and focus was then lost.
+  const [changes, setChanges] = useState(0)
+  useEffect(() => {
+    if (changes === 0) return undefined
+    const frame = requestAnimationFrame(() => {
       statusRef.current?.scrollIntoView?.({ block: 'nearest' })
       statusRef.current?.focus({ preventScroll: true })
     })
+    return () => cancelAnimationFrame(frame)
+  }, [changes])
+
+  const changed = (text: string) => {
+    returnFocus.cancel()
+    setMessage(text)
+    setChanges((count) => count + 1)
   }
 
   return { message, statusRef, begin, changed, clear }

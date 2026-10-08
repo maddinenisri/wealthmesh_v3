@@ -244,5 +244,9 @@ Owner walked all seven steps, spread across the four types (chooser and blank se
 
 Left in the dev data by the owner: CW 401k, CW Trad IRA (finished at $5,000.00).
 
+### Vitest timing flake (Land, 2026-10-08), investigated with repeated runs
+
+Ten full Vitest runs with the dev stack stopped: **3 of 10 failed**, each with one `AccountStatusCard.test.tsx` test (ACCOUNT_LIFECYCLE_001 twice, 003 once) at `await waitFor(() => expect(status).toHaveFocus())`: the status line was on the page with its text and focus was on `<body>`. Common cause, read from `useStateChangeFocus.changed()`: it set the message and asked for focus in a `requestAnimationFrame` callback in the same breath; when that frame ran before React committed the line, `statusRef.current` was still empty, the focus call did nothing and nothing retried. A real (rare) race for every state change that uses the hook (archive, close, delete, Finish setup, statement saved), not only a test artefact. Fix: `changed()` counts the change and an effect (after the commit) asks for focus in the next frame. **After the fix: 0 of 10 failed** (full Vitest, same conditions), full e2e 305 passed. This is evidence, not proof (a 30% failure rate over ten runs makes 0 of 10 about a 3% chance if nothing changed). The 17a `DeletedAccountSweepApiTests` read-timeout flake is the backend one: `scripts/flake-check.sh` below. The script covers the backend only; extending it to Vitest is offered below.
+
 
 Advisor: used on this list (2026-10-07: coming-soon, coverage matching, names, lean e2e, flake order); due again before Land.
