@@ -219,6 +219,19 @@ class InvestmentStatementApiTests extends InvestmentTestBase {
                 .jsonPath("$.deleteBlockedBy[?(@ =~ /.*statement.*removed ones count.*/)]").exists();
     }
 
+    @Order(14)
+    @Test
+    @DisplayName("V2_INV_CORRECTION_005 two attaches that both back the opening wait for the lock; the second is refused")
+    void concurrentOpeningAttachesTakeTheLock() throws Exception {
+        String id = investment(TYPE, "Race Attach", "2026-09-01", opening(null, "100.00"));
+        java.util.List<Integer> statuses = both(id,
+                () -> attach(id, "inv-a1", statementBody("100.00", true)),
+                () -> attach(id, "inv-a2", statementBody("100.00", true)));
+        assertThat(statuses).as("one attach links the opening, the other finds it taken")
+                .containsExactlyInAnyOrder(201, 409);
+        assertStatementCount(id, 1);
+    }
+
     private void assertStatementCount(String account, int count) {
         webTestClient.get().uri("/api/v1/accounts/{id}/statements", account).exchange().expectBody()
                 .jsonPath("$.length()").isEqualTo(count);
