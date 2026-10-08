@@ -82,7 +82,10 @@ export function holdingRules(setupOn: () => string, today: string, index: number
       validate: (value: string) => {
         if (value.trim() === '') return true
         if (value > today) return 'Future values are not completed account history'
-        return value >= setupOn() || 'Review the earlier tracking start before saving'
+        return (
+          value >= setupOn() ||
+          `Review the earlier tracking start before saving. The Setup date is ${setupOn()}.`
+        )
       },
     },
   }

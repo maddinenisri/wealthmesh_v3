@@ -132,7 +132,7 @@ public record OpeningComponents(BigDecimal total, BigDecimal cash, List<Line> li
             throw bad("Future values are not completed account history");
         }
         if (date.isBefore(setupOn)) {
-            throw bad("Review the earlier tracking start before saving");
+            throw bad("Review the earlier tracking start before saving. The Setup date is " + setupOn + ".");
         }
         return date;
     }

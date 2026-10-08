@@ -57,7 +57,10 @@ export function judgeOpening(
     if (price.startsWith('-')) return { error: 'Holding market price must be zero or greater' }
     const valueOn = typeof line.valueOn === 'string' && line.valueOn ? line.valueOn : setupOn
     if (valueOn > today) return { error: 'Future values are not completed account history' }
-    if (valueOn < setupOn) return { error: 'Review the earlier tracking start before saving' }
+    if (valueOn < setupOn)
+      return {
+        error: `Review the earlier tracking start before saving. The Setup date is ${setupOn}.`,
+      }
     holdings.push({ symbol, quantity: String(Number(quantity)), price: priceText(price), valueOn })
   }
   const blank = total === null && cash === null && holdings.length === 0

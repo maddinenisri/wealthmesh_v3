@@ -155,7 +155,7 @@ for (const width of [710, 1280] as const) {
         'value date 2026-08-31',
         { cash: '1', holdings: [['HOME', '1', '100', '2026-08-31']] },
         'Holding 1 value date',
-        'Review the earlier tracking start before saving',
+        'Review the earlier tracking start before saving. The Setup date is 2026-09-01.',
       ],
     ] as const) {
       test(`V2_BROKERAGE_005 ${input}: the field explains, is in view and focused, nothing is added (${width}px)`, async ({

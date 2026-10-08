@@ -225,7 +225,7 @@ describe('setting up a brokerage', () => {
       'value date 2026-08-31',
       { cash: '1', holdings: [['HOME', '1', '100', '2026-08-31']] },
       'Holding 1 value date',
-      'Review the earlier tracking start before saving',
+      'Review the earlier tracking start before saving. The Setup date is 2026-09-01.',
     ],
   ]
   it.each(invalid)(
