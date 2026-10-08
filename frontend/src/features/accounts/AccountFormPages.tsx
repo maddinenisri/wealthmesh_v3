@@ -21,7 +21,7 @@ export function NewAccountPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Add account"
-        description="The starting amount is optional. Leave it blank to start at $0.00 on the first date."
+        description="The starting amount is optional. Leave it blank to start at $0.00 on the date you choose below."
       />
       {(context.isPending || today.isPending) && !context.error && !today.error && (
         <p className="text-ink-muted">Loading</p>
@@ -68,7 +68,9 @@ export function EditAccountPage() {
           !account.data
             ? 'Change the name or owner.'
             : isValued(account.data.type)
-              ? 'Change the name or owner. Values are not changed here; record a new value on the account.'
+              ? typeTraits(account.data.type).plan
+                ? 'Change the name, institution or participant. The plan value is changed by a plan statement on the account, not here.'
+                : 'Change the name or owner. Values are not changed here; record a new value on the account.'
               : isDebt(account.data.type)
                 ? 'Change the name, lender or owner. The amount owed is changed by payments and reviewed corrections, not here.'
                 : typeTraits(account.data.type).kind === 'investment'

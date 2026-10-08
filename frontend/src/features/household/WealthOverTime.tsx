@@ -144,8 +144,18 @@ function Explanation({
     {
       label: 'Asset value change',
       value: Number(change.valueChange),
-      note: 'Property and other assets re-valued: an estimate, never income or spending',
+      note: 'Property, other assets and plans re-valued: an estimate, never income or spending',
       always: true,
+    },
+    {
+      label: 'Pay credits',
+      value: Number(change.payCredits),
+      note: 'Credited by a defined benefit plan: part of its plan value, never income',
+    },
+    {
+      label: 'Benefit interest',
+      value: Number(change.benefitInterest),
+      note: 'Credited by a defined benefit plan: part of its plan value, never income',
     },
     {
       label: 'Balance corrections',
@@ -221,16 +231,32 @@ function Explanation({
           ))}
         </ul>
       )}
+      {change.creditLines.length > 0 && (
+        <ul className="text-sm" aria-label="Plan credits">
+          {change.creditLines.map((line, index) => (
+            <li key={`${line.accountId}-${line.on}-${index}`}>
+              {line.name}: pay credit {formatMoney(Number(line.payCredit))} and benefit interest{' '}
+              {formatMoney(Number(line.interestCredit))}, dated <Dated on={line.on} />. Part of the
+              plan value, not income, spending or a salary.
+            </li>
+          ))}
+        </ul>
+      )}
       {change.valueMoves.length > 0 && (
         <ul className="text-sm" aria-label="Value changes">
           {change.valueMoves.map((move) => {
             const delta = Number(move.change)
+            // The range includes the credits listed above; the figure here is what is left after them.
+            const credited = change.creditLines
+              .filter((line) => line.accountId === move.accountId)
+              .reduce((sum, line) => sum + Number(line.payCredit) + Number(line.interestCredit), 0)
             return (
               <li key={move.accountId}>
                 {move.name} {delta > 0 ? 'value increase' : 'value decrease'} of{' '}
                 {formatMoney(Math.abs(delta))} ({formatMoney(Number(move.start))} to{' '}
-                {formatMoney(Number(move.end))}), an asset value change rather than income or
-                spending.
+                {formatMoney(Number(move.end))}
+                {credited > 0 && `; ${formatMoney(credited)} of that range is the credits above`}),
+                an asset value change rather than income or spending.
               </li>
             )
           })}

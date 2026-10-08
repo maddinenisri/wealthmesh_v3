@@ -15,7 +15,7 @@ import type { Account } from '../../api/accounts'
 import type { WealthLine } from '../../api/wealth'
 import { useAccounts } from '../../hooks/useAccounts'
 import { useWealth } from '../../hooks/useWealth'
-import { accountTypeLabel, isDebt, isValued, typeTraits } from '../accounts/accountTypes'
+import { accountTypeLabel, isDebt } from '../accounts/accountTypes'
 import { BalanceFigure } from '../accounts/BalanceFigure'
 import { cardSide, isCard } from '../accounts/cardBalance'
 import { STATUS_LABEL } from '../accounts/statusLabel'
@@ -23,6 +23,7 @@ import { ownerNames } from '../accounts/ownerNames'
 import { useAccountContext } from '../accounts/useAccountContext'
 import { CreateHouseholdForm, RenameHouseholdForm } from './HouseholdForms'
 import { MembersCard } from './MembersCard'
+import { accountsIn } from './wealthGroups'
 import { WealthOverTime } from './WealthOverTime'
 import { useHousehold } from '../../hooks/useHousehold'
 import { useMembers } from '../../hooks/useMembers'
@@ -134,7 +135,7 @@ function AccountsAndWealth() {
             id="bank-money-heading"
             title="Bank money"
             total={wealth.data?.bankMoney.total}
-            accounts={accounts.data.filter((account) => typeTraits(account.type).kind === 'ledger')}
+            accounts={accountsIn(accounts.data, wealth.data?.bankMoney)}
             members={members}
             note={
               wealth.data?.debtLines.some((line) => !isCard(line.type) && !isDebt(line.type))
@@ -147,7 +148,7 @@ function AccountsAndWealth() {
             title="Cards"
             card
             total={wealth.data?.cards.total}
-            accounts={accounts.data.filter((account) => isCard(account.type))}
+            accounts={accountsIn(accounts.data, wealth.data?.cards)}
             members={members}
           />
           <AccountGroup
@@ -156,7 +157,7 @@ function AccountsAndWealth() {
             card
             owed
             total={wealth.data?.loans.total}
-            accounts={accounts.data.filter((account) => account.type === 'loan')}
+            accounts={accountsIn(accounts.data, wealth.data?.loans)}
             members={members}
           />
           <AccountGroup
@@ -165,24 +166,30 @@ function AccountsAndWealth() {
             card
             owed
             total={wealth.data?.mortgages.total}
-            accounts={accounts.data.filter((account) => account.type === 'mortgage')}
+            accounts={accountsIn(accounts.data, wealth.data?.mortgages)}
             members={members}
           />
           <AccountGroup
             id="investments-heading"
             title="Investments"
             total={wealth.data?.investments.total}
-            accounts={accounts.data.filter(
-              (account) =>
-                typeTraits(account.type).kind === 'investment' && account.status !== 'draft',
-            )}
+            accounts={accountsIn(accounts.data, wealth.data?.investments)}
             members={members}
+          />
+          <AccountGroup
+            id="retirement-heading"
+            title="Retirement"
+            total={wealth.data?.retirement.total}
+            accounts={accountsIn(accounts.data, wealth.data?.retirement)}
+            members={members}
+            lines={wealth.data?.retirement.accounts}
+            note="A plan-reported benefit value is counted here once. It is not personal investment cash or holdings, and it is not added to wealth again."
           />
           <AccountGroup
             id="property-heading"
             title="Property and other assets"
             total={wealth.data?.propertyAndOther.total}
-            accounts={accounts.data.filter((account) => isValued(account.type))}
+            accounts={accountsIn(accounts.data, wealth.data?.propertyAndOther)}
             members={members}
             lines={wealth.data?.propertyAndOther.accounts}
           />
@@ -288,7 +295,10 @@ function AccountGroup({
               <BalanceFigure type={account.type} amount={account.balance.amount} />
               {lines?.find((line) => line.accountId === account.id)?.valueDate && (
                 <span className="block text-sm text-ink-muted">
-                  Value dated {lines.find((line) => line.accountId === account.id)?.valueDate}{' '}
+                  {account.type === 'defined_benefit' ? 'As of' : 'Value dated'}{' '}
+                  <span className="whitespace-nowrap">
+                    {lines.find((line) => line.accountId === account.id)?.valueDate}
+                  </span>{' '}
                   {lines.find((line) => line.accountId === account.id)?.stale && (
                     <Badge>Older value</Badge>
                   )}

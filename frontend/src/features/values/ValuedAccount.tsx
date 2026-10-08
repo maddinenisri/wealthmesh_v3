@@ -1,4 +1,5 @@
-import { Fragment, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useLocation } from 'react-router'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
 import type { ValueEvent, ValueRow } from '../../api/values'
@@ -6,6 +7,7 @@ import { Badge, Button, Card, CardTitle, Table, Td, Th } from '../../design-syst
 import { useToday } from '../../hooks/useAccounts'
 import { useValueHistory } from '../../hooks/useValues'
 import { formatMoney } from '../../lib/money'
+import { typeTraits } from '../accounts/accountTypes'
 import { useReturnFocus } from '../activity/useReturnFocus'
 import { Stamped } from './Dated'
 import { ExtendStart } from './ExtendStart'
@@ -36,16 +38,34 @@ const STATUS: Record<ValueRow['status'], string> = {
 export function ValuedAccount({
   account,
   members,
+  onActivity,
 }: {
   account: Account
   members: Member[] | undefined
+  /** Called when a panel opens or ends with a sentence, so the status card drops its own sentence. */
+  onActivity?: () => void
 }) {
   const history = useValueHistory(account.id)
   const today = useToday()
   const [panel, setPanel] = useState<Panel | null>(null)
   // The status line belongs to the account's state when it was written; a change of state (Archive, Close, Restore,
   // Reopen) makes it stale, so it is not shown.
-  const [saved, setSaved] = useState<{ message: string; status: string } | null>(null)
+  // A page reached from setting the account up carries a sentence for the person to read first.
+  const arrived = (useLocation().state as { notice?: string } | null)?.notice
+  const [saved, setSaved] = useState<{ message: string; status: string } | null>(
+    arrived ? { message: arrived, status: account.status } : null,
+  )
+  const arrivedRef = useRef<HTMLParagraphElement>(null)
+  useEffect(() => {
+    if (arrived) {
+      arrivedRef.current?.focus()
+      // A long name pushes the sentence below the fold: bring it into view where focus lands.
+      arrivedRef.current?.scrollIntoView?.({ block: 'center' })
+    }
+    // Once, when the page opens with a sentence.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const plan = typeTraits(account.type).plan
   const notice = saved?.status === account.status ? saved.message : null
   const setNotice = (message: string | null) =>
     setSaved(message === null ? null : { message, status: account.status })
@@ -58,6 +78,7 @@ export function ValuedAccount({
   const finish = (message?: string) => {
     setPanel(null)
     if (message) {
+      onActivity?.()
       returnFocus.cancel()
       setNotice(message)
       requestAnimationFrame(() => {
@@ -68,6 +89,7 @@ export function ValuedAccount({
     }
   }
   const open = (next: Panel) => {
+    onActivity?.()
     setNotice(null)
     returnFocus()
     setPanel(next)
@@ -121,28 +143,41 @@ export function ValuedAccount({
       <Card aria-labelledby="values-heading">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle id="values-heading" tabIndex={-1} className="text-lg outline-none">
-            Value history
+            {plan ? 'Plan statements' : 'Value history'}
           </CardTitle>
           {account.status === 'active' && (
             <div className="flex flex-wrap gap-2">
               <Button disabled={!canAdd} onClick={() => open({ kind: 'new' })}>
-                Record new value
+                {plan ? 'Record plan statement' : 'Record new value'}
               </Button>
-              <Button variant="secondary" disabled={!canAdd} onClick={() => open({ kind: 'plan' })}>
-                Plan a future value
-              </Button>
+              {!plan && (
+                <Button
+                  variant="secondary"
+                  disabled={!canAdd}
+                  onClick={() => open({ kind: 'plan' })}
+                >
+                  Plan a future value
+                </Button>
+              )}
             </div>
           )}
         </div>
         {notice && (
-          <p role="status" className="mt-3 max-w-prose text-sm">
-            {notice}
+          <p
+            ref={arrivedRef}
+            role="status"
+            tabIndex={-1}
+            className="mt-3 max-w-prose text-sm outline-none"
+          >
+            {plan ? withDates(notice) : notice}
           </p>
         )}
         {account.status !== 'active' && (
           <p className="mt-3 max-w-prose text-sm text-ink-muted">
             {account.status === 'archived'
-              ? 'This account is archived. Restore it to record a new value; earlier values can still be corrected or removed.'
+              ? plan
+                ? 'This account is archived. Restore it to record a new statement; earlier statements can still be corrected or removed.'
+                : 'This account is archived. Restore it to record a new value; earlier values can still be corrected or removed.'
               : 'This account is closed. Reopen it to record or change a value.'}
           </p>
         )}
@@ -229,6 +264,9 @@ const SYSTEM_ROW = 'Value when tracking began'
 /** Reason, who and when, and who removed it, with the time kept whole. */
 function Details({ row }: { row: ValueRow }) {
   const parts = [
+    row.payCredit !== null &&
+      row.interestCredit !== null &&
+      `Pay credit ${formatMoney(Number(row.payCredit))}, benefit interest ${formatMoney(Number(row.interestCredit))}`,
     row.reason,
     row.enteredBy && (
       <>

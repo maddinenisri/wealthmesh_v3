@@ -44,6 +44,7 @@ export function AccountDetailPage() {
   const account = useAccount(id)
   const { members } = useAccountContext()
   const [reviewsOpened, setReviewsOpened] = useState(0)
+  const [valueActivity, setValueActivity] = useState(0)
 
   return (
     <div className="flex flex-col gap-6">
@@ -86,9 +87,14 @@ export function AccountDetailPage() {
           <AccountStatusCard
             account={account.data}
             onReview={() => setReviewsOpened((count) => count + 1)}
+            staleAfter={valueActivity}
           />
           {isValued(account.data.type) ? (
-            <ValuedAccount account={account.data} members={members} />
+            <ValuedAccount
+              account={account.data}
+              members={members}
+              onActivity={() => setValueActivity((count) => count + 1)}
+            />
           ) : typeTraits(account.data.type).kind === 'investment' ? (
             <InvestmentAccount
               account={account.data}
@@ -110,11 +116,15 @@ function Details({ account, owners }: { account: Account; owners: string }) {
       <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
         <div>
           <dt className="text-caption text-ink-muted">
-            {account.ownerMemberIds.length > 1 ? 'Owners' : 'Owner'}
+            {typeTraits(account.type).plan
+              ? 'Participant'
+              : account.ownerMemberIds.length > 1
+                ? 'Owners'
+                : 'Owner'}
           </dt>
           <dd>{owners}</dd>
         </div>
-        {!isValued(account.type) && (
+        {typeTraits(account.type).institutionLabel && (
           <div>
             <dt className="text-caption text-ink-muted">
               {typeTraits(account.type).institutionLabel}
@@ -133,11 +143,13 @@ function Details({ account, owners }: { account: Account; owners: string }) {
           <>
             <div>
               <dt className="text-caption text-ink-muted">
-                {isValued(account.type)
-                  ? 'Value'
-                  : isDebt(account.type)
-                    ? 'Balance owed'
-                    : 'Balance'}
+                {typeTraits(account.type).plan
+                  ? 'Plan-reported benefit value'
+                  : isValued(account.type)
+                    ? 'Value'
+                    : isDebt(account.type)
+                      ? 'Balance owed'
+                      : 'Balance'}
               </dt>
               <dd>
                 <BalanceFigure
@@ -160,13 +172,15 @@ function Details({ account, owners }: { account: Account; owners: string }) {
             </div>
             <div>
               <dt className="text-caption text-ink-muted">
-                {isValued(account.type)
-                  ? 'Initial value'
-                  : isDebt(account.type)
-                    ? 'Initial amount owed'
-                    : typeTraits(account.type).kind === 'investment'
-                      ? 'Opening Balance'
-                      : 'Initial Balance'}
+                {typeTraits(account.type).plan
+                  ? 'Initial plan value'
+                  : isValued(account.type)
+                    ? 'Initial value'
+                    : isDebt(account.type)
+                      ? 'Initial amount owed'
+                      : typeTraits(account.type).kind === 'investment'
+                        ? 'Opening Balance'
+                        : 'Initial Balance'}
               </dt>
               <dd>
                 <BalanceFigure

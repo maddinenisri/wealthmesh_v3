@@ -42,26 +42,27 @@ const bankRules = { maxLength: { value: 120, message: 'Use 120 characters or few
 const ownerRules = {
   validate: (value: string[]) => value.length > 0 || 'Choose an owner',
 }
+const participantRules = {
+  validate: (value: string[]) => value.length === 1 || 'Choose one participant',
+}
 
 /**
  * Owner choices: active members, plus any member who already owns the account (so an inactive owner stays
- * visible and checked). One or more owners makes the account joint.
+ * visible and checked). One or more owners makes the account joint, except a type held by one member (a defined
+ * benefit's participant), which is a choice of one.
  */
 function OwnerChoices<T extends DetailsValues>({
   members,
   control,
+  type,
   current = [],
-  valued = false,
-  debt = false,
 }: {
   members: Member[]
   control: Control<T>
+  type: string
   current?: string[]
-  /** A property or other asset: owners are named, and there is no "joint account" wording. */
-  valued?: boolean
-  /** A loan: the people who owe it, and no "joint account" wording. */
-  debt?: boolean
 }) {
+  const traits = typeTraits(type)
   const options = members
     .filter((member) => member.active || current.includes(member.id))
     .map((member) => ({ value: member.id, label: memberLabel(member) }))
@@ -69,16 +70,19 @@ function OwnerChoices<T extends DetailsValues>({
     <CheckboxGroupField
       control={control as unknown as Control<DetailsValues>}
       name="ownerMemberIds"
-      label="Owners"
+      label={traits.ownerLabel}
+      single={traits.singleOwner}
       hint={
-        debt
-          ? 'Choose everyone who owes this debt.'
-          : valued
-            ? 'Choose everyone who owns this property or asset.'
-            : 'Choose everyone who owns this account. Two or more makes it a joint account.'
+        traits.singleOwner
+          ? 'Choose the one member who participates in this plan.'
+          : traits.kind === 'debt'
+            ? 'Choose everyone who owes this debt.'
+            : traits.kind === 'valued'
+              ? 'Choose everyone who owns this property or asset.'
+              : 'Choose everyone who owns this account. Two or more makes it a joint account.'
       }
       options={options}
-      rules={ownerRules}
+      rules={traits.singleOwner ? participantRules : ownerRules}
     />
   )
 }
@@ -135,15 +139,23 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
       .mutateAsync({
         type: values.type,
         name: values.name.trim(),
-        institution: valuedNoun(values.type) ? '' : values.institution.trim(),
+        institution: typeTraits(values.type).institutionLabel ? values.institution.trim() : '',
         ownerMemberIds: values.ownerMemberIds,
         openedOn: values.openedOn,
         openingBalance: values.balance.trim() === '' ? null : parseAmount(values.balance),
         balanceSide:
           isCard(values.type) && values.balance.trim() !== '' ? values.balanceSide : null,
+        enteredByMemberId: typeTraits(values.type).recordsCreator ? member?.id : undefined,
       })
       .then(
-        () => navigate('/accounts'),
+        (saved) =>
+          typeTraits(values.type).plan
+            ? navigate(`/accounts/${saved.id}`, {
+                state: {
+                  notice: `${saved.name} is set up with a plan-reported value of ${formatMoney(Number(saved.balance.amount))} as of ${saved.balance.asOf}.${values.balance.trim() === '' ? ' No starting amount was entered. That zero does not say the pension promise is zero; the promise is not recorded here.' : ''}`,
+                },
+              })
+            : navigate('/accounts'),
         () => undefined,
       )
   const newInvestment = (values: SetupValues): NewAccount => ({
@@ -180,16 +192,14 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
     }
   }
   const onSubmit = handleSubmit((values) => {
-    if (investment) {
-      if (!member) {
-        setMemberMissing(true)
-        requestAnimationFrame(() =>
-          document.querySelector<HTMLSelectElement>('[data-entered-by] select')?.focus(),
-        )
-        return undefined
-      }
-      return reviewInvestment(values)
+    if (traits.recordsCreator && !member) {
+      setMemberMissing(true)
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLSelectElement>('[data-entered-by] select')?.focus(),
+      )
+      return undefined
     }
+    if (investment) return reviewInvestment(values)
     if (valuedNoun(values.type) || isDebt(values.type)) {
       create.reset()
       setReview(values)
@@ -245,6 +255,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
   if (review) {
     const amount = review.balance.trim() === '' ? 0 : Number(parseAmount(review.balance))
     const owing = isDebt(review.type)
+    const reviewTraits = typeTraits(review.type)
     return (
       <Panel>
         <section aria-labelledby="setup-review-heading" className="flex max-w-md flex-col gap-3">
@@ -264,12 +275,17 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
             <p className="text-sm text-ink-muted">
               {owing
                 ? 'The amount owed was left blank, so it starts at $0.00 owed. Saving completes the setup.'
-                : 'The value was left blank, so it starts at $0.00. Saving completes the setup.'}
+                : reviewTraits.plan
+                  ? 'No starting amount was entered, so the plan-reported value starts at $0.00. That zero does not say the pension promise is zero; the promise is not recorded here. Saving completes the setup.'
+                  : 'The value was left blank, so it starts at $0.00. Saving completes the setup.'}
             </p>
           )}
           <p className="text-sm text-ink-muted">
-            {owing && review.institution.trim() !== '' && `Lender: ${review.institution.trim()}. `}
-            Owners: {owners(review.ownerMemberIds)}.
+            {reviewTraits.institutionLabel &&
+              review.institution.trim() !== '' &&
+              `${reviewTraits.institutionLabel}: ${review.institution.trim()}. `}
+            {reviewTraits.ownerLabel}: {owners(review.ownerMemberIds)}.
+            {reviewTraits.recordsCreator && member && ` Set up by: ${memberLabel(member)}.`}
           </p>
           <div className="flex gap-2">
             <Button type="button" disabled={create.isPending} onClick={() => void save(review)}>
@@ -306,15 +322,15 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         ))}
       </SelectField>
       <TextField control={control} name="name" label="Account name" rules={nameRules} />
-      {!noun && (
+      {traits.institutionLabel && (
         <TextField
           control={control}
           name="institution"
-          label={traits.institutionLabel ?? 'Bank'}
+          label={traits.institutionLabel}
           rules={bankRules}
         />
       )}
-      <OwnerChoices members={members} control={control} valued={!!noun} debt={debt} />
+      <OwnerChoices members={members} control={control} type={typeValue} />
       <TextField
         control={control}
         name="openedOn"
@@ -337,12 +353,12 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
         <TextField
           control={control}
           name="balance"
-          label={noun ? 'Value' : debt ? 'Amount owed' : 'Balance'}
+          label={traits.valueLabel}
           inputMode="decimal"
           placeholder="0.00"
           hint={
             noun
-              ? 'Optional. Leave blank to start at $0.00 on the value date.'
+              ? `Optional. Leave blank to start at $0.00 on the ${traits.plan ? 'as-of' : 'value'} date.`
               : debt
                 ? 'Optional. Leave blank to start at $0.00 owed on the date.'
                 : 'Optional. Leave blank to start at $0.00 on the opening date.'
@@ -352,7 +368,8 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
               if (value.trim() === '') return true
               const amount = parseAmount(value)
               if (amount === null) return 'Enter a valid amount'
-              if (noun && amount.startsWith('-')) return `Enter zero or a positive ${noun} value`
+              if (noun && amount.startsWith('-'))
+                return traits.negativeValueMessage ?? 'Enter a valid amount'
               if (debt && amount.startsWith('-')) return 'Enter zero or a positive amount owed'
               return !(card && amount.startsWith('-')) || 'Enter a valid amount'
             },
@@ -370,7 +387,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
           <option value="credit">Card credit</option>
         </SelectField>
       )}
-      {investment && (
+      {traits.recordsCreator && (
         <div data-entered-by>
           <EnteredBy members={members} member={member} setMemberId={setMemberId} />
           {memberMissing && !member && (
@@ -421,20 +438,19 @@ export function AccountEditForm({ account, members }: { account: Account; member
     <form onSubmit={onSubmit} noValidate className="flex max-w-md flex-col gap-4">
       <FormAlert message={update.error?.message} />
       <TextField control={control} name="name" label="Account name" rules={nameRules} />
-      {!valuedNoun(account.type) && (
+      {typeTraits(account.type).institutionLabel && (
         <TextField
           control={control}
           name="institution"
-          label={typeTraits(account.type).institutionLabel ?? 'Bank'}
+          label={typeTraits(account.type).institutionLabel!}
           rules={bankRules}
         />
       )}
       <OwnerChoices
         members={members}
         control={control}
+        type={account.type}
         current={account.ownerMemberIds}
-        valued={!!valuedNoun(account.type)}
-        debt={isDebt(account.type)}
       />
       <div className="flex gap-2">
         <Button type="submit" disabled={update.isPending}>

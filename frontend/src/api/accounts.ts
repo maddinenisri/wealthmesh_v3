@@ -25,7 +25,7 @@ export type NewAccount = {
   balanceSide?: 'owed' | 'credit' | null
   /** An investment account's opening cash and holdings, instead of one balance (slice 17). */
   opening?: OpeningInput
-  /** Who is setting up an investment account: recorded in its history (required there, refused elsewhere). */
+  /** Who is setting up an investment account or a defined benefit: recorded in its history (refused elsewhere). */
   enteredByMemberId?: string
 }
 

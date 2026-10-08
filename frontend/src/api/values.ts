@@ -15,6 +15,9 @@ export type ValueRow = {
   planned: boolean
   /** The setup value that lives on the account row. */
   initial: boolean
+  /** A defined benefit statement's credits (null on any other value). */
+  payCredit: string | null
+  interestCredit: string | null
 }
 
 export type ValueEvent = {
@@ -45,6 +48,13 @@ export type ValueReview = {
   balanceAfterOn: string
   replacesAmount: string | null
   replacesOn: string | null
+  /** A defined benefit statement: its credits, and the household and Retirement totals before and after. */
+  payCredit: string | null
+  interestCredit: string | null
+  netWorthBefore: string | null
+  netWorthAfter: string | null
+  retirementBefore: string | null
+  retirementAfter: string | null
 }
 
 /** The value that was saved, corrected, removed or restored, and the account's Balance before and after. */
@@ -69,7 +79,10 @@ export type ExtensionReview = {
 }
 
 export type NewValue = {
-  amount: string
+  /** Left out when a defined benefit statement sends its credits instead. */
+  amount?: string
+  payCredit?: string
+  interestCredit?: string
   valueOn?: string
   reason?: string
   enteredByMemberId: string
@@ -103,6 +116,8 @@ function parseRow(value: unknown): ValueRow {
     removedAt: maybe(data.removedAt),
     planned: data.planned === true,
     initial: data.initial === true,
+    payCredit: maybe(data.payCredit),
+    interestCredit: maybe(data.interestCredit),
   }
 }
 
@@ -144,6 +159,12 @@ function parseReview(value: unknown): ValueReview {
     balanceAfterOn: text(d.balanceAfterOn),
     replacesAmount: maybe(d.replacesAmount),
     replacesOn: maybe(d.replacesOn),
+    payCredit: maybe(d.payCredit),
+    interestCredit: maybe(d.interestCredit),
+    netWorthBefore: maybe(d.netWorthBefore),
+    netWorthAfter: maybe(d.netWorthAfter),
+    retirementBefore: maybe(d.retirementBefore),
+    retirementAfter: maybe(d.retirementAfter),
   }
 }
 

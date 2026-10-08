@@ -31,8 +31,10 @@ export type Wealth = {
   cards: WealthGroup
   loans: WealthGroup
   mortgages: WealthGroup
-  /** Brokerage and other investment accounts, one total line (the finer groups are slice 18). */
+  /** Brokerage and other investment accounts. */
   investments: WealthGroup
+  /** Defined benefit plan values (the retirement investment types join them in slice 18b). */
+  retirement: WealthGroup
   propertyAndOther: WealthGroup
   debtLines: WealthLine[]
   notTracked: NotTracked[]
@@ -79,6 +81,16 @@ export type WealthChange = {
     change: string
     reason: string | null
     madeOn: string
+  }[]
+  /** A defined benefit's pay credits and benefit interest in the period: their own terms, never income. */
+  payCredits: string
+  benefitInterest: string
+  creditLines: {
+    accountId: string
+    name: string
+    payCredit: string
+    interestCredit: string
+    on: string
   }[]
 }
 
@@ -130,6 +142,7 @@ function parseWealth(value: unknown): Wealth {
     loans: parseGroup(data.loans),
     mortgages: parseGroup(data.mortgages),
     investments: parseGroup(data.investments),
+    retirement: parseGroup(data.retirement),
     propertyAndOther: parseGroup(data.propertyAndOther),
     debtLines: parseLines(data.debtLines),
     notTracked: data.notTracked.map((item) => {
@@ -148,6 +161,7 @@ function parseChange(value: unknown): WealthChange {
   const data = record(value)
   if (!Array.isArray(data.valueMoves)) throw bad()
   if (!Array.isArray(data.correctionLines) || !Array.isArray(data.restatements)) throw bad()
+  if (!Array.isArray(data.creditLines)) throw bad()
   return {
     from: text(data.from),
     to: text(data.to),
@@ -194,6 +208,18 @@ function parseChange(value: unknown): WealthChange {
         change: text(line.change),
         reason: line.reason == null ? null : text(line.reason),
         madeOn: text(line.madeOn),
+      }
+    }),
+    payCredits: text(data.payCredits),
+    benefitInterest: text(data.benefitInterest),
+    creditLines: data.creditLines.map((item) => {
+      const line = record(item)
+      return {
+        accountId: text(line.accountId),
+        name: text(line.name),
+        payCredit: text(line.payCredit),
+        interestCredit: text(line.interestCredit),
+        on: text(line.on),
       }
     }),
   }

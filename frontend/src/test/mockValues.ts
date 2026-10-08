@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import { isDebt } from '../features/accounts/accountTypes'
+import { isDebt, isValued } from '../features/accounts/accountTypes'
 import type { MockAccount } from './mockApi'
 
 /** A dated value of a property or other asset, as the server keeps it. */
@@ -16,6 +16,9 @@ export type MockValue = {
   removedAt: string | null
   removedBy: string | null
   createdAt: string
+  /** A defined benefit statement's credits. */
+  payCredit?: string | null
+  interestCredit?: string | null
 }
 
 type Context = {
@@ -115,16 +118,40 @@ export function valueHandlers(ctx: Context) {
     removedAt: v.removedAt,
     planned: v.planned,
     initial: false,
+    payCredit: v.payCredit ?? null,
+    interestCredit: v.interestCredit ?? null,
   })
   const find = (id: unknown) => {
     const account = accounts.find((a) => a.id === id)
-    return account &&
-      (account.type === 'property' || account.type === 'other_asset' || isDebt(account.type))
-      ? account
-      : null
+    return account && (isValued(account.type) || isDebt(account.type)) ? account : null
+  }
+  const isPlan = (account: MockAccount) => account.type === 'defined_benefit'
+  const credit = (value: unknown, name: string) => {
+    if (value == null || value === '') return { amount: '0.00' }
+    if (typeof value !== 'string' || !/^-?\d+(\.\d{1,2})?$/.test(value))
+      return { error: problem(400, 'Enter a valid amount') }
+    if (Number(value) < 0) return { error: problem(400, `${name} must be zero or greater`) }
+    return { amount: Number(value).toFixed(2) }
   }
   const parse = (account: MockAccount, body: Record<string, unknown>, replaced?: MockValue) => {
-    const amount = typeof body.amount === 'string' ? body.amount : ''
+    const credited = body.payCredit != null || body.interestCredit != null
+    if (credited && !isPlan(account))
+      return { error: problem(400, 'Credits apply to a defined benefit only') }
+    if (credited && body.amount != null)
+      return { error: problem(400, 'Enter a plan value or credits, not both') }
+    if (!credited && isPlan(account) && body.amount == null && body.plan !== true)
+      return { error: problem(400, 'Enter a plan value or a credit') }
+    let pay: string | null = null
+    let interest: string | null = null
+    if (credited) {
+      const p = credit(body.payCredit, 'Pay credit')
+      if ('error' in p) return { error: p.error }
+      const i = credit(body.interestCredit, 'Benefit interest')
+      if ('error' in i) return { error: i.error }
+      pay = p.amount
+      interest = i.amount
+    }
+    const amount = credited ? '0.00' : typeof body.amount === 'string' ? body.amount : ''
     if (!/^-?\d+(\.\d{1,2})?$/.test(amount)) return { error: problem(400, 'Enter a valid amount') }
     if (Number(amount) < 0)
       return {
@@ -132,14 +159,25 @@ export function valueHandlers(ctx: Context) {
           400,
           isDebt(account.type)
             ? 'Enter zero or a positive amount owed'
-            : account.type === 'property'
-              ? 'Enter zero or a positive property value'
-              : 'Enter zero or a positive asset value',
+            : isPlan(account)
+              ? 'Plan value must be zero or greater'
+              : account.type === 'property'
+                ? 'Enter zero or a positive property value'
+                : 'Enter zero or a positive asset value',
         ),
       }
     const valueOn = (body.valueOn as string | undefined) ?? replaced?.valueOn
     if (!valueOn) return { error: problem(400, 'Enter a date') }
     const plan = body.plan === true
+    if (isPlan(account) && (plan || valueOn > today))
+      return { error: problem(400, 'Future values are not completed account history') }
+    if (isPlan(account) && valueOn < account.openedOn)
+      return {
+        error: problem(
+          400,
+          `Review the earlier tracking start before saving. The start is ${account.openedOn}.`,
+        ),
+      }
     if (plan && valueOn <= today)
       return {
         error: problem(400, 'A plan is dated after today. Choose a date on or before today.'),
@@ -167,16 +205,41 @@ export function valueHandlers(ctx: Context) {
       }
     const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim() : null
     if (replaced && !reason) return { error: problem(400, 'Enter a reason') }
+    // A statement with credits is the value in force on its date plus both credits.
+    const base = credited ? basis(account, valueOn, replaced?.id) : 0
     return {
-      amount: (isDebt(account.type) ? -Number(amount) : Number(amount)).toFixed(2),
+      amount: credited
+        ? (base + Number(pay) + Number(interest)).toFixed(2)
+        : (isDebt(account.type) ? -Number(amount) : Number(amount)).toFixed(2),
       valueOn,
       plan,
       reason,
+      pay,
+      interest,
+    }
+  }
+  const basis = (account: MockAccount, on: string, excluding?: string) => {
+    const earlier = effective(account.id, excluding).find((v) => v.valueOn <= on)
+    return Number(earlier ? earlier.amount : account.openingAmount)
+  }
+  /** Household net worth and the Retirement total now, the way the server's review reads them. */
+  const totals = (account: MockAccount, moved: number) => {
+    if (!isPlan(account)) return {}
+    const live = accounts.filter((a) => a.status !== 'draft')
+    const net = live.reduce((x, a) => x + Number(a.balance.amount), 0)
+    const retirement = live
+      .filter((a) => a.type === 'defined_benefit')
+      .reduce((x, a) => x + Number(a.balance.amount), 0)
+    return {
+      netWorthBefore: money(net),
+      netWorthAfter: money(net + moved),
+      retirementBefore: money(retirement),
+      retirementAfter: money(retirement + moved),
     }
   }
   const figures = (
     account: MockAccount,
-    parsed: { amount: string; valueOn: string; plan: boolean },
+    parsed: { amount: string; valueOn: string; plan: boolean; pay?: string | null },
     excluding?: string,
   ) => {
     const now = point(account)
@@ -260,6 +323,8 @@ export function valueHandlers(ctx: Context) {
         removedAt: null,
         planned: false,
         initial: true,
+        payCredit: null,
+        interestCredit: null,
       }
       return HttpResponse.json({
         values: [...rows, ...(isDebt(account.type) ? [] : [initial])].sort((a, b) =>
@@ -295,6 +360,13 @@ export function valueHandlers(ctx: Context) {
         balanceAfterOn: f.after.on,
         replacesAmount: null,
         replacesOn: null,
+        payCredit: parsed.pay ?? null,
+        interestCredit: parsed.interest ?? null,
+        netWorthBefore: null,
+        netWorthAfter: null,
+        retirementBefore: null,
+        retirementAfter: null,
+        ...totals(account, Number(f.after.amount) - Number(f.now.amount)),
       })
     }),
     http.post(
@@ -324,6 +396,13 @@ export function valueHandlers(ctx: Context) {
           balanceAfterOn: f.after.on,
           replacesAmount: old.amount,
           replacesOn: old.valueOn,
+          payCredit: parsed.pay ?? null,
+          interestCredit: parsed.interest ?? null,
+          netWorthBefore: null,
+          netWorthAfter: null,
+          retirementBefore: null,
+          retirementAfter: null,
+          ...totals(account, Number(f.after.amount) - Number(f.now.amount)),
         })
       },
     ),
@@ -356,6 +435,8 @@ export function valueHandlers(ctx: Context) {
         removedAt: null,
         removedBy: null,
         createdAt: stamp(),
+        payCredit: parsed.pay ?? null,
+        interestCredit: parsed.interest ?? null,
       }
       values.push(saved)
       ctx.keys.set(key, saved.id)
@@ -364,7 +445,9 @@ export function valueHandlers(ctx: Context) {
         saved.enteredBy,
         saved.valueOn,
         saved.amount,
-        `${saved.planned ? 'Plan for ' : 'Value for '}${saved.valueOn}: ${saved.amount}`,
+        saved.payCredit != null
+          ? `Statement for ${saved.valueOn}: pay credit ${saved.payCredit} and benefit interest ${saved.interestCredit}, plan value ${saved.amount}`
+          : `${saved.planned ? 'Plan for ' : 'Value for '}${saved.valueOn}: ${saved.amount}`,
       )
       refresh(account)
       const res = result(account, saved, before)
@@ -402,6 +485,8 @@ export function valueHandlers(ctx: Context) {
         removedAt: null,
         removedBy: null,
         createdAt: stamp(),
+        payCredit: parsed.pay ?? null,
+        interestCredit: parsed.interest ?? null,
       }
       values.push(saved)
       ctx.keys.set(key, saved.id)

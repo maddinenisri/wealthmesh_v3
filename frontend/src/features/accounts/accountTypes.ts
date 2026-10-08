@@ -9,6 +9,13 @@ export const ACCOUNT_TYPES = [
   { value: 'credit_card', label: 'Credit card' },
   { value: 'property', label: 'Property', valued: 'property' },
   { value: 'other_asset', label: 'Other asset', valued: 'asset' },
+  {
+    value: 'defined_benefit',
+    label: 'Defined benefit',
+    noun: 'defined benefit plan',
+    valued: 'plan',
+    singleOwner: true,
+  },
   { value: 'brokerage', label: 'Brokerage', investment: true },
   { value: '401k', label: '401(k)', noun: '401(k)', investment: true },
   { value: 'traditional_ira', label: 'Traditional IRA', noun: 'Traditional IRA', investment: true },
@@ -20,7 +27,8 @@ export const ACCOUNT_TYPES = [
   value: string
   label: string
   noun?: string
-  valued?: 'property' | 'asset'
+  valued?: 'property' | 'asset' | 'plan'
+  singleOwner?: true
   debt?: true
   investment?: true
 }[]
@@ -62,6 +70,18 @@ export type TypeTraits = {
   holdsMoney: boolean
   /** The label of the opening date field. */
   dateLabel: string
+  /** A defined benefit: a plan-reported value with statements that carry pay and interest credits. */
+  plan: boolean
+  /** True for a type held by exactly one member (the server's `AccountType.singleOwner`). */
+  singleOwner: boolean
+  /** The label of the owner field: "Participant" for a plan, else "Owners". */
+  ownerLabel: string
+  /** The label of the amount typed at setup and for a new value. */
+  valueLabel: string
+  /** True when setup records the member who entered it (the server's `AccountType.recordsCreator`). */
+  recordsCreator: boolean
+  /** The refusal text for a negative typed value; null for a type that has no value to type. */
+  negativeValueMessage: string | null
 }
 
 export function typeTraits(type: string): TypeTraits {
@@ -75,23 +95,48 @@ export function typeTraits(type: string): TypeTraits {
           : isInvestment(type)
             ? 'investment'
             : 'ledger'
+  const noun = valuedNoun(type)
+  const plan = noun === 'plan'
   return {
     kind,
-    institutionLabel: {
-      ledger: 'Bank',
-      card: 'Issuer',
-      valued: null,
-      debt: 'Lender',
-      investment: 'Institution',
-    }[kind],
+    institutionLabel: plan
+      ? 'Institution'
+      : {
+          ledger: 'Bank',
+          card: 'Issuer',
+          valued: null,
+          debt: 'Lender',
+          investment: 'Institution',
+        }[kind],
     holdsMoney: kind === 'ledger' || kind === 'card',
-    dateLabel: {
-      ledger: 'Opened on',
-      card: 'Opened on',
-      valued: 'Value date',
-      debt: 'As of',
-      investment: 'Setup date',
-    }[kind],
+    dateLabel: plan
+      ? 'As of'
+      : {
+          ledger: 'Opened on',
+          card: 'Opened on',
+          valued: 'Value date',
+          debt: 'As of',
+          investment: 'Setup date',
+        }[kind],
+    plan,
+    singleOwner: ACCOUNT_TYPES.some(
+      (candidate) => candidate.value === type && 'singleOwner' in candidate,
+    ),
+    ownerLabel: plan ? 'Participant' : 'Owners',
+    valueLabel: plan
+      ? 'Plan-reported value'
+      : kind === 'valued'
+        ? 'Value'
+        : kind === 'debt'
+          ? 'Amount owed'
+          : 'Balance',
+    recordsCreator: kind === 'investment' || plan,
+    negativeValueMessage:
+      noun === null
+        ? null
+        : plan
+          ? 'Plan value must be zero or greater'
+          : `Enter zero or a positive ${noun} value`,
   }
 }
 
@@ -116,8 +161,8 @@ export const interestCategoryName = (type: string): string =>
 /** A noun at the start of a label: "Loan", "Mortgage", "Loan or mortgage". */
 export const capitalNoun = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1)
 
-/** "property" or "asset" for a valued type, as the messages name it ("Enter zero or a positive property value"). */
-export function valuedNoun(type: string): 'property' | 'asset' | null {
+/** "property", "asset" or "plan" for a valued type, as the messages name it ("Enter zero or a positive property value"). */
+export function valuedNoun(type: string): 'property' | 'asset' | 'plan' | null {
   const found = ACCOUNT_TYPES.find((candidate) => candidate.value === type)
   return found && 'valued' in found ? found.valued : null
 }

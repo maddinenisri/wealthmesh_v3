@@ -16,6 +16,8 @@ export type CheckboxGroupFieldProps<T extends FieldValues, N extends Path<T> = P
   label: string
   options: CheckboxOption[]
   hint?: string
+  /** Choose exactly one: radio buttons, the value stays a one-item array. */
+  single?: boolean
   rules?: UseControllerProps<T, N>['rules']
 }
 
@@ -26,6 +28,7 @@ export function CheckboxGroupField<T extends FieldValues, N extends Path<T> = Pa
   label,
   options,
   hint,
+  single = false,
   rules,
 }: CheckboxGroupFieldProps<T, N>) {
   const { field, fieldState } = useController({ control, name, rules })
@@ -50,7 +53,7 @@ export function CheckboxGroupField<T extends FieldValues, N extends Path<T> = Pa
         {options.map((option, index) => (
           <label key={option.value} className="flex items-center gap-2 text-sm">
             <input
-              type="checkbox"
+              type={single ? 'radio' : 'checkbox'}
               name={field.name}
               value={option.value}
               // oxlint-disable-next-line react/refs
@@ -59,9 +62,11 @@ export function CheckboxGroupField<T extends FieldValues, N extends Path<T> = Pa
               onBlur={field.onBlur}
               onChange={(event) =>
                 field.onChange(
-                  event.target.checked
-                    ? [...selected, option.value]
-                    : selected.filter((value) => value !== option.value),
+                  single
+                    ? [option.value]
+                    : event.target.checked
+                      ? [...selected, option.value]
+                      : selected.filter((value) => value !== option.value),
                 )
               }
             />

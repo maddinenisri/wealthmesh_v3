@@ -1,7 +1,11 @@
 import { http, HttpResponse } from 'msw'
 import { valueHandlers, valuedPoint, type MockValue } from './mockValues'
 import { server } from './server'
-import { isDebt as isDebtType, typeTraits } from '../features/accounts/accountTypes'
+import {
+  isDebt as isDebtType,
+  isValued as isValuedType,
+  typeTraits,
+} from '../features/accounts/accountTypes'
 import {
   calculated,
   judgeOpening,
@@ -2698,29 +2702,52 @@ export function mockApi(
       const to = query.get('to') ?? today
       if (from > to) return problem(400, 'The start date must be on or before the end date')
       if (to > today) return problem(400, 'The end date cannot be in the future')
+      const creditRows = state.values
+        .filter(
+          (v) =>
+            v.payCredit != null &&
+            !v.removedAt &&
+            !v.replaced &&
+            !v.planned &&
+            v.valueOn > from &&
+            v.valueOn <= to,
+        )
+        .map((v) => ({
+          accountId: v.accountId,
+          name: state.accounts.find((a) => a.id === v.accountId)?.name ?? '',
+          payCredit: v.payCredit ?? '0.00',
+          interestCredit: v.interestCredit ?? '0.00',
+          on: v.valueOn,
+        }))
       const moves = state.accounts
-        .filter((a) => a.type === 'property' || a.type === 'other_asset')
+        .filter((a) => isValuedType(a.type))
         .map((a) => {
           const start =
             a.openedOn > from ? { amount: a.openingAmount } : valuedPoint(state.values, a, from)
           const end = valuedPoint(state.values, a, to)
+          // A statement's credits are their own terms, not an asset value change.
+          const credits = creditRows
+            .filter((c) => c.accountId === a.id)
+            .reduce((x, c) => x + Number(c.payCredit) + Number(c.interestCredit), 0)
           return {
             accountId: a.id,
             name: a.name,
             type: a.type,
             start: Number(start.amount).toFixed(2),
             end: Number(end.amount).toFixed(2),
-            change: (Number(end.amount) - Number(start.amount)).toFixed(2),
+            change: (Number(end.amount) - Number(start.amount) - credits).toFixed(2),
           }
         })
         .filter((m) => Number(m.change) !== 0)
       const moved = moves.reduce((x, m) => x + Number(m.change), 0)
+      const pay = creditRows.reduce((x, c) => x + Number(c.payCredit), 0)
+      const interest = creditRows.reduce((x, c) => x + Number(c.interestCredit), 0)
       return HttpResponse.json({
         from,
         to,
         startWealth: '0.00',
-        endWealth: moved.toFixed(2),
-        change: moved.toFixed(2),
+        endWealth: (moved + pay + interest).toFixed(2),
+        change: (moved + pay + interest).toFixed(2),
         income: '0.00',
         spending: '0.00',
         valueChange: moved.toFixed(2),
@@ -2728,6 +2755,9 @@ export function mockApi(
         accountsAdded: '0.00',
         transfers: '0.00',
         other: '0.00',
+        payCredits: pay.toFixed(2),
+        benefitInterest: interest.toFixed(2),
+        creditLines: creditRows,
         valueMoves: moves,
         correctionLines: state.activity
           .filter(
@@ -2773,7 +2803,7 @@ export function mockApi(
       if (asOf > today) return problem(400, 'The date cannot be in the future')
       const tracked = state.accounts.filter((a) => a.openedOn <= asOf && a.status !== 'draft')
       const lines = tracked.map((a) => {
-        const valued = a.type === 'property' || a.type === 'other_asset'
+        const valued = isValuedType(a.type)
         const point = valued ? valuedPoint(state.values, a, asOf) : null
         const dated = point?.on ?? null
         const days = dated ? (Date.parse(asOf) - Date.parse(dated)) / 86_400_000 : 0
@@ -2799,6 +2829,7 @@ export function mockApi(
       const financialAssets = assets.reduce((x, y) => x + y, 0)
       const debts = -sum(debtLines)
       const valuedLines = lines.filter((l) => l.type === 'property' || l.type === 'other_asset')
+      const retirementLines = lines.filter((l) => l.type === 'defined_benefit')
       return HttpResponse.json({
         asOf,
         financialAssets: financialAssets.toFixed(2),
@@ -2809,6 +2840,7 @@ export function mockApi(
         loans: { total: sum(loans).toFixed(2), accounts: loans },
         mortgages: { total: sum(mortgages).toFixed(2), accounts: mortgages },
         investments: { total: sum(investmentLines).toFixed(2), accounts: investmentLines },
+        retirement: { total: sum(retirementLines).toFixed(2), accounts: retirementLines },
         propertyAndOther: { total: sum(valuedLines).toFixed(2), accounts: valuedLines },
         debtLines,
         notTracked: state.accounts
@@ -2859,11 +2891,21 @@ export function mockApi(
       log(request)
       const body = (await request.json()) as NewAccountBody
       if (typeTraits(body.type).kind === 'investment') return createInvestment(body)
+      const traits = typeTraits(body.type)
       const failure =
         validateAccount(body.name, body.ownerMemberIds) ??
         validateOwners(state.members, body.ownerMemberIds, []) ??
+        (traits.singleOwner && new Set(body.ownerMemberIds).size > 1
+          ? problem(400, 'A defined benefit has one participant. Choose one member.')
+          : null) ??
         validateOpening(body, today) ??
-        validateSide(body)
+        validateSide(body) ??
+        (traits.recordsCreator && !body.enteredByMemberId
+          ? problem(400, 'Choose who entered this')
+          : null) ??
+        (traits.plan && Number(amountOrZero(body.openingBalance)) < 0
+          ? problem(400, 'Plan value must be zero or greater')
+          : null)
       if (failure) return failure
       // A card is entered as a positive figure with a side and stored with the asset sign (owed negative).
       const entered = amountOrZero(body.openingBalance) as string
@@ -2882,6 +2924,7 @@ export function mockApi(
         status: 'active',
       }
       state.accounts.push(account)
+      if (traits.recordsCreator) noteAccountEvent(account.id, 'set_up', body.enteredByMemberId)
       return HttpResponse.json(account, { status: 201 })
     }),
     http.put('*/api/v1/accounts/:id', async ({ request, params }) => {
@@ -2896,7 +2939,10 @@ export function mockApi(
       }
       const failure =
         validateAccount(body.name as string, body.ownerMemberIds as string[]) ??
-        validateOwners(state.members, body.ownerMemberIds as string[], account.ownerMemberIds)
+        validateOwners(state.members, body.ownerMemberIds as string[], account.ownerMemberIds) ??
+        (typeTraits(account.type).singleOwner && new Set(body.ownerMemberIds as string[]).size > 1
+          ? problem(400, 'A defined benefit has one participant. Choose one member.')
+          : null)
       if (failure) return failure
       account.name = (body.name as string).trim()
       account.institution = (body.institution as string | undefined)?.trim() || null

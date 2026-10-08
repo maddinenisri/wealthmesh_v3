@@ -38,17 +38,31 @@ type Review = 'archive' | 'restore' | 'close' | 'reopen' | 'delete'
 export function AccountStatusCard({
   account,
   onReview,
+  staleAfter = 0,
 }: {
   account: Account
   /** Called when a review opens, so a sentence another card still shows from an earlier page can go. */
   onReview?: () => void
+  /** Counts changes made by another card (a statement panel opened or saved): the sentence here is then out of date. */
+  staleAfter?: number
 }) {
   const [review, setReview] = useState<Review | null>(null)
-  const { message, statusRef, begin: beginFocus, changed } = useStateChangeFocus(review !== null)
+  const {
+    message,
+    statusRef,
+    begin: beginFocus,
+    changed,
+    clear,
+  } = useStateChangeFocus(review !== null)
   const begin = () => {
     beginFocus()
     onReview?.()
   }
+  useEffect(() => {
+    if (staleAfter > 0) clear()
+    // `clear` is new every render; only a change from the other card matters.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [staleAfter])
   const { members } = useAccountContext()
   const { member, setMemberId } = useEnteringAs(members)
   const change = useChangeAccountStatus(account.id, member?.id)
@@ -84,7 +98,7 @@ export function AccountStatusCard({
         setReview(null)
         changed(
           {
-            archive: `${account.name} is archived. Its ${figure} stays in wealth.`,
+            archive: `${account.name} is archived. Its ${figure} stays in wealth${typeTraits(account.type).plan ? ' and in Retirement' : ''}.`,
             restore: `${account.name} is active again with its ${figure} and complete history.`,
             close: debt
               ? `${account.name} is closed at ${figure}. Its history is kept.`
@@ -155,12 +169,14 @@ export function AccountStatusCard({
                   Its {figure} will remain in wealth
                   {(isCard(account.type) && Number(account.balance.amount) < 0) || debt
                     ? ' as debt'
-                    : ''}
+                    : typeTraits(account.type).plan
+                      ? ' and in Retirement'
+                      : ''}
                   , with a visible archived label.
                 </p>
                 <p className="text-sm">
                   {isValued(account.type)
-                    ? `${account.name} leaves the active account list and takes no new values until you restore it. This changes the household list only.`
+                    ? `${account.name} leaves the active account list and takes no new ${typeTraits(account.type).plan ? 'statements' : 'values'} until you restore it. This changes the household list only.`
                     : debt
                       ? `${account.name} leaves the active account list and every choice for new payments. This changes the household list. It does not close the ${debtNoun(account.type)} at its lender.`
                       : `${account.name} leaves the active account list and every choice for new entries, transfers and payments. This changes the household list. It does not close an account at its bank.`}
@@ -185,8 +201,10 @@ export function AccountStatusCard({
                 </p>
               ) : isValued(account.type) ? (
                 <p className="text-sm">
-                  Closing needs a zero value. {account.name} has {figure}: record a $0.00 value
-                  first (for example when it is sold), then review closing again.
+                  Closing needs a zero value. {account.name} has {figure}: record a $0.00{' '}
+                  {typeTraits(account.type).plan ? 'plan value' : 'value'} first (for example when{' '}
+                  {typeTraits(account.type).plan ? 'the plan ends' : 'it is sold'}), then review
+                  closing again.
                 </p>
               ) : debt ? (
                 <>
