@@ -177,7 +177,8 @@ describe('setting up a brokerage', () => {
     expect(screen.getByText('$100.00', { selector: 'dd' })).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    await vi_waitFocus(screen.getByLabelText('Account name'))
+    // The mismatch is about the total, so Back lands on it (it can sit below the fold on a narrow window).
+    await vi_waitFocus(screen.getByLabelText('Opening total'))
     expect(screen.getByLabelText('Cash')).toHaveValue('100')
     const total = screen.getByLabelText('Opening total')
     await user.clear(total)

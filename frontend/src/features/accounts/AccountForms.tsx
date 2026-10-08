@@ -224,8 +224,9 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
           onBack={() => {
             create.reset()
             setOpeningReview(null)
-            // The form is back on the page; its first field takes focus, not the body.
-            requestAnimationFrame(() => setFocus('name'))
+            // The form is back on the page. A mismatch is about the typed total, so focus goes there (it can sit
+            // below the fold); any other review returns to the first field, not the body.
+            requestAnimationFrame(() => setFocus(result.state === 'mismatch' ? 'total' : 'name'))
           }}
           cancel={
             <Link to="/accounts" className={buttonStyles({ variant: 'ghost' })}>

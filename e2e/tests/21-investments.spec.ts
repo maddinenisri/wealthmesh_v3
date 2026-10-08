@@ -175,7 +175,7 @@ for (const width of [710, 1280] as const) {
       })
     }
 
-    test(`V2_BROKERAGE_006 a mismatch is shown, cannot be confirmed, and Back returns to the name (${width}px)`, async ({
+    test(`V2_BROKERAGE_006 a mismatch is shown, cannot be confirmed, and Back returns to the Opening total (${width}px)`, async ({
       page,
     }) => {
       const before = await financialAssets(page)
@@ -191,7 +191,8 @@ for (const width of [710, 1280] as const) {
       await expect(page.getByRole('button', { name: 'Confirm' })).toBeDisabled()
       await expectNoSidewaysScroll(page)
       await page.getByRole('button', { name: 'Back' }).click()
-      await expect(page.getByLabel('Account name')).toBeFocused()
+      await expect(page.getByLabel('Opening total')).toBeFocused()
+      await expectInView(page, page.getByLabel('Opening total'))
       expect(await financialAssets(page)).toBe(before)
     })
 
