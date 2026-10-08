@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { Household } from '../../api/household'
 import { Link } from 'react-router'
 import {
@@ -15,7 +15,7 @@ import type { Account } from '../../api/accounts'
 import type { WealthLine } from '../../api/wealth'
 import { useAccounts } from '../../hooks/useAccounts'
 import { useWealth } from '../../hooks/useWealth'
-import { accountTypeLabel, isDebt } from '../accounts/accountTypes'
+import { accountTypeLabel, isDebt, typeTraits } from '../accounts/accountTypes'
 import { BalanceFigure } from '../accounts/BalanceFigure'
 import { cardSide, isCard } from '../accounts/cardBalance'
 import { STATUS_LABEL } from '../accounts/statusLabel'
@@ -23,7 +23,7 @@ import { ownerNames } from '../accounts/ownerNames'
 import { useAccountContext } from '../accounts/useAccountContext'
 import { CreateHouseholdForm, RenameHouseholdForm } from './HouseholdForms'
 import { MembersCard } from './MembersCard'
-import { accountsIn } from './wealthGroups'
+import { accountsIn, alsoIn, overlapText } from './wealthGroups'
 import { WealthOverTime } from './WealthOverTime'
 import { useHousehold } from '../../hooks/useHousehold'
 import { useMembers } from '../../hooks/useMembers'
@@ -99,6 +99,10 @@ function AccountsAndWealth() {
   const accounts = useAccounts()
   const wealth = useWealth()
   const { members } = useAccountContext()
+  // A draft investment account counts nothing; it is offered under Finish setup (HOLDINGS_001).
+  const investmentDrafts = (accounts.data ?? []).filter(
+    (account) => account.status === 'draft' && typeTraits(account.type).kind === 'investment',
+  )
 
   return (
     <Card aria-labelledby="wealth-heading">
@@ -172,18 +176,45 @@ function AccountsAndWealth() {
           <AccountGroup
             id="investments-heading"
             title="Investments"
+            groupKey="investments"
             total={wealth.data?.investments.total}
             accounts={accountsIn(accounts.data, wealth.data?.investments)}
             members={members}
+            lines={wealth.data?.investments.accounts}
+            showEmpty={investmentDrafts.length > 0}
+            emptyText="No completed investment accounts"
+            note={overlapText(wealth.data?.investments, 'investments', [
+              'retirement',
+              'healthSavings',
+            ])}
+            footer={<FinishSetup drafts={investmentDrafts} members={members} />}
           />
           <AccountGroup
             id="retirement-heading"
             title="Retirement"
+            groupKey="retirement"
             total={wealth.data?.retirement.total}
             accounts={accountsIn(accounts.data, wealth.data?.retirement)}
             members={members}
             lines={wealth.data?.retirement.accounts}
-            note="A plan-reported benefit value is counted here once. It is not personal investment cash or holdings, and it is not added to wealth again."
+            note={[
+              wealth.data?.retirement.accounts.some((line) => line.type === 'defined_benefit')
+                ? 'A plan-reported benefit value is counted here once. It is not personal investment cash or holdings, and it is not added to wealth again.'
+                : undefined,
+              overlapText(wealth.data?.retirement, 'retirement', ['investments']),
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          />
+          <AccountGroup
+            id="health-savings-heading"
+            title="Health savings"
+            groupKey="healthSavings"
+            total={wealth.data?.healthSavings.total}
+            accounts={accountsIn(accounts.data, wealth.data?.healthSavings)}
+            members={members}
+            lines={wealth.data?.healthSavings.accounts}
+            note="A health savings account is shown here and in Investments. It is not added to Retirement or Bank money, and this total is not added again to wealth."
           />
           <AccountGroup
             id="property-heading"
@@ -236,11 +267,21 @@ function AccountGroup({
   members,
   note,
   lines,
+  groupKey,
+  showEmpty = false,
+  emptyText,
+  footer,
   card = false,
   owed = false,
 }: {
   id: string
   title: string
+  /** The server's name for the group: another group that lists an account is shown as "Also in …". */
+  groupKey?: string
+  /** Show the group with an empty sentence when it has no accounts (an Investments group with only drafts). */
+  showEmpty?: boolean
+  emptyText?: string
+  footer?: ReactNode
   total: string | undefined
   accounts: Account[]
   members: Parameters<typeof ownerNames>[1]
@@ -252,7 +293,7 @@ function AccountGroup({
   /** A loan group is always owed: its total never reads as Card credit. */
   owed?: boolean
 }) {
-  if (accounts.length === 0) return null
+  if (accounts.length === 0 && !showEmpty) return null
   return (
     <section aria-labelledby={id} className="mt-4">
       <div className="flex items-baseline justify-between gap-4">
@@ -260,6 +301,7 @@ function AccountGroup({
           {title}
         </h3>
         {total !== undefined &&
+          accounts.length > 0 &&
           (card ? (
             <span className="whitespace-nowrap">
               <Amount value={Math.abs(Number(total))} />{' '}
@@ -270,40 +312,88 @@ function AccountGroup({
           ))}
       </div>
       {note && <p className="text-sm text-ink-muted">{note}</p>}
-      <ul className="mt-2 divide-y divide-line border-y border-line">
-        {accounts.map((account) => (
-          <li key={account.id} className="flex items-baseline justify-between gap-4 py-3">
-            <span>
-              <Link
-                to={`/accounts/${account.id}`}
-                className="font-medium underline-offset-2 hover:underline"
-              >
-                {account.name}
-              </Link>{' '}
-              <span className="text-sm text-ink-muted">{accountTypeLabel(account.type)}</span>{' '}
-              {account.status !== 'active' && (
-                <Badge>{STATUS_LABEL[account.status] ?? account.status}</Badge>
-              )}{' '}
-              <span aria-hidden className="text-sm text-ink-muted">
-                ·
-              </span>{' '}
-              <span className="text-sm text-ink-muted">
-                {ownerNames(account.ownerMemberIds, members)}
-              </span>
-            </span>
-            <span className="text-right">
-              <BalanceFigure type={account.type} amount={account.balance.amount} />
-              {lines?.find((line) => line.accountId === account.id)?.valueDate && (
-                <span className="block text-sm text-ink-muted">
-                  {account.type === 'defined_benefit' ? 'As of' : 'Value dated'}{' '}
-                  <span className="whitespace-nowrap">
-                    {lines.find((line) => line.accountId === account.id)?.valueDate}
-                  </span>{' '}
-                  {lines.find((line) => line.accountId === account.id)?.stale && (
-                    <Badge>Older value</Badge>
-                  )}
+      {accounts.length === 0 && emptyText && <p className="mt-2 text-ink-muted">{emptyText}</p>}
+      {accounts.length > 0 && (
+        <ul className="mt-2 divide-y divide-line border-y border-line">
+          {accounts.map((account) => (
+            <li key={account.id} className="flex items-baseline justify-between gap-4 py-3">
+              <span>
+                <Link
+                  to={`/accounts/${account.id}`}
+                  className="font-medium underline-offset-2 hover:underline"
+                >
+                  {account.name}
+                </Link>{' '}
+                <span className="text-sm text-ink-muted">{accountTypeLabel(account.type)}</span>{' '}
+                {account.status !== 'active' && (
+                  <Badge>{STATUS_LABEL[account.status] ?? account.status}</Badge>
+                )}{' '}
+                <span aria-hidden className="text-sm text-ink-muted">
+                  ·
+                </span>{' '}
+                <span className="text-sm text-ink-muted">
+                  {ownerNames(account.ownerMemberIds, members)}
                 </span>
-              )}
+                {groupKey &&
+                  alsoIn(
+                    lines?.find((line) => line.accountId === account.id),
+                    groupKey,
+                  ).length > 0 && (
+                    <span className="block text-sm text-ink-muted">
+                      Also in{' '}
+                      {alsoIn(
+                        lines?.find((line) => line.accountId === account.id),
+                        groupKey,
+                      ).join(' and ')}
+                    </span>
+                  )}
+              </span>
+              <span className="text-right">
+                <BalanceFigure type={account.type} amount={account.balance.amount} />
+                {lines?.find((line) => line.accountId === account.id)?.valueDate && (
+                  <span className="block text-sm text-ink-muted">
+                    {account.type === 'defined_benefit' ? 'As of' : 'Value dated'}{' '}
+                    <span className="whitespace-nowrap">
+                      {lines.find((line) => line.accountId === account.id)?.valueDate}
+                    </span>{' '}
+                    {lines.find((line) => line.accountId === account.id)?.stale && (
+                      <Badge>Older value</Badge>
+                    )}
+                  </span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {footer}
+    </section>
+  )
+}
+
+/** Drafts of investment accounts: counted nowhere, and finished from their own page (HOLDINGS_001). */
+function FinishSetup({
+  drafts,
+  members,
+}: {
+  drafts: Account[]
+  members: Parameters<typeof ownerNames>[1]
+}) {
+  if (drafts.length === 0) return null
+  return (
+    <section aria-label="Finish setup" className="mt-3">
+      <h4 className="text-sm font-medium">Finish setup</h4>
+      <p className="text-sm text-ink-muted">
+        A draft is not counted in wealth until it is finished.
+      </p>
+      <ul className="mt-1 text-sm">
+        {drafts.map((draft) => (
+          <li key={draft.id}>
+            <Link to={`/accounts/${draft.id}`} className="underline underline-offset-2">
+              {draft.name}
+            </Link>{' '}
+            <span className="text-ink-muted">
+              {accountTypeLabel(draft.type)} · {ownerNames(draft.ownerMemberIds, members)}
             </span>
           </li>
         ))}

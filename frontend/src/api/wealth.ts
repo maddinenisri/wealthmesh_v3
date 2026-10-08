@@ -11,6 +11,8 @@ export type WealthLine = {
   valueDate: string | null
   /** True when that value is dated more than 30 days before the wealth date. */
   stale: boolean
+  /** Every group that lists the account, as the server decided once (D-067): a 401(k) is in two. */
+  groups: string[]
 }
 
 /** An account that had not begun tracking on the wealth date: named, never counted as zero. */
@@ -31,10 +33,13 @@ export type Wealth = {
   cards: WealthGroup
   loans: WealthGroup
   mortgages: WealthGroup
-  /** Brokerage and other investment accounts. */
+  /**
+   * Investments, Retirement and Health savings overlap on purpose: each is a view, never added to wealth (D-067).
+   * Investments lists every investment account, Retirement the 401(k), IRAs and plan values, Health savings the HSA.
+   */
   investments: WealthGroup
-  /** Defined benefit plan values (the retirement investment types join them in slice 18b). */
   retirement: WealthGroup
+  healthSavings: WealthGroup
   propertyAndOther: WealthGroup
   debtLines: WealthLine[]
   notTracked: NotTracked[]
@@ -116,6 +121,7 @@ function parseLine(value: unknown): WealthLine {
     balance: text(data.balance),
     valueDate: data.valueDate == null ? null : text(data.valueDate),
     stale: data.stale === true,
+    groups: Array.isArray(data.groups) ? data.groups.map(text) : [],
   }
 }
 
@@ -143,6 +149,7 @@ function parseWealth(value: unknown): Wealth {
     mortgages: parseGroup(data.mortgages),
     investments: parseGroup(data.investments),
     retirement: parseGroup(data.retirement),
+    healthSavings: parseGroup(data.healthSavings),
     propertyAndOther: parseGroup(data.propertyAndOther),
     debtLines: parseLines(data.debtLines),
     notTracked: data.notTracked.map((item) => {

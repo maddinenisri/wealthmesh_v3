@@ -46,7 +46,12 @@ export function useUpdateAccount(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (details: AccountDetails) => updateAccount(id, details),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: accountsKey }),
+    // A name or owner shows in the account, its history and the wealth groups that list it.
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: accountsKey }),
+        queryClient.invalidateQueries({ queryKey: wealthKey }),
+      ]),
   })
 }
 

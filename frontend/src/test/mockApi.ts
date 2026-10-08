@@ -370,6 +370,32 @@ function problem(status: number, message: string) {
  * 404 before creation, 400 for blank names and 409 for duplicate members. Accounts follow the same
  * rules as the backend: blank name, invalid amount, missing owner and future opening date are 400.
  */
+/**
+ * The groups that list a type (the server's `AccountType.groups`, D-067): a test double of one server rule, so the
+ * Household page is read against the same overlaps. An investment account is also in Investments.
+ */
+function mockGroups(type: string): string[] {
+  const own: Record<string, string> = {
+    checking: 'bankMoney',
+    savings: 'bankMoney',
+    credit_card: 'cards',
+    loan: 'loans',
+    mortgage: 'mortgages',
+    property: 'propertyAndOther',
+    other_asset: 'propertyAndOther',
+    defined_benefit: 'retirement',
+    brokerage: 'investments',
+    '401k': 'retirement',
+    traditional_ira: 'retirement',
+    roth_ira: 'retirement',
+    hsa: 'healthSavings',
+  }
+  const order = ['investments', 'retirement', 'healthSavings']
+  const groups = new Set([own[type]])
+  if (typeTraits(type).kind === 'investment') groups.add('investments')
+  return [...groups].sort((a, b) => order.indexOf(a) - order.indexOf(b))
+}
+
 export function mockApi(
   seed: {
     household?: MockHousehold
@@ -423,13 +449,17 @@ export function mockApi(
   /** Accounts deleted through the API; Undo puts them back. */
   const deletedAccounts: MockAccount[] = []
   /** State changes by account id, newest first, as the server keeps them. */
-  const accountEvents = new Map<string, { action: string; memberId: string | null; at: string }[]>()
-  const noteAccountEvent = (id: string, action: string, memberId: unknown) =>
+  const accountEvents = new Map<
+    string,
+    { action: string; memberId: string | null; at: string; detail: string | null }[]
+  >()
+  const noteAccountEvent = (id: string, action: string, memberId: unknown, detail?: string) =>
     accountEvents.set(id, [
       {
         action,
         memberId: typeof memberId === 'string' ? memberId : null,
         at: '2026-10-06T09:00:00Z',
+        detail: detail ?? null,
       },
       ...(accountEvents.get(id) ?? []),
     ])
@@ -2815,6 +2845,7 @@ export function mockApi(
           balance: Number(point ? point.amount : a.balance.amount).toFixed(2),
           valueDate: dated,
           stale: valued && days > 30,
+          groups: mockGroups(a.type),
         }
       })
       const sum = (rows: { balance: string }[]) =>
@@ -2823,13 +2854,15 @@ export function mockApi(
       const cards = lines.filter((l) => l.type === 'credit_card')
       const loans = lines.filter((l) => l.type === 'loan')
       const mortgages = lines.filter((l) => l.type === 'mortgage')
-      const investmentLines = lines.filter((l) => typeTraits(l.type).kind === 'investment')
+      const inGroup = (key: string) => lines.filter((l) => l.groups.includes(key))
+      const investmentLines = inGroup('investments')
       const debtLines = lines.filter((l) => Number(l.balance) < 0)
       const assets = lines.map((l) => Number(l.balance)).filter((b) => b > 0)
       const financialAssets = assets.reduce((x, y) => x + y, 0)
       const debts = -sum(debtLines)
       const valuedLines = lines.filter((l) => l.type === 'property' || l.type === 'other_asset')
-      const retirementLines = lines.filter((l) => l.type === 'defined_benefit')
+      const retirementLines = inGroup('retirement')
+      const healthLines = inGroup('healthSavings')
       return HttpResponse.json({
         asOf,
         financialAssets: financialAssets.toFixed(2),
@@ -2841,6 +2874,7 @@ export function mockApi(
         mortgages: { total: sum(mortgages).toFixed(2), accounts: mortgages },
         investments: { total: sum(investmentLines).toFixed(2), accounts: investmentLines },
         retirement: { total: sum(retirementLines).toFixed(2), accounts: retirementLines },
+        healthSavings: { total: sum(healthLines).toFixed(2), accounts: healthLines },
         propertyAndOther: { total: sum(valuedLines).toFixed(2), accounts: valuedLines },
         debtLines,
         notTracked: state.accounts
@@ -2933,7 +2967,9 @@ export function mockApi(
       const account = state.accounts.find((a) => a.id === params.id)
       if (!account) return problem(404, 'Account not found')
       if (
-        Object.keys(body).some((key) => !['name', 'institution', 'ownerMemberIds'].includes(key))
+        Object.keys(body).some(
+          (key) => !['name', 'institution', 'ownerMemberIds', 'enteredByMemberId'].includes(key),
+        )
       ) {
         return problem(400, 'Edit account changes details only, not the balance or date')
       }
@@ -2944,7 +2980,10 @@ export function mockApi(
           ? problem(400, 'A defined benefit has one participant. Choose one member.')
           : null)
       if (failure) return failure
+      const renamedFrom = account.name
       account.name = (body.name as string).trim()
+      if (renamedFrom !== account.name)
+        noteAccountEvent(account.id, 'renamed', body.enteredByMemberId, renamedFrom)
       account.institution = (body.institution as string | undefined)?.trim() || null
       account.ownerMemberIds = body.ownerMemberIds as string[]
       return HttpResponse.json(account)

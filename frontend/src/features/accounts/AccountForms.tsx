@@ -23,6 +23,7 @@ import { OpeningReview } from '../investments/OpeningReview'
 import { toOpening, type OpeningValues } from '../investments/openingForm'
 import { ACCOUNT_TYPES, isDebt, typeNoun, typeTraits, valuedNoun } from './accountTypes'
 import { isCard } from './cardBalance'
+import { editSentence } from './editSentence'
 import { memberLabel } from './ownerNames'
 
 type DetailsValues = { name: string; institution: string; ownerMemberIds: string[] }
@@ -417,7 +418,7 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
 export function AccountEditForm({ account, members }: { account: Account; members: Member[] }) {
   const navigate = useNavigate()
   const update = useUpdateAccount(account.id)
-  const { control, handleSubmit } = useForm<DetailsValues>({
+  const { control, handleSubmit, setFocus } = useForm<DetailsValues>({
     defaultValues: {
       name: account.name,
       institution: account.institution ?? '',
@@ -425,11 +426,24 @@ export function AccountEditForm({ account, members }: { account: Account; member
     },
   })
 
+  const { member } = useEnteringAs(members)
+  // The page opens on its first field, not on the page body.
+  useEffect(() => setFocus('name'), [setFocus])
+
+  // The edit ends on the account's page with one sentence on its status line (Q-062).
   const onSubmit = handleSubmit((values) =>
     update
-      .mutateAsync({ ...values, name: values.name.trim(), institution: values.institution.trim() })
+      .mutateAsync({
+        ...values,
+        name: values.name.trim(),
+        institution: values.institution.trim(),
+        enteredByMemberId: member?.id,
+      })
       .then(
-        () => navigate(`/accounts/${account.id}`),
+        (saved) =>
+          navigate(`/accounts/${account.id}`, {
+            state: { updated: editSentence(account, saved, members) },
+          }),
         () => undefined,
       ),
   )

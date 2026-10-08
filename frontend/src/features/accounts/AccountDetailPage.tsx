@@ -1,7 +1,7 @@
 import type { ValueRow } from '../../api/values'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useBalanceAsOf } from '../../hooks/useActivity'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
 import { Button, Card, CardTitle, EmptyState, PageHeader, buttonStyles } from '../../design-system'
@@ -41,10 +41,19 @@ import { useAccountContext } from './useAccountContext'
 
 export function AccountDetailPage() {
   const { id = '' } = useParams()
+  const location = useLocation()
   const account = useAccount(id)
   const { members } = useAccountContext()
   const [reviewsOpened, setReviewsOpened] = useState(0)
   const [valueActivity, setValueActivity] = useState(0)
+  // The sentence an Edit arrived with is read once; a reload or Back must not say it again.
+  const updated = (location.state as { updated?: string } | null)?.updated
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (updated) navigate('.', { replace: true, state: null })
+    // Once, when the page opens with a sentence.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div className="flex flex-col gap-6">
@@ -88,6 +97,7 @@ export function AccountDetailPage() {
             account={account.data}
             onReview={() => setReviewsOpened((count) => count + 1)}
             staleAfter={valueActivity}
+            arrivedWith={updated}
           />
           {isValued(account.data.type) ? (
             <ValuedAccount

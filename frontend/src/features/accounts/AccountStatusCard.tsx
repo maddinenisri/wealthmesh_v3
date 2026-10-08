@@ -27,6 +27,7 @@ const EVENT_LABEL: Record<string, string> = {
   deleted: 'Deleted',
   undeleted: 'Deleted, then brought back',
   set_up: 'Set up',
+  renamed: 'Renamed',
   drafted: 'Draft saved',
   setup_finished: 'Setup finished',
   discarded: 'Draft cancelled',
@@ -39,12 +40,15 @@ export function AccountStatusCard({
   account,
   onReview,
   staleAfter = 0,
+  arrivedWith,
 }: {
   account: Account
   /** Called when a review opens, so a sentence another card still shows from an earlier page can go. */
   onReview?: () => void
   /** Counts changes made by another card (a statement panel opened or saved): the sentence here is then out of date. */
   staleAfter?: number
+  /** A sentence from a change made on another page (a plain Edit): the status line shows it and takes focus. */
+  arrivedWith?: string
 }) {
   const [review, setReview] = useState<Review | null>(null)
   const {
@@ -53,11 +57,14 @@ export function AccountStatusCard({
     begin: beginFocus,
     changed,
     clear,
-  } = useStateChangeFocus(review !== null)
+  } = useStateChangeFocus(review !== null, arrivedWith)
   const begin = () => {
     beginFocus()
     onReview?.()
   }
+  // The sentence an Edit ended with does not replace the account's own explanation (Archived, Closed).
+  const [edited] = useState(arrivedWith)
+  const explain = !message || message === edited
   useEffect(() => {
     if (staleAfter > 0) clear()
     // `clear` is new every render; only a change from the other card matters.
@@ -129,14 +136,14 @@ export function AccountStatusCard({
           {message}
         </p>
       )}
-      {account.status === 'closed' && !message && (
+      {account.status === 'closed' && explain && (
         <p className="mt-2 max-w-prose text-sm text-ink-muted">
           Closed: it takes no new{' '}
-          {isValued(account.type) ? 'values' : debt ? 'payments' : 'entries'} and no changes until
-          you reopen it. Its history stays.
+          {isValued(account.type) ? 'values' : debt ? 'payments' : 'entries'} until you reopen it.
+          Its name and owners can still be edited. Its history stays.
         </p>
       )}
-      {account.status === 'archived' && !message && (
+      {account.status === 'archived' && explain && (
         <p className="mt-2 max-w-prose text-sm text-ink-muted">
           {isValued(account.type)
             ? 'Archived: hidden from the active list and from new values.'
@@ -380,9 +387,10 @@ export function AccountStatusCard({
             Status history
           </h3>
           <ul className="mt-1 text-sm text-ink-muted">
-            {events.data.map((event) => (
-              <li key={`${event.at}-${event.action}`}>
+            {events.data.map((event, index) => (
+              <li key={`${event.at}-${event.action}-${index}`}>
                 {EVENT_LABEL[event.action] ?? event.action}
+                {event.action === 'renamed' && event.detail && ` from ${event.detail}`}
                 {event.memberId &&
                   members?.find((m) => m.id === event.memberId) &&
                   ` by ${memberLabel(members.find((m) => m.id === event.memberId)!)}`}

@@ -42,7 +42,13 @@ export type HoldingInput = {
 /** Cash and holdings as typed. A null cash is "not answered" (a draft when anything else was entered). */
 export type OpeningInput = { total: string | null; cash: string | null; holdings: HoldingInput[] }
 
-export type AccountDetails = { name: string; institution: string; ownerMemberIds: string[] }
+export type AccountDetails = {
+  name: string
+  institution: string
+  ownerMemberIds: string[]
+  /** Who made the edit (Entering as); a rename records them in the account's history. */
+  enteredByMemberId?: string
+}
 
 function record(value: unknown): Record<string, unknown> {
   if (typeof value !== 'object' || value === null)
@@ -107,6 +113,7 @@ export const updateAccount = (id: string, details: AccountDetails) =>
       name: details.name,
       institution: details.institution,
       ownerMemberIds: details.ownerMemberIds,
+      enteredByMemberId: details.enteredByMemberId,
     },
     parse: parseAccount,
   })
@@ -124,7 +131,13 @@ export const changeAccountStatus = (
   })
 
 /** One change of an account's state: who entered it (null when unknown) and when. */
-export type AccountEvent = { action: string; memberId: string | null; at: string }
+export type AccountEvent = {
+  action: string
+  memberId: string | null
+  at: string
+  /** More about the change: a rename names the name it replaced. */
+  detail: string | null
+}
 
 export const getAccountEvents = (id: string) =>
   request(`/accounts/${id}/events`, {
@@ -136,6 +149,7 @@ export const getAccountEvents = (id: string) =>
           action: str(data.action),
           memberId: data.memberId == null ? null : str(data.memberId),
           at: str(data.at),
+          detail: data.detail == null ? null : str(data.detail),
         }
       })
     },
