@@ -55,6 +55,8 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
       inside the form, and a removal or Undo (slice 11: Back, Remove portion and Confirm of a removal lost focus). A
       status line says what changed. Run each new e2e assertion red on its own (`--grep`): a serial run stops at the first
       failure and hides the rest.
+- [ ] An e2e spec on the shared database judges deltas and scopes every negative assertion (`not.toContainText`, a count of zero) and every short label (`getByLabel('To')`) to the block the spec created, with `exact: true` (slices 18a and 18b: both failed only in the full run).
+- [ ] A plant is real only when `npm run package` printed `BUILD SUCCESSFUL` before the e2e run (slice 18b: a plant that broke the TypeScript build left the old jar and looked harmless).
 - [ ] Edit forms start from the current values and show the original. A long name and label wrap at 710px.
 - [ ] A race test for a lock uses an update when a foreign key to the locked row would make an insert wait anyway (plant the
       lock's removal and see it red). A screen that lists rows is checked in a short month and at 1280px; a history row

@@ -198,3 +198,182 @@ Written after Land by a read-only agent and checked against the code.
 - What slowed this session: e2e helpers that hid a 400 (missing `Idempotency-Key`), a short label that collided only on the shared database, a lint warning on my own effect, and a scripted-click focus claim that did not reproduce.
 - What went well: groups decided once on the type with a total that adds up; credits kept out of income by a test; each Cowork fault got a test that failed first.
 - Process change to try: reproduce a Cowork fault with a real click at the reported width before changing code.
+
+---
+
+# 18b: wealth groups and every reader
+
+Session started 2026-10-08 (after 18a was pushed at `4a17225`).
+
+## 18b prompts and directions
+
+- Kickoff (summarized, no transcript): run `feature-session` for slice 18b, the uncovered IDs of slice 18 planned for it: WEALTH 002, 008, 009; HOLDINGS 001, 007; RETIREMENT_ACTIVITY_007; HOUSEHOLD_SETUP_005; OTHER_ASSET_001; PROPERTY_001. Owner answers 2026-10-08: Q-055 overlap reading stands (Investments, Retirement and Health savings overlap on purpose; a group total is a view, never added; net worth and financial assets come from account lines); Q-058 stands; Q-056 stays not built. Every reader needs a "counted once" test (net worth, financial assets, Household total, each group total, change explanation) on a partition of disjoint base groups and on the overlaps (401(k) in Investments and Retirement, HSA in Investments and Health savings, a defined benefit in Retirement and not Investments); list every reader of the 18a group helper. WEALTH_009 may need slice 19 prices: check, and defer whole with a reason in `deferred.txt` if so. Carry in: focus after Archive and Restore on the defined-benefit page did not reproduce with a real click (keep on the not-verified list, look again with the visual-reviewer); "two reviews open at once" waits for 18c. Every lock has a test that fails when planted away; every Confirm, removal, Undo and Back ends with a sentence and focus; a rule that refuses at Confirm also refuses in the review. Validator then visual-reviewer before Checkpoint 2; flake check and Vitest loop before Land; advisor at Checkpoint 1 and before Land. Do not stop between groups. Report the Cowork count against 8, 8, 5, 5, 5, 7, 9, 9, 8, 5, 6, 2 and 5.
+- 18b Checkpoint 1 answer (2026-10-08): approved. Q-060 defer WEALTH_009 whole (deferred.txt line, and a line in slice 19's notes so it comes back with the as-of reads). Q-061 yes. Q-062 yes: sentence and focus after a plain Edit save on every account type, and a history row for a rename; the owner-change history stays in 18c. Test that an owner change creates no income and does not change the Balance. D-067 as proposed (an amendment of D-065). Check that the plain Edit locks the account row; if not, fix it and prove it with a plant, not a log entry. Do not stop between groups.
+- Checkpoint 2 answer (18b, 2026-10-08): all six steps pass; the groups add up (financial assets equals the sum of every account's positive Balance); 1 fault, a wording one, against 8, 8, 5, 5, 5, 7, 9, 9, 8, 5, 6, 2 and 5 (the lowest so far). Q-063: keep a plain Edit allowed on a closed account, and change the closed card's wording because "no changes" is what the app now contradicts. Not verified by Cowork: 1280px Edit and Archive by eye, any save at 1280px, a small household built from scratch.
+
+## 18b gap analysis (from the code, 2026-10-08)
+
+| ID | What the scenario needs | In the code now | Citeable in 18b? |
+| --- | --- | --- | --- |
+| WEALTH_002 | Investments $131,500 and Retirement $150,000 overlap (401k and Traditional IRA in both), plan value in Retirement only, net worth unchanged, an explanation | `AccountType.groups()` is the base group only; the 401k and IRAs are in Investments only; no explanation | Yes |
+| WEALTH_008 | Roth in Investments and Retirement, HSA in Investments and a Health savings group, not in Retirement; membership explained | No Health savings group | Yes |
+| RETIREMENT_ACTIVITY_007 | Same with Roth $6,000 and HSA $3,050; HSA not in Retirement or Bank money | Same gap | Yes |
+| HOLDINGS_007 | Investments three accounts $131,500; Retirement three accounts $150,000; plan not investment cash | Same gap | Yes |
+| HOLDINGS_001 | Empty completed Investments group; a draft offered under "Finish setup"; no draft amount in wealth; no known shares, cost or return | The group is hidden when empty; drafts never count (`WealthStore`); `GET /accounts` returns drafts (`AccountsPage` lists them) so the Household page can read them; Finish setup is on the account page | Yes (empty state and draft links on the Household page) |
+| HOUSEHOLD_SETUP_005 | The Retirement list shows both accounts and owners, total $110,000; Sam's 401k opens with Sam and $80,000; no second account from another list | Group lists show owners and link to the one account; the 401k is not in Retirement | Yes |
+| OTHER_ASSET_001 | Car in the account list, details and the Other assets group once; Bank money and Investments exclude it; edit name and make it joint, **"confirms"**, without changing Balance or creating income | Built in slice 15 (create, edit, valued lines); no test cites the group and edit together. **A plain Edit account ends with no sentence and no history row (logged in 18a, every type)**; both scenarios end the edit with "confirms" | Yes, once the Edit-save sentence is fixed (Q-062); otherwise it stays logged and the two IDs are not cited |
+| PROPERTY_001 | Home once in the property list and details; rename keeps owners, Balance and date; mortgage is separate debt | Same | Same |
+| WEALTH_009 | Net worth as of Sept 30 without later transactions or prices; a trend through Oct 31 with the October increase | The feature file has no Background (checked in `understand-wealth.feature`, `holdings.feature` and `retirement-health.feature`). As-of exists. A trend is only two as-of reads and is buildable now. What cannot be shown is "only account activity and price values effective on or before September 30": no price can be recorded after setup until slice 19, so the exclusion is vacuous and a test of it proves nothing (WEALTH_004 and 007 wait on the same thing). D-016: a partly built scenario is not cited | **No: defer whole to slice 19** (owner to confirm, Q-060) |
+
+8 of 9 citeable. The map listed WEALTH_009 under 18; it is the only one that does not hold.
+
+## 18b proposed split of work (groups of tasks, in order; do not stop between them)
+
+| Group | IDs | Test level | What it builds |
+| --- | --- | --- | --- |
+| 0 Groups on the type | WEALTH_002, 008; RETIREMENT_ACTIVITY_007; HOLDINGS_007 | Unit (`AccountGroupsTest`: every type has one base, views listed), API (`WealthPartitionApiTests`, `WealthOverlapApiTests`: counted-once on net worth, financial assets, each group total, as-of, change explanation) | `WealthGroup` gains `HEALTH_SAVINGS`; the base group is a partition tag (brokerage Investments, 401k/IRAs Retirement, HSA Health savings, plan Retirement); `groups()` adds the views; `Line` carries `groups`; `WealthSummary` gains `healthSavings` |
+| 1 Household page | WEALTH_002, 008; RETIREMENT_ACTIVITY_007; HOLDINGS_001, 007; HOUSEHOLD_SETUP_005 | Vitest (`WealthGroups.test.tsx`: lists, owners, "also in", empty state, drafts), e2e at 710px and 1280px | Health savings section, overlap note naming the accounts in both groups, "also in Retirement" on the row, Investments empty state with drafts under "Finish setup", mock mirrors the server |
+| 2 Property and other assets, and the Edit-save sentence | OTHER_ASSET_001, PROPERTY_001 | API (create, view, edit, joint, no income, group membership once), Vitest, e2e | Tests plus the Household assertions; if Q-062 is yes, a plain Edit account Save ends with a sentence ("<name> was updated") and focus on it, for every account type, and a history row for a rename or an owner change; no new rule on the server |
+| 3 Prove | all 8 | validator, then visual-reviewer (focus and the status sentence after each step, Archive and Restore on the plan page again) | |
+
+No new writer and no new lock in 18b (every change reads existing rows), so there is no new race; the inventory says which existing locks the readers share. Nothing new refuses at Confirm.
+
+## 18b decisions to make (feature-local unless noted)
+
+- **D-067 (cross-cutting, proposed as an amendment of D-065, since it reassigns the base tags D-065 introduced):** the base group is a partition tag, not what the owner sees. Brokerage is Investments; 401(k), Traditional and Roth IRAs and the defined benefit are Retirement; the HSA is Health savings. `groups()` lists the views: every investment account is also in Investments; the four retirement types are also in Retirement; the HSA is also in Health savings. Net worth and financial assets are summed from the lines, so a view cannot count an account twice. This changes 18a's base of the 401k from Investments to Retirement. After it, no displayed set partitions the accounts (Investments overlaps Retirement), so a test never sums displayed groups: it collects every `accountId` across all groups and `debtLines`, de-duplicates, sums the signed balances and asserts that equals `netWorth`; and separately asserts each account's `groups` equal its type's `groups()`. The blast radius was grepped: the Investments view keeps every investment-kind account, so `InvestmentSetupApiTests.investmentsGroup`, `InvestmentTypesApiTests` and the Investments assertions in `21-investments.spec.ts`, `InvestmentSetup.test.tsx` and `InvestmentTypes.test.tsx` stay true. What moves: `WealthPartitionApiTests.baseGroupsAddUp` (sums the JSON groups), `AccountGroupsTest` (base tags), `DefinedBenefit.test.tsx` (the mock's group literals), `mockApi.ts`, and the `WealthSummary` Javadoc (says the base groups add up).
+- One combined "Property and other assets" group stays (README says "Property and Other assets"; the scenarios say "Property assets" and "Other assets group" of the same list). Not split.
+- Investments shows on the Household page when the household has any investment-kind account, draft or completed (HOLDINGS_001's Given is a brokerage draft), with "No completed investment accounts" when none is completed and each draft offered under "Finish setup". A household with only a checking account shows no Investments line. The other empty groups stay hidden.
+- WEALTH_009 is deferred whole to slice 19 (see the gap table).
+
+## 18b inventory
+
+Writers of the shared state: none new. Account type, owners and status are written by `AccountService`, `InvestmentSetupService`, `ValueService`, `AccountLifecycleService` (all unchanged and locked in 17 and 18a).
+
+Readers of the 18a group helper (`AccountType.baseGroup()` / `groups()` / `inGroup`, `WealthSummary` groups), found by grep:
+
+| Reader | File | What it does with groups | 18b change |
+| --- | --- | --- | --- |
+| Wealth summary | `WealthService.summarize`, `in()` | Filters lines by `inGroup` | Adds Health savings; group lines carry `groups` |
+| Net worth and financial assets | `WealthService.summarize` | Sums the lines | Unchanged; the test proves it equals the independent sum |
+| Household total and debts | `HouseholdPage` `AccountsAndWealth` | Prints the server's three figures | Unchanged |
+| Each group total | `WealthSummary.Group` | `group(lines)` per view | A view total, never added |
+| Group lists | `HouseholdPage` `AccountGroup`, `wealthGroups.ts accountsIn` | Lists the accounts the server counted | Health savings, "also in", overlap note, Investments empty state and drafts |
+| Wealth on a date | `WealthOverTime` (uses `propertyAndOther` and the summary) | Property lines with value dates | Counted once test as of 2026-09-01; no other change |
+| Change explanation | `WealthService.change` (start and end wealth, `accountsAdded`, `valueMoves`, credits) | Reads lines and rows, never a group | Test: a 401k and an HSA added in the period are counted once, `other` stays 0 |
+| Plan review totals | `ValueService.totals` (`summary.retirement().total()`) | Retirement before and after | The Retirement total now includes retirement investment accounts; the after is before plus the move, so the check stays right; test |
+| Value form review | `ValueForm.tsx` "Retirement total" | Prints the two totals | Unchanged |
+| Archive sentence | `AccountStatusCard.tsx` ("stays in wealth and in Retirement") | Plan only | Unchanged; a 401k archive keeps its own wording (checked) |
+| API client | `api/wealth.ts` (`parseGroup`, `WealthSummary`) | Parses the groups | Adds `healthSavings` and `groups` |
+| Test double | `test/mockApi.ts` | Picks groups by type literal | Mirrors the new views (logged in 18a; fixed here) |
+| Per-person view | does not exist | | 18c must read the same lines |
+| `WealthSummary` Javadoc | `WealthSummary.java` | Says the base groups add up to net worth | Rewritten with D-067 |
+| Pages that list or pick accounts by type | `AccountsPage.tsx`, the transfer and payment pickers (`accountChoice.ts`), Spending | Grepped: none reads a wealth group; they use `typeTraits` kind | No change |
+
+Existing tests that already cite IDs near these (so 18b does not duplicate them): `WealthGroupsApiTests` and `WealthGroups.test.tsx` (WEALTH_003), `WealthApiTests` and `HouseholdOverview.test.tsx` (HOUSEHOLD_SETUP_003), `HouseholdSetupAccountsApiTests`, `DefinedBenefitSetupApiTests` and `DefinedBenefit.test.tsx` (HOUSEHOLD_SETUP_002). No test cites a 18b ID yet.
+
+## 18b open questions
+
+| # | Question | Default |
+| --- | --- | --- |
+| Q-060 | Defer WEALTH_009 whole to slice 19 (no price can be recorded after setup, no trend view exists)? | Yes, defer |
+| Q-061 | Investments shows on the Household page when the household has any investment-kind account, draft or completed, with an empty sentence and drafts under "Finish setup" (HOLDINGS_001)? | Yes |
+| Q-062 | OTHER_ASSET_001 and PROPERTY_001 end an edit with "confirms", and a plain Edit account Save ends with no sentence or history row today (logged in 18a). Fix it in 18b for every account type (a sentence with focus, and a history row for a rename or an owner change), or read "confirms" as a plain save and keep it logged? | Fix it |
+
+## 18b task status and proof (written during the build)
+
+| Group | State | Tests |
+| --- | --- | --- |
+| 0 Groups on the type | Done | `AccountGroupsTest` (overlaps per type), `WealthOverlapApiTests` (WEALTH_002 totals $150,000 / $131,500 / net worth $186,840; WEALTH_008 Roth and HSA; counted once across all groups, as of a date and in the change explanation; the plan review reads the Retirement total that now holds the 401k; draft counts nowhere; one account from either list), `WealthPartitionApiTests` rewritten to count each account once |
+| 1 Household page | Done | `WealthGroups.test.tsx` (overlap, Roth and HSA, empty Investments with the draft, no Investments for a bank-only household, Retirement list with owners and one account), e2e `24-wealth-groups.spec.ts` at 710px and 1280px |
+| 2 Property and other, Edit sentence | Done | `AccountEditApiTests` (car and home, rename history, entering member, account-row race), `AccountEdit.test.tsx`, e2e (car and home Edit at both widths) |
+
+Plants (each restored from a copy, never `git checkout`):
+
+| Lock or rule planted away | Test that went red |
+| --- | --- |
+| Financial assets summed from the group totals instead of the lines (double counting the overlaps) | `WealthOverlapApiTests`: WEALTH_002, WEALTH_008 and the as-of test |
+| `activity.lockAccount` removed from `AccountService.update` | `AccountEditApiTests.editWaitsForTheAccountRow` (the edit overwrote a concurrent archive) |
+| Both member `FOR SHARE` reads on the edit path removed (`checkOwners` and `memberLocked`) | `AccountEditApiTests.editWaitsForTheEnteringMemberRow` |
+| "Also in" rendering and the arrival sentence removed from the UI | e2e `24-wealth-groups.spec.ts` (four tests, both widths) |
+
+Limit found, not hidden: the member lock on the edit path cannot be proven alone, because `checkOwners` already reads every household member `FOR SHARE` in the same transaction (the same limit 18a logged for create). Removing either read alone leaves the test green; removing both turns it red.
+
+**Lock on the plain Edit (the owner's mid-build ask):** `AccountService.update` already took the account row lock first (`activity.lockAccount`) before 18b. It had no test that failed without it. Now `AccountEditApiTests.editWaitsForTheAccountRow` holds an uncommitted archive and asserts the edit waits and then keeps the account archived; planting the lock away turned it red (`$.status expected archived but was active`, re-run by the validator and restored exact). No fix was needed. The edit also reads the entering member `FOR SHARE`: `editWaitsForTheEnteringMemberRow` turns red only when both member reads are removed (the limit above).
+
+Existing assertions that moved with D-067: `WealthPartitionApiTests` (summed the groups), `AccountGroupsTest`, `mockApi.ts` (now one `mockGroups` double of the server rule). The Investments assertions of slices 17 and 18a stayed true.
+
+## 18b validator report (before the visual review)
+
+The validator (independent run) passed the readers of the group helper (none sums displayed groups), the lock on every writer of name and owners, V31 against the earlier check, `npm run coverage` (15 of 21, WEALTH_009 deferred, five 18c IDs missing), and re-ran two plants (account lock in `update`; the `investments` view in `mockGroups`), both red and restored exact. It could not run e2e (denied); the full e2e was run by me: 329 pass.
+
+| # | Finding | Result |
+| --- | --- | --- |
+| 1 | The Edit sentence came back after a reload or Back (history state) | Fixed: the page clears its state once (`navigate('.', {replace: true, state: null})`); e2e reloads and expects no sentence (planted red) |
+| 2 | The Edit sentence hid the Archived or Closed explanation | Fixed: the explanation shows beside the Edit sentence; Vitest on an archived car |
+| 3 | No test for the plan wording, the loan wording, or an edit on an archived account | Fixed: `AccountEdit.test.tsx` (plan "Participant is now Sam", loan "Its amount of … owed", archived) |
+| 4 | A foreign editor id was not tested | Fixed: `AccountEditApiTests.foreignEnteringMemberIsRefused` |
+| 5 | The history list key collided for two renames at one instant | Fixed: key includes the index |
+| 6 | Cancel on the Edit page ends with no sentence or stated focus | Logged: Cancel changes nothing and returns to the account page; the page opens at the top. Revisit if the Cowork pass finds it |
+| 7 | Edit is offered on a closed account, whose card says "no changes until you reopen it"; the API has no status gate | Logged for the owner (Q-063): this predates 18b. Default: leave it (a rename changes no money) |
+| 8 | The member lock on the edit cannot be proven alone | Logged above (both reads are removed together) |
+
+## 18b visual review (real clicks at 710px and 1280px, before Checkpoint 2)
+
+| # | Finding | Result |
+| --- | --- | --- |
+| F1 | The Edit page opens with focus on the page body | Fixed: focus on the name field (Vitest and e2e) |
+| F2 | Cancel on the Edit page returns with focus on the body | Logged (validator #6): Cancel changes nothing |
+| F3 | An owner or participant change has a sentence but no history row | Deferred to 18c by the owner (Q-062) |
+| F4 | The overlap note listed 17 names in one paragraph (shared dev data) | Fixed: three names and "and N more" (Vitest) |
+| F5 | A draft under Finish setup was only a name | Fixed: type and owner beside it (Vitest, e2e) |
+| taste | Plan sentence said "value" where the card says "Plan-reported benefit value" | Fixed: "Its plan value of …" |
+| taste | Loan sentence "amount of … owed" vs card "Balance owed"; owners "Maya, Sam" on the card vs "Maya and Sam" in the sentence; small tap targets in Finish setup | Left |
+| carry-in | Archive and Restore on the defined benefit with real clicks: focus on the status line after each Confirm, at both widths | Did not reproduce; off the not-verified list for Chromium |
+
+Not verified by the visual-reviewer: the "No completed investment accounts" wording (many investment accounts in the shared dev database; covered by Vitest), Edit on a Closed account (Q-063), the mortgage, card and savings types, and a real browser other than headless Chromium. The reviewer also saw gaps before punctuation in every picture (a headless-font artifact, not checked in a real browser).
+
+## What to click (Checkpoint 2, 18b)
+
+Use `docs/process/ui-checklist.md`. At 710px and 1280px, on `http://localhost:5180` (not 127.0.0.1). The dev database has many "VR18b …", "VR18a …" and "CW …" accounts, so the Investments note is long there; judge one small household in your head, or add a few accounts.
+
+1. **Household, overlap.** Add a 401(k), a Roth IRA, an HSA, a brokerage and a defined benefit. Read Investments, Retirement and Health savings: the "Also in …" line on the 401(k), Roth and HSA rows, the plan in Retirement only, the sentences about both groups, "not added again". Check net worth and financial assets do not change when you open a group.
+2. **Finish setup.** Save a brokerage as a draft. It appears under "Finish setup" in Investments with its type and owner, counts nowhere in wealth, and its link opens the draft.
+3. **Retirement list.** Open a 401(k) from Retirement and from Investments: the same account, with its owner and balance.
+4. **Edit account** for a car (make it joint), a home, a checking account, a plan (change the participant), a loan: opens with focus on the name; Save ends on the account page with one sentence on the status line (focus on it); the history shows "Renamed from …" for a rename; reload the page and the sentence does not return; open Archive and the sentence goes; on an archived account the "Archived:" line stays.
+5. **Edit, Cancel and a refused save** (empty name): where does focus land.
+6. **Archive then Restore** a defined benefit: sentence and focus after each.
+
+## 18b Cowork findings
+
+| # | Check | Result | Fault seen | Test added |
+| --- | --- | --- | --- | --- |
+| 1 | wording | Fixed | The loan's Edit sentence said "Its amount of $19,900.00 owed" where the loan page says "Balance owed" | Vitest `AccountEdit.test.tsx` (red first) and e2e `24-wealth-groups.spec.ts` loan Edit |
+
+Q-063 is built: the closed card now reads "Closed: it takes no new … until you reopen it. Its name and owners can still be edited. Its history stays." (Vitest).
+
+## Handoff (18b)
+
+- 18b built: 15 of 21 IDs covered (`npm run coverage -- --require --slice 18`), WEALTH_009 deferred to slice 19 (`deferred.txt`, dependency map), five missing, all 18c.
+- 18c: `401K_007`, `HSA_007`, `ROTH_IRA_007`, `TRAD_IRA_007` (the one-participant rule on the four investment types: flip `singleOwner` on `AccountType`, the UI follows `typeTraits().singleOwner`; `AccountType.singleOwnerMessage()` is hardcoded to "A defined benefit has one participant" and must name the type), `MEMBERS_002` (the per-person view must read the same account lines, once each, with a joint account in each member's view).
+- Also 18c: the reviewed owner correction with ownership history (an owner or participant change has a sentence today but no history row: `account_event` gets an `owner_changed` action with a detail, V32); the "joint account" hint on retirement and health types; the "two reviews open at once" guard (one `activeReview` in the page); Q-059 (a create preview).
+- Logged, not built: Cancel on the Edit page leaves focus on the body; the card, savings, mortgage and checking Edit sentence wording was read by the validator but not by the owner at 1280px; the member lock on the edit path cannot be proven alone (`checkOwners` also reads every member `FOR SHARE`); `accountsIn` lists nothing while `/wealth` loads; the loan sentence reads "Balance owed" and the owners "Maya and Sam" while the card says "Maya, Sam" (taste).
+- Not verified: 1280px Edit and Archive by eye, a small household built from scratch, a real browser other than headless Chromium.
+- Dev data: "VR18a", "VR18b", "CW" accounts remain in the dev database; the Investments note is long there.
+
+## How it works (18b)
+
+Written after the build by a read-only agent and checked against the code.
+
+**Groups are decided on the type**
+- `AccountType.baseGroup()` is a partition tag: brokerage Investments; 401(k), Traditional and Roth IRA Retirement; HSA `WealthGroup.HEALTH_SAVINGS`; a defined benefit Retirement. `groups()` returns the views: the base group plus Investments for every investment-kind type, so a 401(k) is in Investments and Retirement, an HSA in Investments and Health savings, and a defined benefit in Retirement only. `WealthGroup.key()` is the JSON name (`healthSavings`).
+- `WealthService.line()` fills `Line.groups` from `groups()`; `summarize()` builds each group with `in(lines, group)` and adds `healthSavings`. Financial assets, debts and net worth are summed from the lines, one per account, so no overlap can count an account twice (D-067, amending D-065).
+
+**The Household page**
+- The server decides membership. `AccountGroup` lists accounts with `accountsIn` and prints "Also in …" through `alsoIn`. `overlapNote` and `overlapText` (`wealthGroups.ts`) name the accounts shared by two groups (three names, then "N more") and end with "a group total is a view and is not added again". Health savings has its own `AccountGroup`.
+- Investments shows when it has completed accounts or any investment draft; with only drafts it says "No completed investment accounts". `FinishSetup` lists each draft with its type and owner as a link; a draft counts nowhere.
+
+**The plain Edit account**
+- `AccountService.update` locks the account row first, loads it, checks the owners, takes the entering member `FOR SHARE` (`editor`, `validator.memberLocked`), saves, and a rename (`renamed`) adds an `account_event` row `renamed` with the old name in `detail` (V31). The optional `enteredByMemberId` is on `AccountUpdateRequest`. An owner change has no history row until 18c.
+- `editSentence.ts` builds the sentence; `AccountEditForm` focuses the name field, sends the entering member and navigates with `state: {updated}`. `AccountDetailPage` reads it once and clears the state (`navigate('.', {replace: true, state: null})`) so a reload or Back does not say it again, and passes it to `AccountStatusCard` as `arrivedWith`, which shows it on the status line with focus; its `explain` flag keeps the Archived or Closed explanation visible beside it.
+
+**Tests:** `AccountGroupsTest`, `WealthPartitionApiTests`, `WealthOverlapApiTests`, `AccountEditApiTests` (backend); `WealthGroups.test.tsx`, `AccountEdit.test.tsx`, `mockApi.ts` (`mockGroups` mirrors the server); `e2e/tests/24-wealth-groups.spec.ts`.

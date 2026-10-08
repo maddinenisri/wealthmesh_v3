@@ -243,6 +243,7 @@ Derived from the scenario table: a scenario lands in the first slice whose cumul
 - Adds: I1 Holdings, prices and views
 - Becomes citeable (13): 401K 001; BROKERAGE 001; HOLDINGS 002, 003, 004, 005, 008; HSA 001; ROTH_IRA 001; SUPPORTING_RECORD 002; TRAD_IRA 001; WEALTH 001, 004
 - Note: Prices, holdings, partial cost, selected vs group views. First slice that shows investment value, so the five types cite their 001 here.
+- Carried in from 18b (Q-060): **WEALTH_009** (net worth on an earlier date and the trend through the next month). Deferred whole because "only price values effective on or before the date" can be shown only once a price can be recorded after setup; build it with the as-of reads of WEALTH_004 and 007. See `deferred.txt`.
 
 ### Slice 20: Purchases and sales
 

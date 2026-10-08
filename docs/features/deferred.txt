@@ -1,3 +1,4 @@
 V2_CHECKING_006 waits on a feature that can create an account with no opening amount (Q-030)
 V2_WEALTH_005 waits on a feature that can create an account with no opening amount (Q-030)
 V2_SAVINGS_005 waits on a feature that can create an account with no opening amount (Q-030)
+V2_WEALTH_009 needs a price recorded after setup (slice 19) so that "only price values effective on or before the date" can be shown; the trend alone would be a partly built scenario (D-016, Q-060). Comes back in slice 19 with WEALTH_004 and 007
