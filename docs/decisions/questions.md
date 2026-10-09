@@ -80,3 +80,4 @@
 | Q-077 | 2026-10-09 | Slice 19b: a price before the symbol's opening price date is refused in the review and at save. | resolved | Refuse (owner, 2026-10-09; the advisor's rule) | D-071 |
 | Q-078 | 2026-10-09 | Slice 19b: a price is entered by a chosen active member (Entering as). | resolved | Yes (owner, 2026-10-09) | D-071 |
 | Q-079 | 2026-10-09 | Slice 19b group 0: the Household "Accounts in this view" list shows the status label the groups show. | resolved | Fixed (owner directed, 2026-10-09) | |
+| Q-080 | 2026-10-09 | Slice 19b visual review: an account whose opening price is dated after its setup shows "as of <setup date>" (header, list) and "Prices last updated <price date>" on the Household page. Make the Balance date the later of the two (changes 19a's "dated 2026-09-01" on an HSA priced 09-30), or keep two dates? Default if unanswered: keep. | open | | |
