@@ -74,3 +74,9 @@
 | Q-071 | 2026-10-09 | Slice 19d: WEALTH_009 trend reuses the two-date read on the Household page rather than a new chart? | resolved | Reuse (owner, 2026-10-09) | |
 | Q-072 | 2026-10-09 | Slice 19: split into 19a to 19d, build 19a only this session? | resolved | Yes; 19a this session, the INDEX row `partial` (owner, 2026-10-09) | |
 | Q-073 | 2026-10-09 | Slice 19: run the process review (scheduled for the start of Milestone D) before or after slice 19? | resolved | Skipped in this session; the owner runs the process review separately (owner, 2026-10-09) | |
+| Q-074 | 2026-10-09 | Slice 19b: reading of Q-069: a price replaced on its date is gone from every read from that date on, an earlier-dated read is unaffected, the history keeps it. | resolved | As written (owner, 2026-10-09) | D-071 |
+| Q-075 | 2026-10-09 | Slice 19b: a price on a symbol the account does not hold is refused (400). | resolved | Refuse (owner, 2026-10-09) | D-071 |
+| Q-076 | 2026-10-09 | Slice 19b: the different-dates sentence applies to investment lines whose latest price is before the wealth date. | resolved | As written (owner, 2026-10-09) | D-071 |
+| Q-077 | 2026-10-09 | Slice 19b: a price before the symbol's opening price date is refused in the review and at save. | resolved | Refuse (owner, 2026-10-09; the advisor's rule) | D-071 |
+| Q-078 | 2026-10-09 | Slice 19b: a price is entered by a chosen active member (Entering as). | resolved | Yes (owner, 2026-10-09) | D-071 |
+| Q-079 | 2026-10-09 | Slice 19b group 0: the Household "Accounts in this view" list shows the status label the groups show. | resolved | Fixed (owner directed, 2026-10-09) | |
