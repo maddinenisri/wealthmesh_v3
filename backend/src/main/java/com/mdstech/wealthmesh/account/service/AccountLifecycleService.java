@@ -222,6 +222,13 @@ public class AccountLifecycleService {
         if (found.prices() > 0) {
             reasons.add(counted(found.prices(), "recorded price", "recorded prices") + " (replaced ones count)");
         }
+        reasons.addAll(laterBlockers(account, found));
+        return reasons;
+    }
+
+    /** The blockers after the records of money: schedules, dated values, a moved start, a starting Balance. */
+    private static List<String> laterBlockers(Account account, Usage found) {
+        List<String> reasons = new ArrayList<>();
         if (found.schedules() > 0) {
             reasons.add(counted(found.schedules(), "recurring bill", "recurring bills"));
         }
