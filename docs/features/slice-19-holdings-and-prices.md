@@ -263,7 +263,7 @@ Both are citeable. WEALTH_001 and WEALTH_009 stay with 19d (the as-of reads get 
 
 **Balance sites decided** (build-checklist: every `formatMoney` of a Balance): the Holdings card (cash, holdings, Balance: effective prices), the Prices card (Balance history points), the account header and list (`balance.amount`, moved by a recorded price), the Household group lines (`account.balance` and "Prices last updated"), the "Wealth on a date" card (`balance` per line as of the date), the review (before and after: holding value, Balance, household wealth), the status sentence (`PriceResult.message`). No reader formats a Balance from the opening amount alone for an investment account.
 
-## 19b visual review (710px and 1280px; 1 Medium x4, Low x4)
+## 19b visual review (710px and 1280px; 4 Medium, 4 Low)
 
 | # | Finding | Result |
 | --- | --- | --- |
@@ -279,4 +279,4 @@ Both are citeable. WEALTH_001 and WEALTH_009 stay with 19d (the as-of reads get 
 Taste, logged: the form opens above its opener; Entered by sits above the buttons in the form and below them in the review; the review does not show the gain change; "Household wealth" in the review is today's figure; Balance date wording varies ("as of", "dated"); Balance history rows have no reason label; "Accounts in this view" shows no date phrase for investment lines; At 710 the "Asset value change" amount sits under its note.
 Not reached by the reviewer: a draft or closed account refusing a price in the UI, a chooser with several holdings, a price with 4 decimals, the delete review blocked by prices, the packaged build (`npm start`; the e2e runs the jar).
 
-One Vitest failure, seen once, evidence not kept (a mistake: pitfall 33 says copy the output first): `OwnerCorrection.test.tsx` "V2_401K_007 Maya reviews and saves ..." failed in the first full run after a frontend edit and passed in the next 3 full runs (514 tests). Open.
+One Vitest failure, seen once, evidence not kept (a mistake: pitfall 33 says copy the output first): `OwnerCorrection.test.tsx` "V2_401K_007 Maya reviews and saves ..." failed in the first full run after a frontend edit and passed in the next 3 full Vitest runs (514 tests, about 13s each). Open.
