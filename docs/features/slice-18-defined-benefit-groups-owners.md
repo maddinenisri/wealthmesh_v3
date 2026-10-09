@@ -1,7 +1,7 @@
 # Slice 18: Defined benefit, wealth groups, individual owners
 
 - Slice: 18 in `docs/features/INDEX.md` (IDs in `slices.txt`); feature files touched: `accounts/defined-benefit/setup.feature`, `household/overview/understand-wealth.feature`, `investments/holdings.feature`, `investments/retirement-health.feature`, `household/setup/set-up-household.feature`, `household/members/manage-members.feature`, `accounts/{401k,hsa,roth-ira,traditional-ira}/setup.feature` (007), `accounts/{property,other-assets}/setup.feature` (001)
-- Status: in-progress (18a built and proven; Checkpoint 2 next). 18b and 18c are later sessions (Q-057)
+- Status: in-progress (18a and 18b done and pushed; 18c, owner correction and the per-person view, at Checkpoint 1)
 - Started: 2026-10-08 09:32 EDT (session clock)  Finished:  Commit:
 
 ## Prompts and directions
@@ -377,3 +377,125 @@ Written after the build by a read-only agent and checked against the code.
 - `editSentence.ts` builds the sentence; `AccountEditForm` focuses the name field, sends the entering member and navigates with `state: {updated}`. `AccountDetailPage` reads it once and clears the state (`navigate('.', {replace: true, state: null})`) so a reload or Back does not say it again, and passes it to `AccountStatusCard` as `arrivedWith`, which shows it on the status line with focus; its `explain` flag keeps the Archived or Closed explanation visible beside it.
 
 **Tests:** `AccountGroupsTest`, `WealthPartitionApiTests`, `WealthOverlapApiTests`, `AccountEditApiTests` (backend); `WealthGroups.test.tsx`, `AccountEdit.test.tsx`, `mockApi.ts` (`mockGroups` mirrors the server); `e2e/tests/24-wealth-groups.spec.ts`.
+
+---
+
+# 18c: owner correction and the per-person view
+
+Session started 2026-10-08 18:32 EDT (main at `b602ea5`, pushed).
+
+## 18c prompts and directions
+
+- Kickoff (summarized, no transcript): run `feature-session` for slice 18c: `401K_007`, `HSA_007`, `ROTH_IRA_007`, `TRAD_IRA_007`, `MEMBERS_002`. Build the individual-owner rule on the four investment types (each choice one named member, "Maya and Sam" not offered, both members can still view), a reviewed owner correction that leaves cash, holdings and Balance unchanged and keeps the previous owner in the ownership history, and the per-person view (an account counted once in the household and once in each owner's view, never split; totals add up; whole-household view). Carry in: the owner-change history row (the correction replaces the plain Edit path, no two paths), the "joint account" Owners hint changed with the rule, the "two reviews open at once" guard, Q-059 (decide from the code), Cancel focus on the Edit page, the one-participant message naming the type. A counted-once test across net worth, financial assets, each person's total, the Household total and the change explanation; every reader of owners in the inventory. The correction is a writer of the account row: lock, race test, raw-API refusal per type, rule refused in the review as well as at Confirm. Plants restored from a copy. Every Confirm, removal, Undo and Back ends with a sentence and the right focus. Validator, then visual-reviewer, before Checkpoint 2; flake check and Vitest loop before Land; advisor at Checkpoint 1 and before Land. Commit in logical pieces. Cowork count against 8, 8, 5, 5, 5, 7, 9, 9, 8, 5, 6, 2, 5 and 1.
+- 18c Checkpoint 1 answer (2026-10-08): approved. Q-064 yes: one reviewed owner-correction path for brokerage, the four retirement and health types and the defined benefit; the plain Edit refuses an owner change there; other types keep the plain Edit and gain the same history row. Q-065 yes: What changed stays household-wide and says so when a person is chosen. Add: MEMBERS_002's last line (joint checking appears in each person's view and is counted once for the household) is shown on the whole-household view and tested. Add a test with an existing joint row of one of the four types: it still shows, counts once, is editable for other fields, and its owner correction requires one named member. List the existing tests that move when singleOwner is turned on. Do not stop between groups.
+
+## 18c gap analysis (from the code, 2026-10-08)
+
+| Fact in the code | Consequence |
+| --- | --- |
+| `AccountType.singleOwner` is true for the defined benefit only; `checkOwners` already refuses several owners for a single-owner type on create, edit and Finish setup (`InvestmentSetupService` calls it), with `singleOwnerMessage()` hardcoded to "A defined benefit has one participant" | Flip the flag on `K401`, `TRADITIONAL_IRA`, `ROTH_IRA`, `HSA` (not brokerage: a brokerage can be joint). The message names the type. An existing joint row stays as it is until corrected |
+| The plain Edit (`PUT /accounts/{id}`) replaces owners with no review and no history (a sentence only, 18b) | The owner correction becomes the only way to change owners of a type that records its creator (investment types and defined benefit). The plain Edit then refuses an owner change there. Other types keep the plain Edit (see Q-064) |
+| `account_event` has `set_up`, `renamed` and the lifecycle actions, with a `detail` text (V31) | `owner_changed` with the detail "Sam → Maya" (names at the time, so a later rename of a member does not rewrite history). V32 widens the action check |
+| Reviews exist for opening (`/opening-preview`), values, corrections, lifecycle; none for owners | One review endpoint for the owner correction only (Q-059 default: no preview for a create of other types; the create already refuses in the form and at save) |
+| `GET /wealth` has no member filter; `WealthStore.balancesAsOf` and `notYetTracked` read all accounts; `account_owner` is read only by `AccountOwnerStore` | `GET /wealth?memberId=` filters the lines by an `EXISTS` on `account_owner`; groups, financial assets, debts and net worth come from the filtered lines (D-067), so a joint account is in each owner's view in full and once in the household |
+| The Household page has the totals and groups from `useWealth()`; `MembersCard` lists members | A view selector on "Accounts and wealth" (Whole household, then each member who owns an account); the choice is in the URL (`?view=`) |
+| `AccountDetailPage` has the status card (archive, restore, close, reopen, delete reviews) and, for an investment account, Finish setup and Cancel draft; the status card and `InvestmentAccount` each hold their own `review` state, and `reviewsOpened` only clears a sentence | Two reviews can be open at once. The guard: opening a review closes the other card's review (a signal both read), with a test |
+| Edit page Cancel is a plain `Link` to the account page; focus ends on the body | Cancel returns with state and the account page focuses its heading |
+
+## 18c decisions to make (feature-local unless noted)
+
+| # | Choice | Recommendation |
+| --- | --- | --- |
+| Q-064 | The owner correction for which types? | Every type that records its creator (brokerage, 401(k), IRAs, Roth IRA, HSA, defined benefit), one path: the plain Edit refuses an owner change there. Not the others, because their scenarios change the owner inside the plain Edit in one step (`V2_OTHER_ASSET_001` "edits its name and changes ownership to Maya and Sam", checking/savings/card scenarios, `V2_CHECKING` cancel case), so a reviewed correction there would contradict a scenario. Owner changes on those types keep the 18b sentence and gain a history row in the same `owner_changed` action (no second review). So no type has two paths |
+| Q-065 | Does the person view filter the change explanation too? | No. `GET /wealth` takes `memberId`; "What changed" stays for the whole household, and says so when a person is chosen. Its counted-once test is household-level |
+| D-068 | The correction is a page (`/accounts/:id/owner`), like Edit, with a review before the save | A page has one form and one review, and cannot be open beside the status card |
+| | No reason field | Moving a name changes no money; the history row says who made it and when |
+| D-069 (feature-local) | What "sees checking once and the 401k once" means on the Household page, where a 401(k) is listed under Investments and Retirement | A new region "Accounts in this view" lists each account exactly once with its owners and Balance, above the groups, with a sentence "3 accounts, each counted once"; the groups stay as views with "Also in …". Counted-once e2e reads the flat list |
+| | Owner label | "Owner" (not "Owners") for a single-owner type that is not a plan; "Participant" stays for the plan. Hints per type: "Choose the one member who owns this 401(k). Both members can still see it." |
+| | Two-reviews guard | The correction is a page, so it adds no second review to the account page; the guard still lands for the status card vs `InvestmentAccount` (Cancel draft, Finish setup) overlap that is open since 17 |
+| | Cancel focus | Cancel on Edit and on the owner page returns to the account page with the heading focused |
+| | Existing joint 401(k), IRA or HSA rows | Left as they are; rename still works (owners unchanged skips the rule); the correction offers one owner |
+
+## 18c proposed split of work (groups, in order; do not stop between them)
+
+| Group | IDs | Test level |
+| --- | --- | --- |
+| 1 The rule on four types: flag, message naming the type, refusal in create, edit, correction and review per type, owner hint wording, radio on the form | `401K_007`, `HSA_007`, `ROTH_IRA_007`, `TRAD_IRA_007` (first half) | API per type; UI (Vitest); e2e |
+| 2 The reviewed owner correction: review and save endpoints, lock, `owner_changed` history (V32), plain Edit refuses an owner change on those types, Balance/cash/holdings/income unchanged, previous owner in history; the page, the review, the sentence and focus | the four `_007` (second half) | API incl. race and per-type refusal; UI; e2e |
+| 3 The per-person view: `memberId` on `/wealth`, selector, explanation sentence, drafts and not-tracked filtered, counted-once test | `MEMBERS_002` | API (counted once); UI; e2e |
+| 4 Carry-ins: two-reviews guard; Cancel focus; Q-059 decision recorded | none | UI; e2e |
+
+## 18c inventory
+
+| Row or state | Readers | Writers | Race test |
+| --- | --- | --- | --- |
+| `account_owner` | `AccountOwnerStore.ownersByAccount/ownersOf` (list, get, response, edit, preview); `InvestmentSetupService.preview` (reads the draft's owners for the one-owner check; `finish` writes none, `FinishRequest` has no owners); `WealthStore.ownedBy` (the member filter); frontend `ownerNames`, `AccountsPage`, `AccountDetailPage`, `HouseholdPage` (`choices`, `jointNames`, draft filter, "Accounts in this view", `accountsIn`, `FinishSetup`), `investments/FinishSetup` (sends the account's owners to the preview, `api/investments.ts`), `MembersCard`, `editSentence`, `OwnerChoices`, `OwnerNote`, `OwnerCorrection` | `AccountService.create/update`, new `correctOwners`; `InvestmentSetupService.create` | owner correction vs an edit of the same account (account lock); member row `FOR SHARE` (limit as before: combined plant) |
+| `account_event` | `AccountUsageStore.eventsOf` (status card history) | `recordEvent` from create, rename, lifecycle, new `owner_changed` | none new |
+| `/wealth` lines and groups | `WealthService.summary`, Household page, WealthOverTime, `/wealth/change` (unchanged) | none | none |
+| `singleOwner` flag | `checkOwners` (create, edit, finish, correction, review); frontend `typeTraits().singleOwner` | `AccountType` | none |
+
+## 18c open questions (resolved at Checkpoint 1)
+
+- Q-064 yes (one reviewed path for brokerage, the four retirement and health types and the defined benefit); Q-065 yes (What changed stays household-wide and says so). Q-059 decided from the code: the correction has its own review; no create preview for other types.
+
+## 18c task status and proof (written during the build)
+
+| Group | Status | Proof |
+| --- | --- | --- |
+| 1 The rule on four types | done | `AccountGroupsTest.singleOwnerTypes`; `OwnerCorrectionApiTests.twoOwnersAreRefusedPerType` (create, setup review and edit, each type, message names the type); `OwnerCorrection.test.tsx` (radios and hint per type); e2e `25` raw-API refusal per type |
+| 2 The reviewed owner correction | done | `OwnerCorrectionApiTests` (13 tests: review writes nothing; Balance, opening, wealth and change unchanged; no money rows; `owner_changed` "Sam → Maya" with who; refusals the same in review and save; brokerage may be joint; plain Edit refuses an owner change; the legacy joint row; account-row lock; two at once; entering-member lock); `OwnerCorrection.test.tsx` (17); e2e `25` at 710 and 1280px |
+| 3 The per-person view | done | `PersonViewApiTests` (9 tests, counted-once across net worth, financial assets, each person's total, the Household total and the change explanation: $85,000.00 / $35,000.00 / $115,000.00, 120,000.00 of people against 115,000.00); `PersonView.test.tsx` (6); e2e `25` person view at both widths |
+| 4 Carry-ins | done | `TwoReviews.test.tsx` (both directions, planted red twice); Cancel focus in `OwnerCorrection.test.tsx` and e2e; Q-059 above |
+
+**Plants (restored from a copy, `BUILD SUCCESSFUL` checked):** removing `activity.lockAccount` from `correctOwners` turned `correctionWaitsForTheAccountRow` and `twoCorrectionsTakeTurns` red; removing the member `FOR SHARE` reads (`validator.memberLocked` and `findByHouseholdIdForShare` together, as in 18b the two cover each other) turned `correctionWaitsForTheEnteringMemberRow` red; making `WealthStore.ownedBy` return no condition turned seven `PersonViewApiTests` red; removing the `closeWhen` effect, and separately the `setFinishing/setAsking(false)` closing, turned `TwoReviews.test.tsx` red.
+
+**Existing tests that move when `singleOwner` is turned on and the owners leave the plain Edit** (listed, as asked at Checkpoint 1):
+
+| Test | Why it moved |
+| --- | --- |
+| Backend `AccountGroupsTest.singleOwnerTypes` | Five one-owner types now, message names the type |
+| Backend `AccountEditApiTests.renameIsInTheHistory` | The car's owner change adds an `owner_changed` row (two rows, not one) |
+| Backend `DefinedBenefitSetupApiTests` V2_DB_006 two tests | The plain Edit refuses a participant change; the correction takes it (`correct` helper in `DefinedBenefitTestBase`) |
+| Vitest `InvestmentTypes.test.tsx` (16 cases through `fill`) | The owner of the four types is a radio, a brokerage stays a checkbox |
+| Vitest `AccountEdit.test.tsx`, `DefinedBenefit.test.tsx`, `InvestmentSetup.test.tsx` (one each) | The Edit page shows the owner and a Change owner link; its description changed |
+| Vitest `MemberLifecycle.test.tsx` (4), `CardSetup.test.tsx` (1) | "Accounts in this view" repeats the names: queries are scoped to Bank money / Cards (pitfall 48) |
+| e2e `22-investment-types` (owner helper), `23-defined-benefit` V2_DB_006, `01-household` (two assertions), `11b-transfers`, `11c-cards` | Radios for the four types; the refusal goes through the correction; names repeat in the view list |
+| Backend `InvestmentGuardsApiTests.draftEditDetails` | Found by the validator: a draft's owner changed in the plain Edit and was refused, so a draft takes its owner in the plain Edit (no history yet) |
+
+Full backend run after the build: 854 tests, 0 failures, three runs (`scripts/flake-check.sh`); Vitest 470 eight times in a row; e2e 338.
+
+**Validator findings (18c, before the visual review), all addressed:** (1) a draft's owner could be changed nowhere (plain Edit refused, correction refuses drafts, Finish setup has no owners): a draft now takes its owner in the plain Edit as one choice (`checkEditOwners`), a draft that was joint opens with nobody chosen, `OwnerCorrectionApiTests.stateMatrix` and `InvestmentGuardsApiTests.draftEditDetails`; (2) seven checkstyle line lengths; (3) root typecheck on `e2e/tests/22` (a literal-type comparison); (4) the legacy joint draft can be corrected through the same plain Edit (UI test); (5) state matrix test: draft 409 in review and save, closed allowed, deleted 404; (6) inventory completed above; (7) per-type Vitest titles now carry explicit IDs; (8) logged: the view sentence calls a legacy joint 401(k) a joint account (true: it has two owners); (9) logged: on a legacy joint draft, Finish setup refuses "A 401(k) has one owner" without naming Edit as the way out (the path exists); the member filter accepts an inactive member and `memberExists` ignores the household (one household).
+
+**Visual review (18c, 710px and 1280px, real clicks):** 8 faults, 6 taste items. Fixed with a Vitest test each: focus after a review closes another (`abandon`, planted red), the same-owner refusal and the missing Entered by (focus), the plan's refusal and history say participant, "stay" and "previous owners" for a joint row, no possessive on a long name ("Showing the accounts of …"), the Change owner link at the default size, the view list shows the type and a card's "Card credit". Logged, not fixed: 13px radio buttons and 32px status buttons (app-wide), a mortgage or house is called a "joint account" in the sentence, the View select cuts a very long name, the owner sentence and row sit in the status card, "Maya, Sam" against "Maya and Sam", the plan's review says "account". Not seen: Edit for the plan and the legacy joint 401(k), the brokerage owner page, a member with no accounts, an inactive owner.
+
+## What to click (Checkpoint 2, 18c)
+
+Run at 710px and 1280px with `docs/process/ui-checklist.md`. Dev data holds VR18c accounts (a 401(k), Traditional and Roth IRA, HSA, pension, a joint checking, a draft brokerage, and "VR18c Joint 401k legacy", which has Maya and Sam as owners again for step 4; the backend was restarted on the final code).
+
+1. **Rule on the four types.** Add account → 401(k): Owner is a choice of one named member (no "Maya and Sam"), the hint says everyone in the household can still see it. Repeat for Traditional IRA, Roth IRA, HSA; a Brokerage still offers several owners; a defined benefit says Participant.
+2. **Edit shows the owner, it does not edit it.** Open a 401(k) → Edit account: the owner is text with a Change owner button; rename it and save (sentence, focus). Cancel returns with the account name focused.
+3. **Reviewed owner correction.** Change owner → pick the other member → Review (names the previous and new owner, "cash, holdings and Balance of $X stay the same") → Back (focus on your choice) → Review → Confirm: the account page opens on a sentence with focus; the Status history says "Owner changed: Sam → Maya by …"; the Balance and wealth did not move. Try naming the same owner, no Entered by, and Cancel from the review.
+4. **The legacy joint 401(k).** It still shows once, can be renamed, and Change owner opens with nobody chosen and needs one member.
+5. **Per-person view.** Household page → View: choose each person and Whole household. Each account appears once under "Accounts in this view"; the sentence names the joint accounts ("appear in each person's view and are counted once for the household"); the totals of two people are more than the household because a joint account is in both. Reload keeps the person. "Wealth on a date" says it is for the whole household.
+6. **One review at a time.** On a draft investment account open Delete (or another status review), then Cancel draft: the first closes and focus is in the new one.
+
+Report: faults only (count against 8, 8, 5, 5, 5, 7, 9, 9, 8, 5, 6, 2, 5 and 1), with step, width and what you saw.
+
+### Cowork findings (Checkpoint 2, 18c)
+
+1 fault against 8, 8, 5, 5, 5, 7, 9, 9, 8, 5, 6, 2, 5 and 1.
+
+| # | Step | Width | Saw | Fix |
+| --- | --- | --- | --- | --- |
+| 1 | 4 legacy joint 401(k) | 710 | Edit page said "Owner: Maya, Sam" for two people | `OwnerNote` says "Owners" when there is more than one; Vitest assertion failed first (`OwnerCorrection.test.tsx`); a plan reads "Participants" |
+
+Data note: the legacy account's owners had been set back by SQL, so its history ended with "Owner changed: Maya → Sam". The two `owner_changed` rows were deleted from the dev data. Not an app fault.
+
+Deviation: no e2e for this fault. A joint 401(k) cannot be created through the API any more and e2e has no seed path for a pre-rule row, so the red-first assertion is Vitest. A legacy-row e2e seed helper is a follow-up.
+
+## Handoff (18c)
+
+- 18c built: 5 of 5 IDs; slice 18 has 20 of 21 covered, WEALTH_009 deferred to slice 19.
+- Proof: backend 854 × 3, Vitest 470 × 3 after the last change (8 earlier), e2e 338 before the wording fix, lint and typecheck clean.
+- Logged, not built: 13px radios and 32px status buttons (app-wide); a mortgage or house reads "joint account"; the View select truncates a long name; "Maya, Sam" against "Maya and Sam"; Finish setup on a legacy joint draft refuses without naming Edit; the member filter accepts an inactive member; `ValuedAccount` and `Activity` reviews sit outside the one-review guard; no e2e seed path for a pre-rule joint row.
+- Dev data: "VR18c" and "CW" accounts remain.
