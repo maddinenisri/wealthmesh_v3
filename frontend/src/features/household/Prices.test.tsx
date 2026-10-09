@@ -84,8 +84,9 @@ describe('older prices on the Household page (WEALTH_004)', () => {
     expect(investments).toHaveTextContent('$20,000.00')
     expect(investments).toHaveTextContent('Prices last updated 2026-09-01')
     expect(card).toHaveTextContent(
-      'These balances come from different dates. On 2026-09-30, Redwood Brokerage still uses prices last updated on 2026-09-01.',
+      'These balances come from different dates: 1 investment account uses prices dated before 2026-09-30.',
     )
+    expect(card).toHaveTextContent('Redwood Brokerage: prices last updated 2026-09-01')
     expect(user).toBeDefined()
   })
 
@@ -125,9 +126,7 @@ describe('older prices on the Household page (WEALTH_004)', () => {
     expect(item).not.toHaveTextContent('Value dated')
     // Today is Sep 30 and the latest price is older, so the total says its dates differ.
     const region = screen.getByRole('region', { name: 'Accounts and wealth' })
-    expect(region).toHaveTextContent(
-      'Redwood Brokerage still uses prices last updated on 2026-09-15',
-    )
+    expect(region).toHaveTextContent('Redwood Brokerage: prices last updated 2026-09-15')
   })
 
   it('V2_WEALTH_004 the change explanation shows a price move as its own line, never as income', async () => {
@@ -141,5 +140,45 @@ describe('older prices on the Household page (WEALTH_004)', () => {
     expect(row).toHaveTextContent('$1,500.00')
     expect(within(change).getByText('Income').closest('li')).toHaveTextContent('$0.00')
     expect(within(change).getByText('Spending').closest('li')).toHaveTextContent('$0.00')
+  })
+
+  it('V2_WEALTH_004 four accounts on older prices are a count and a folded list, not one long paragraph', async () => {
+    const data = seed()
+    const more = ['A', 'B', 'C'].map((letter, index) => {
+      const id = `44444444-4444-4444-8444-44444444445${index}`
+      return { id, account: make(id, 'brokerage', `Extra ${letter}`, '1000.00') }
+    })
+    mockApi({
+      ...data,
+      accounts: [...data.accounts, ...more.map((m) => m.account)],
+      openings: {
+        ...data.openings,
+        ...Object.fromEntries(
+          more.map((m) => [
+            m.id,
+            {
+              total: '1000.00',
+              cash: '500.00',
+              blank: false,
+              holdings: [{ symbol: 'HOME', quantity: '5', price: '100.00', valueOn: '2026-09-01' }],
+              statementId: null,
+            },
+          ]),
+        ),
+      },
+    })
+    renderRoute('/')
+    const card = await screen.findByRole('region', { name: 'Wealth on a date' })
+    fireEvent.change(within(card).getByLabelText('Show wealth on'), {
+      target: { value: '2026-09-30' },
+    })
+    expect(
+      await within(card).findByText(/different dates: 4 investment accounts use prices/),
+    ).toBeVisible()
+    const details = card.querySelector('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(within(details).getByText('Show the accounts')).toBeVisible()
+    expect(details).toHaveTextContent('Redwood Brokerage: prices last updated 2026-09-01')
+    expect(details).toHaveTextContent('Extra C: prices last updated 2026-09-01')
   })
 })

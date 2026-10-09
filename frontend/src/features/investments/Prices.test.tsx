@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { configure, fireEvent, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockApi } from '../../test/mockApi'
 import type { MockOpening, MockPrice } from '../../test/mockInvestments'
@@ -80,7 +80,7 @@ describe.each(
 
     // The sentence says what changed and takes focus; the one Balance equals cash.
     const status = await screen.findByText(
-      `HOME is priced at 0.00 on 2026-09-30. ${row.name}'s Balance is $1,000.00 as of 2026-09-30.`,
+      `HOME is priced at $0.00 on 2026-09-30. ${row.name}'s Balance is $1,000.00 as of 2026-09-30.`,
     )
     expect(status).toHaveAttribute('role', 'status')
     await vi.waitFor(() => expect(status).toHaveFocus())
@@ -154,12 +154,22 @@ describe('record a price', () => {
     await user.click(screen.getByRole('button', { name: 'Review price' }))
     expect(
       await screen.findByText(
-        "HOME's opening price is dated 2026-09-20; record a price on or after it",
+        "HOME's opening price is dated 2026-09-20. Record a price on or after that date.",
       ),
     ).toBeVisible()
     expect(api.requests.filter((r) => r.startsWith('POST') && !r.endsWith('/review'))).toHaveLength(
       0,
     )
+    // Visual review: the refusal is about the date, so it sits beside Price date and that field has focus.
+    const date = screen.getByLabelText('Price date')
+    await vi.waitFor(() => expect(date).toHaveFocus())
+    expect(date).toHaveAttribute('aria-invalid', 'true')
+    // The message appears once, at the field, not again in an alert at the top of the form.
+    expect(
+      screen.getAllByText(
+        "HOME's opening price is dated 2026-09-20. Record a price on or after that date.",
+      ),
+    ).toHaveLength(1)
   })
 
   it('V2_HOLDINGS_008 a negative price and a date before setup are refused at their fields and nothing is sent', async () => {
@@ -169,9 +179,7 @@ describe('record a price', () => {
     await user.click(screen.getByRole('button', { name: 'Review price' }))
     expect(await screen.findByText('Holding market price must be zero or greater')).toBeVisible()
     expect(
-      screen.getByText(
-        'Review the earlier tracking start before saving. The Setup date is 2026-09-01.',
-      ),
+      screen.getByText('A price cannot be dated before tracking began on 2026-09-01.'),
     ).toBeVisible()
     expect(api.requests.filter((r) => r.startsWith('POST'))).toHaveLength(0)
   })
@@ -208,10 +216,10 @@ describe('record a price', () => {
     await user.click(screen.getByRole('button', { name: 'Review price' }))
     const heading = await screen.findByRole('heading', { name: /Review the HOME price/ })
     expect(heading.closest('section')).toHaveTextContent(
-      'It replaces the 130.00 price for this date that Sam recorded',
+      'It replaces the $130.00 price for this date that Sam recorded',
     )
     await user.click(screen.getByRole('button', { name: 'Confirm price' }))
-    await screen.findByText(/HOME is priced at 140.00 on 2026-09-30/)
+    await screen.findByText(/HOME is priced at \$140.00 on 2026-09-30/)
     const list = await screen.findByRole('list', { name: 'Recorded prices' })
     const items = within(list).getAllByRole('listitem')
     expect(items).toHaveLength(2)
@@ -224,6 +232,25 @@ describe('record a price', () => {
     const history = screen.getByRole('region', { name: 'Balance history' })
     expect(history).toHaveTextContent('2026-09-01 $2,000.00')
     expect(history).toHaveTextContent('2026-09-30 $2,400.00')
+  })
+
+  it('V2_HOLDINGS_008 Back puts focus on the form heading in the dev server too, where StrictMode runs every effect twice', async () => {
+    configure({ reactStrictMode: true })
+    try {
+      mockApi(base())
+      const { user } = renderRoute(`/accounts/${id}`)
+      await fillPrice(user, '130', '2026-09-30')
+      await user.click(screen.getByRole('button', { name: 'Review price' }))
+      await screen.findByRole('heading', { name: /Review the HOME price/ })
+      await user.click(screen.getByRole('button', { name: 'Back' }))
+      const form = await screen.findByRole('heading', { name: /Record a price for/ })
+      await vi.waitFor(() => expect(form).toHaveFocus())
+      // Still there after the effects have settled: nothing takes focus back to the panel's wrapper.
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(form).toHaveFocus()
+    } finally {
+      configure({ reactStrictMode: false })
+    }
   })
 
   it('V2_HOLDINGS_008 Cancel from the review saves nothing and returns focus to the Record a price button', async () => {

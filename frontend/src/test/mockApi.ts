@@ -735,12 +735,12 @@ export function mockApi(
     if (lines.length === 0)
       return { problem: problem(400, `${symbol} is not held in ${account.name}`) }
     if (body.valueOn > today)
-      return { problem: problem(400, 'Future values are not completed account history') }
+      return { problem: problem(400, 'A price cannot be dated in the future.') }
     if (body.valueOn < account.openedOn)
       return {
         problem: problem(
           400,
-          `Review the earlier tracking start before saving. The Setup date is ${account.openedOn}.`,
+          `A price cannot be dated before tracking began on ${account.openedOn}.`,
         ),
       }
     const earliest = lines.map((l) => l.valueOn).sort()[0]
@@ -748,7 +748,7 @@ export function mockApi(
       return {
         problem: problem(
           400,
-          `${symbol}'s opening price is dated ${earliest}; record a price on or after it`,
+          `${symbol}'s opening price is dated ${earliest}. Record a price on or after that date.`,
         ),
       }
     const member = state.members.find((m) => m.id === body.enteredByMemberId && m.active !== false)
@@ -794,12 +794,12 @@ export function mockApi(
     const message =
       (zero
         ? `${shape.symbol} will be worth $0.00 on ${shape.valueOn}. Your ${shares} ${shares === 1 ? 'share stays' : 'shares stay'} recorded; only their value becomes $0.00.`
-        : `${shape.symbol} will be priced at ${priceText(shape.price)} on ${shape.valueOn}.`) +
+        : `${shape.symbol} will be priced at $${priceText(shape.price)} on ${shape.valueOn}.`) +
       (moved === 0
         ? ' The Balance does not change: a later price already counts, or this is the same price.'
         : '') +
       (replaces
-        ? ` It replaces the ${replaces.price} price for this date that ${replaces.enteredByName} recorded; that one stays in the history.`
+        ? ` It replaces the $${replaces.price} price for this date that ${replaces.enteredByName} recorded; that one stays in the history.`
         : '')
     const bal = Number(account.balance.amount)
     return {
@@ -839,7 +839,7 @@ export function mockApi(
       holdingValue: held.toFixed(2),
       balance: account.balance.amount,
       balanceOn: account.balance.asOf,
-      message: `${saved.symbol} is priced at ${saved.price} on ${saved.valueOn}. ${account.name}'s Balance is ${Number(account.balance.amount).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} as of ${account.balance.asOf}.`,
+      message: `${saved.symbol} is priced at $${saved.price} on ${saved.valueOn}. ${account.name}'s Balance is ${Number(account.balance.amount).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} as of ${account.balance.asOf}.`,
     }
   }
   /** What counts toward a month figure: spending is expenses minus refunds (the server defines it once). */

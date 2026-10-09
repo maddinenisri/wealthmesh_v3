@@ -141,7 +141,7 @@ export function InvestmentAccount({
           ref={statusRef}
           role="status"
           tabIndex={-1}
-          className="max-w-2xl rounded-control border border-line p-3 text-sm outline-none"
+          className="max-w-2xl text-pretty rounded-control border border-line p-3 text-sm outline-none"
         >
           {message}
         </p>

@@ -17,6 +17,14 @@ const dollars = (text: string) => formatMoney(Number(text))
 /** One id per review: a repeat of the same save carries the same id (D-024), a changed price gets a new one. */
 const newKey = () => globalThis.crypto.randomUUID()
 
+/** The field a server refusal is about, so it is shown beside that field; null when it is about the whole price. */
+function fieldOf(message: string): keyof Values | null {
+  if (/cannot be dated|opening price is dated/.test(message)) return 'valueOn'
+  if (/is not held in|Choose the holding/.test(message)) return 'symbol'
+  if (/market price|valid amount/.test(message)) return 'price'
+  return null
+}
+
 /** "$1,234.5" to "1234.5": a price keeps up to four decimals, unlike a money amount. */
 const cleanPrice = (text: string) =>
   text
@@ -52,10 +60,11 @@ export function RecordPrice({
   const [cameBack, setCameBack] = useState(false)
   const [key, setKey] = useState(newKey)
   const heading = useRef<HTMLHeadingElement>(null)
-  const { control, handleSubmit } = useForm<Values>({
+  const { control, handleSubmit, setError, setFocus } = useForm<Values>({
     defaultValues: { symbol: symbols[0] ?? '', price: '', valueOn: today },
   })
   const refusal = reviewMutation.error?.message
+  const alertMessage = refusal && !fieldOf(refusal) ? refusal : undefined
   useEffect(() => {
     if (refusal) document.querySelector('[role="alert"]')?.scrollIntoView?.({ block: 'center' })
   }, [refusal])
@@ -75,7 +84,15 @@ export function RecordPrice({
     if (!member) return
     reviewMutation.reset()
     save.reset()
-    const result = await reviewMutation.mutateAsync(input(values)).catch(() => null)
+    const result = await reviewMutation.mutateAsync(input(values)).catch((error: Error) => {
+      // A refusal about one field is shown beside it and takes focus; any other stays in the alert.
+      const field = fieldOf(error.message)
+      if (field) {
+        setError(field, { type: 'server', message: error.message })
+        setFocus(field)
+      }
+      return null
+    })
     if (result) {
       setKey(newKey())
       setReview({ values, result })
@@ -156,7 +173,7 @@ export function RecordPrice({
   }
 
   return (
-    <Panel key="form">
+    <Panel key="form" takeFocus={!cameBack}>
       <form
         onSubmit={onSubmit}
         noValidate
@@ -171,7 +188,7 @@ export function RecordPrice({
         >
           Record a price for {account.name}
         </h2>
-        <FormAlert message={refusal} />
+        <FormAlert message={alertMessage} />
         <p className="text-sm text-ink-muted">
           A price is for one holding on one date. A second price for the same holding and date
           replaces the first; the first stays in the history.
@@ -206,10 +223,10 @@ export function RecordPrice({
           rules={{
             validate: (value) => {
               if (value.trim() === '') return 'Enter the price date'
-              if (value > today) return 'Future values are not completed account history'
+              if (value > today) return 'A price cannot be dated in the future.'
               return (
                 value >= account.openedOn ||
-                `Review the earlier tracking start before saving. The Setup date is ${account.openedOn}.`
+                `A price cannot be dated before tracking began on ${account.openedOn}.`
               )
             },
           }}

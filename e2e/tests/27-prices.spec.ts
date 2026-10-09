@@ -167,7 +167,7 @@ for (const width of [710, 1280]) {
         await page.getByRole('button', { name: 'Confirm price' }).click()
 
         const status = page.getByRole('status').filter({
-          hasText: `HOME is priced at 0.00 on 2026-09-30. ${name}'s Balance is $1,000.00 as of 2026-09-30.`,
+          hasText: `HOME is priced at $0.00 on 2026-09-30. ${name}'s Balance is $1,000.00 as of 2026-09-30.`,
         })
         await expect(status).toBeVisible()
         await expect(status).toBeFocused()
@@ -255,7 +255,7 @@ for (const width of [710, 1280]) {
       const line = investments.getByRole('listitem').filter({ hasText: name })
       await expect(line).toContainText('$20,000.00')
       await expect(line).toContainText('Prices last updated 2026-09-01')
-      await expect(card).toContainText(`${name} still uses prices last updated on 2026-09-01`)
+      await expect(card).toContainText(`${name}: prices last updated 2026-09-01`)
       await expect(card).toContainText('These balances come from different dates')
       await expectNoSidewaysScroll(page)
 
@@ -284,7 +284,7 @@ for (const width of [710, 1280]) {
       await expect(section).toContainText('$21,500.00')
       await page.getByRole('button', { name: 'Confirm price' }).click()
       const status = page.getByRole('status').filter({
-        hasText: `HOME is priced at 130.00 on 2026-09-30. ${name}'s Balance is $21,500.00 as of 2026-09-30.`,
+        hasText: `HOME is priced at $130.00 on 2026-09-30. ${name}'s Balance is $21,500.00 as of 2026-09-30.`,
       })
       await expect(status).toBeFocused()
       await expect(status).toBeInViewport()
@@ -307,7 +307,7 @@ for (const width of [710, 1280]) {
       await expect(investments.getByRole('listitem').filter({ hasText: name })).toContainText(
         '$21,500.00',
       )
-      await expect(card).not.toContainText(`${name} still uses prices`)
+      await expect(card).not.toContainText(`${name}: prices last updated`)
       await card.getByLabel('Show wealth on').fill('2026-09-29')
       await expect(investments.getByRole('listitem').filter({ hasText: name })).toContainText(
         '$20,000.00',
