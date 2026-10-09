@@ -21,7 +21,14 @@ import java.util.List;
  */
 public record WealthSummary(LocalDate asOf, String financialAssets, String debts, String netWorth, Group bankMoney,
         Group cards, Group loans, Group mortgages, Group investments, Group retirement, Group healthSavings,
-        Group propertyAndOther, List<Line> debtLines, List<NotTracked> notTracked) {
+        Group propertyAndOther, List<Line> debtLines, List<NotTracked> notTracked, List<OlderPrice> olderPrices) {
+
+    /**
+     * An investment account whose latest price is dated before the wealth date (slice 19b, WEALTH_004): its Balance
+     * uses that older price, so the household total mixes dates. It is not the stale flag of a manually valued account.
+     */
+    public record OlderPrice(String accountId, String name, LocalDate priceOn) {
+    }
 
     /** A group of accounts with the sum of their signed Balances. */
     public record Group(String total, List<Line> accounts) {
@@ -30,7 +37,8 @@ public record WealthSummary(LocalDate asOf, String financialAssets, String debts
     /**
      * One account in a group: `balance` keeps the asset sign. A valued account carries the date of the value it
      * counts and `stale` when that date is older than the wealth date by more than the stale window. `groups` names
-     * every group that lists the account (D-067: a 401(k) is in `investments` and `retirement`).
+     * every group that lists the account (D-067: a 401(k) is in `investments` and `retirement`). An investment account
+     * with holdings carries `valueDate`, the date of its latest price ("prices last updated").
      */
     public record Line(String accountId, String name, String type, String status, String balance, LocalDate valueDate,
             boolean stale, List<String> groups) {

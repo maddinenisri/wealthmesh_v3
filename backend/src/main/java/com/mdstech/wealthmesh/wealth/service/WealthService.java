@@ -99,6 +99,9 @@ public class WealthService {
         BigDecimal startWealth = start.stream().map(WealthService::balance).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal endWealth = end.stream().map(WealthService::balance).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal valueChange = BigDecimal.ZERO;
+        PriceTerm prices = priceTerm(start, end);
+        BigDecimal priceChange = prices.total();
+        List<WealthChange.PriceMove> priceMoves = prices.moves();
         BigDecimal added = BigDecimal.ZERO;
         java.util.List<ValueMove> moves = new java.util.ArrayList<>();
         for (Balance now : end) {
@@ -125,7 +128,8 @@ public class WealthService {
         BigDecimal interest = credited.stream().map(WealthStore.CreditRow::interestCredit).reduce(BigDecimal.ZERO,
                 BigDecimal::add);
         BigDecimal explained = flows.income().subtract(flows.spending()).add(flows.corrections())
-                .add(flows.transfers()).add(valueChange).add(added).add(pay).add(interest);
+                .add(flows.transfers()).add(valueChange).add(priceChange).add(added).add(pay)
+                .add(interest);
         return new WealthChange(from, to, Money.format(startWealth), Money.format(endWealth), Money.format(change),
                 Money.format(flows.income()), Money.format(flows.spending()), Money.format(valueChange),
                 Money.format(flows.corrections()), Money.format(added), Money.format(flows.transfers()),
@@ -137,7 +141,32 @@ public class WealthService {
                         Money.format(r.amount().subtract(r.previous())), r.reason(), r.madeOn())).toList(),
                 Money.format(pay), Money.format(interest),
                 credited.stream().map(c -> new CreditLine(c.accountId().toString(), c.name(),
-                        Money.format(c.payCredit()), Money.format(c.interestCredit()), c.on())).toList());
+                        Money.format(c.payCredit()), Money.format(c.interestCredit()), c.on())).toList(),
+                Money.format(priceChange), priceMoves);
+    }
+
+    /** The price part of the change: the sum and each account whose holdings moved in price. */
+    private record PriceTerm(BigDecimal total, List<WealthChange.PriceMove> moves) {
+    }
+
+    /**
+     * A price move is its own term of the identity (never income): per account, the price part of the Balance at the
+     * end against the part at the start (nothing for an account that began inside the period).
+     */
+    private static PriceTerm priceTerm(List<Balance> start, List<Balance> end) {
+        BigDecimal total = BigDecimal.ZERO;
+        List<WealthChange.PriceMove> moves = new java.util.ArrayList<>();
+        for (Balance now : end) {
+            BigDecimal before = start.stream().filter(b -> b.id().equals(now.id())).findFirst()
+                    .map(Balance::priceDelta).orElse(BigDecimal.ZERO);
+            BigDecimal moved = now.priceDelta().subtract(before);
+            if (moved.signum() != 0) {
+                total = total.add(moved);
+                moves.add(new WealthChange.PriceMove(now.id().toString(), now.name(), now.type(),
+                        Money.format(before), Money.format(now.priceDelta()), Money.format(moved)));
+            }
+        }
+        return new PriceTerm(total, moves);
     }
 
     /** The Balance on the date: a valued account's effective value (else its opening), or opening plus activity. */
@@ -150,7 +179,8 @@ public class WealthService {
 
     private static Line line(Balance b, LocalDate asOf) {
         boolean valued = AccountType.isValued(b.type());
-        LocalDate valueDate = !valued ? null : b.valueOn() == null ? b.openedOn() : b.valueOn();
+        // A manually valued account shows the date of its value, an investment account the date of its latest price.
+        LocalDate valueDate = !valued ? b.priceOn() : b.valueOn() == null ? b.openedOn() : b.valueOn();
         boolean stale = valued && valueDate.isBefore(asOf.minusDays(STALE_AFTER_DAYS));
         List<String> groups = AccountType.fromWire(b.type()).map(type -> type.groups().stream()
                 .map(WealthGroup::key).toList()).orElse(List.of());
@@ -174,7 +204,17 @@ public class WealthService {
         BigDecimal debts = debtLines.stream().map(l -> amount(l).negate()).reduce(BigDecimal.ZERO, BigDecimal::add);
         return new WealthSummary(asOf, Money.format(assets), Money.format(debts), Money.format(assets.subtract(debts)),
                 group(bank), group(cards), group(loans), group(mortgages), group(investments), group(retirement),
-                group(health), group(valued), debtLines, missing);
+                group(health), group(valued), debtLines, missing, olderPrices(asOf, lines));
+    }
+
+    /**
+     * The investment accounts whose latest price is dated before the wealth date, once each (a 401(k) is in two
+     * groups but one line): their Balance uses an older price, so the total mixes dates (WEALTH_004).
+     */
+    private static List<WealthSummary.OlderPrice> olderPrices(LocalDate asOf, List<Line> lines) {
+        return lines.stream().filter(l -> AccountType.isInvestment(l.type()) && l.valueDate() != null
+                && l.valueDate().isBefore(asOf)).map(l -> new WealthSummary.OlderPrice(l.accountId(), l.name(),
+                        l.valueDate())).toList();
     }
 
     private static List<Line> in(List<Line> lines, WealthGroup group) {

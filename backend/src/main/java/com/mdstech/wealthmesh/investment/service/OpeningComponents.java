@@ -127,7 +127,8 @@ public record OpeningComponents(BigDecimal total, BigDecimal cash, List<Line> li
         return quantity;
     }
 
-    private static BigDecimal price(Object value) {
+    /** A holding's market price as typed: zero or more, up to four decimals (also used by a recorded price). */
+    static BigDecimal price(Object value) {
         if (!(value instanceof String text) || !PRICE.matcher(text.strip()).matches()) {
             throw bad("Enter a valid amount");
         }
@@ -139,7 +140,7 @@ public record OpeningComponents(BigDecimal total, BigDecimal cash, List<Line> li
     }
 
     /** A holding's value date defaults to the setup date; not after today, not before the tracking start. */
-    private static LocalDate valueDate(LocalDate valueOn, LocalDate setupOn, LocalDate today) {
+    static LocalDate valueDate(LocalDate valueOn, LocalDate setupOn, LocalDate today) {
         LocalDate date = valueOn == null ? setupOn : valueOn;
         if (date.isAfter(today)) {
             throw bad("Future values are not completed account history");

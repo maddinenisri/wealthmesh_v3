@@ -13,6 +13,7 @@ import org.springframework.stereotype.Repository;
 
 import com.mdstech.wealthmesh.activity.dto.ActivityResponse;
 import com.mdstech.wealthmesh.activity.dto.HistoryEntry;
+import com.mdstech.wealthmesh.investment.repository.HoldingDeltaSql;
 import com.mdstech.wealthmesh.money.Money;
 
 import reactor.core.publisher.Flux;
@@ -85,6 +86,37 @@ public class ActivityStore {
     private static final String VALUED_DELTAS = "SELECT e.account_id, e.amount - ac.opening_amount AS delta, "
             + "e.value_on AS latest FROM (" + EFFECTIVE_VALUES + ") e JOIN account ac ON ac.id = e.account_id";
 
+    /**
+     * The price part of an investment account's Balance change (slice 19b): each holding's effective price against
+     * its opening price, to the cent, as of a date. It is added to the activity sum, never substituted for it; its
+     * `latest` is the latest recorded price that counts, so the Balance date moves only when a price is recorded.
+     */
+    private static String holdingDeltas(String dateExpr) {
+        return "SELECT h.account_id, h.delta, h.recorded_on AS latest FROM ("
+                + HoldingDeltaSql.perAccount(dateExpr) + ") h";
+    }
+
+    /** The two parts of a Balance change added: the later date wins, and a missing part is nothing. */
+    static Delta plus(Delta activity, Delta price) {
+        if (price == null) {
+            return activity;
+        }
+        boolean priceIsLater = price.latest() != null
+                && (activity.latest() == null || price.latest().isAfter(activity.latest()));
+        LocalDate latest = priceIsLater ? price.latest() : activity.latest();
+        return new Delta(activity.amount().add(price.amount()), latest);
+    }
+
+    private Mono<Delta> holdingDelta(UUID accountId, String dateExpr, LocalDate on) {
+        DatabaseClient.GenericExecuteSpec spec = client.sql(holdingDeltas(dateExpr) + " WHERE h.account_id = :account")
+                .bind("account", accountId);
+        if (on != null) {
+            spec = spec.bind("on", on);
+        }
+        return spec.map((row, meta) -> new Delta(row.get("delta", BigDecimal.class),
+                row.get("latest", LocalDate.class))).one().defaultIfEmpty(Delta.NONE);
+    }
+
     public Mono<Map<UUID, Delta>> deltasByAccount() {
         return Mono.zip(
                 client.sql("SELECT account_id, SUM(" + SIGNED + ") AS delta, MAX(occurred_on) AS latest "
@@ -95,10 +127,15 @@ public class ActivityStore {
                 client.sql(VALUED_DELTAS)
                         .map((row, meta) -> Map.entry(row.get("account_id", UUID.class),
                                 new Delta(row.get("delta", BigDecimal.class), row.get("latest", LocalDate.class))))
+                        .all().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)),
+                client.sql(holdingDeltas(HoldingDeltaSql.CURRENT))
+                        .map((row, meta) -> Map.entry(row.get("account_id", UUID.class),
+                                new Delta(row.get("delta", BigDecimal.class), row.get("latest", LocalDate.class))))
                         .all().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
-                .map(both -> {
-                    Map<UUID, Delta> all = new java.util.HashMap<>(both.getT1());
-                    all.putAll(both.getT2());
+                .map(all3 -> {
+                    Map<UUID, Delta> all = new java.util.HashMap<>(all3.getT1());
+                    all.putAll(all3.getT2());
+                    all3.getT3().forEach((account, price) -> all.merge(account, price, ActivityStore::plus));
                     return all;
                 });
     }
@@ -114,7 +151,8 @@ public class ActivityStore {
                 .one().defaultIfEmpty(Delta.NONE);
         return client.sql(VALUED_DELTAS + " WHERE e.account_id = :account").bind("account", accountId)
                 .map((row, meta) -> new Delta(row.get("delta", BigDecimal.class), row.get("latest", LocalDate.class)))
-                .one().switchIfEmpty(ledger);
+                .one().switchIfEmpty(ledger.zipWith(holdingDelta(accountId, HoldingDeltaSql.CURRENT, null))
+                        .map(both -> plus(both.getT1(), both.getT2())));
     }
 
     /** The net signed change of each date that has activity, oldest first (removed rows never count). */
@@ -154,7 +192,8 @@ public class ActivityStore {
         if (excluding != null) {
             spec = spec.bind("excluding", excluding);
         }
-        return spec.map((row, meta) -> row.get("delta", BigDecimal.class)).one();
+        return spec.map((row, meta) -> row.get("delta", BigDecimal.class)).one()
+                .zipWith(holdingDelta(accountId, ":on", asOn)).map(both -> both.getT1().add(both.getT2().amount()));
     }
 
     /** Locks the account row until the transaction ends, so corrections of one account run one at a time. */

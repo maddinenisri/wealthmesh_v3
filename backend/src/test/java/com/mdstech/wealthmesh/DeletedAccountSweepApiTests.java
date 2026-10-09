@@ -87,7 +87,7 @@ class DeletedAccountSweepApiTests extends ValuedTestBase {
 
     private void readsOfTheAccount(List<String> found) {
         for (String path : List.of("", "/activity", "/activity/history", "/balance?asOf=2026-09-10", "/statements",
-                "/starting-balance-corrections", "/lifecycle",
+                "/starting-balance-corrections", "/lifecycle", "/prices", "/holdings", "/opening",
                 "/balance-corrections/preview?requested=5.00&asOn=2026-09-10")) {
             expectNotFound(found, "GET " + path,
                     statusOf(webTestClient.get().uri("/api/v1/accounts/{id}" + path, gone).exchange()));
@@ -112,6 +112,15 @@ class DeletedAccountSweepApiTests extends ValuedTestBase {
         expectNotFound(found, "POST reminders", statusOf(post(gone, "reminders", "s-6", """
                 {"kind": "expense", "description": "Bill", "amount": "5.00", "dueOn": "2026-10-20",
                  "category": "Dining", "enteredByMemberId": "%s"}""".formatted(mayaId))));
+        // Slice 19b: a price is a writer of an account (V2_HOLDINGS_008).
+        expectNotFound(found, "POST prices/review", statusOf(webTestClient.post()
+                .uri("/api/v1/accounts/{id}/prices/review", gone).contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"symbol": "HOME", "price": "1.00", "valueOn": "2026-09-07", "enteredByMemberId": "%s"}"""
+                        .formatted(mayaId)).exchange()));
+        expectNotFound(found, "POST prices", statusOf(post(gone, "prices", "s-8", """
+                {"symbol": "HOME", "price": "1.00", "valueOn": "2026-09-07", "enteredByMemberId": "%s"}"""
+                .formatted(mayaId))));
         expectNotFound(found, "POST statements", statusOf(post(gone, "statements", "s-7", """
                 {"statementOn": "2026-09-30", "balance": "0.00", "note": "Sep", "enteredByMemberId": "%s"}"""
                 .formatted(mayaId))));

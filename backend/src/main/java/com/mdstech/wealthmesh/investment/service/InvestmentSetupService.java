@@ -29,6 +29,8 @@ import com.mdstech.wealthmesh.investment.dto.HoldingLine;
 import com.mdstech.wealthmesh.investment.dto.HoldingsView;
 import com.mdstech.wealthmesh.investment.dto.OpeningPreview;
 import com.mdstech.wealthmesh.investment.dto.OpeningView;
+import com.mdstech.wealthmesh.investment.repository.HoldingDeltaSql;
+import com.mdstech.wealthmesh.investment.repository.HoldingPriceStore;
 import com.mdstech.wealthmesh.investment.repository.OpeningStore;
 import com.mdstech.wealthmesh.money.Money;
 
@@ -48,6 +50,7 @@ public class InvestmentSetupService {
     private final AccountOwnerStore owners;
     private final AccountService accountService;
     private final OpeningStore store;
+    private final HoldingPriceStore prices;
     private final ActivityStore lock;
     private final AccountUsageStore usage;
     private final EntryValidator validator;
@@ -55,13 +58,15 @@ public class InvestmentSetupService {
     private final Clock clock;
 
     public InvestmentSetupService(HouseholdRepository households, AccountRepository accounts,
-            AccountOwnerStore owners, AccountService accountService, OpeningStore store, ActivityStore lock,
-            AccountUsageStore usage, EntryValidator validator, TransactionalOperator transactions, Clock clock) {
+            AccountOwnerStore owners, AccountService accountService, OpeningStore store, HoldingPriceStore prices,
+            ActivityStore lock, AccountUsageStore usage, EntryValidator validator, TransactionalOperator transactions,
+            Clock clock) {
         this.households = households;
         this.accounts = accounts;
         this.owners = owners;
         this.accountService = accountService;
         this.store = store;
+        this.prices = prices;
         this.lock = lock;
         this.usage = usage;
         this.validator = validator;
@@ -194,10 +199,25 @@ public class InvestmentSetupService {
                         account.name() + " is a draft with no Balance yet. Finish setup first."));
             }
             return store.of(id).switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    account.name() + " has no cash and holdings"))).map(stored -> Holdings.view(
-                            stored.components().cash(), stored.components().lines(),
-                            new BigDecimal(account.balance().amount()), account.balance().asOf()));
+                    account.name() + " has no cash and holdings")))
+                    .flatMap(stored -> prices.effective(id, HoldingDeltaSql.CURRENT, null).collectList()
+                            .map(effective -> Holdings.view(stored.components().cash(),
+                                    atEffectivePrices(stored.components().lines(), effective),
+                                    new BigDecimal(account.balance().amount()), account.balance().asOf())));
         });
+    }
+
+    /** The opening lines with the price that counts now (a recorded price, else the opening one) and its date. */
+    private static List<OpeningComponents.Line> atEffectivePrices(List<OpeningComponents.Line> lines,
+            List<HoldingPriceStore.Effective> effective) {
+        List<OpeningComponents.Line> out = new java.util.ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) {
+            OpeningComponents.Line line = lines.get(i);
+            HoldingPriceStore.Effective now = effective.get(i);
+            out.add(new OpeningComponents.Line(line.symbol(), line.quantity(), now.price(), now.priceOn(),
+                    line.cost()));
+        }
+        return out;
     }
 
     private static BigDecimal openingAmount(OpeningComponents components) {

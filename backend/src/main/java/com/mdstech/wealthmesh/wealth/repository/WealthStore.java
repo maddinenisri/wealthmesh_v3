@@ -8,6 +8,7 @@ import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Repository;
 
 import com.mdstech.wealthmesh.activity.repository.ActivityStore;
+import com.mdstech.wealthmesh.investment.repository.HoldingDeltaSql;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -22,10 +23,12 @@ public class WealthStore {
     /**
      * One account as of a date: its opening, its signed activity up to the date, and its effective dated value on
      * or before the date (null for an account with none, and for every ledger account). Only accounts that had begun
-     * tracking by the date are returned.
+     * tracking by the date are returned. `delta` is the activity and the price move together; `priceDelta` is the price
+     * part alone (an investment account's holdings at their effective prices against their opening prices, slice
+     * 19b) and `priceOn` the date of the latest price counted, null for an account with no holdings.
      */
     public record Balance(UUID id, String name, String type, String status, LocalDate openedOn, BigDecimal opening,
-            BigDecimal delta, BigDecimal valueAmount, LocalDate valueOn) {
+            BigDecimal delta, BigDecimal valueAmount, LocalDate valueOn, BigDecimal priceDelta, LocalDate priceOn) {
     }
 
     /** What moved wealth in a period: the sums of the rows dated after `from` and up to `to`. */
@@ -47,22 +50,26 @@ public class WealthStore {
         DatabaseClient.GenericExecuteSpec spec = client.sql("""
                         SELECT a.id, a.name, a.type, a.status, a.opened_on, a.opening_amount,
                                COALESCE((SELECT SUM(%s) FROM activity WHERE account_id = a.id AND removed_at IS NULL
-                                         AND occurred_on <= :on), 0) AS delta,
-                               v.amount AS value_amount, v.value_on AS value_on
+                                         AND occurred_on <= :on), 0) + COALESCE(h.delta, 0) AS delta,
+                               v.amount AS value_amount, v.value_on AS value_on,
+                               COALESCE(h.delta, 0) AS price_delta, h.price_on AS price_on
                         FROM account a
+                        LEFT JOIN (%s) h ON h.account_id = a.id
                         LEFT JOIN LATERAL (SELECT amount, value_on FROM account_value
                                            WHERE account_id = a.id AND removed_at IS NULL AND replaced_at IS NULL
                                            AND NOT planned AND value_on <= :on
                                            ORDER BY value_on DESC, created_at DESC LIMIT 1) v ON TRUE
                         WHERE a.deleted_at IS NULL AND a.status <> 'draft' AND a.opened_on <= :on%s
-                        ORDER BY a.name, a.created_at""".formatted(ActivityStore.SIGNED, ownedBy(memberId)))
+                        ORDER BY a.name, a.created_at""".formatted(ActivityStore.SIGNED,
+                        HoldingDeltaSql.perAccount(":on"), ownedBy(memberId)))
                 .bind("on", asOf);
         return (memberId == null ? spec : spec.bind("member", memberId))
                 .map((row, meta) -> new Balance(row.get("id", UUID.class), row.get("name", String.class),
                         row.get("type", String.class), row.get("status", String.class),
                         row.get("opened_on", LocalDate.class), row.get("opening_amount", BigDecimal.class),
                         row.get("delta", BigDecimal.class), row.get("value_amount", BigDecimal.class),
-                        row.get("value_on", LocalDate.class)))
+                        row.get("value_on", LocalDate.class), row.get("price_delta", BigDecimal.class),
+                        row.get("price_on", LocalDate.class)))
                 .all();
     }
 
@@ -77,7 +84,7 @@ public class WealthStore {
                 .map((row, meta) -> new Balance(row.get("id", UUID.class), row.get("name", String.class),
                         row.get("type", String.class), row.get("status", String.class),
                         row.get("opened_on", LocalDate.class), row.get("opening_amount", BigDecimal.class),
-                        BigDecimal.ZERO, null, null))
+                        BigDecimal.ZERO, null, null, BigDecimal.ZERO, null))
                 .all();
     }
 
