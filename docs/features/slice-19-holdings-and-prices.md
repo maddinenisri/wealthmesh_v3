@@ -283,7 +283,7 @@ One Vitest failure, seen once, evidence not kept (a mistake: pitfall 33 says cop
 
 ## 19b Cowork pass (owner, 2026-10-09): 3 faults (1 Medium, 2 Low)
 
-Count against 8, 8, 5, 5, 5, 7, 9, 9, 8, 5, 6, 2, 5, 1, 1 and 1. Not counted: Q-080, the status-sentence date split, taste items. 19a's fault (partly known cost) looks fixed. Red-first evidence, as actually seen: fault 1 failed on the old jar in e2e (`27-prices.spec.ts` "Cowork 19b", the review sentence and the Prices card note). Faults 2 and 3: the first e2e run stopped at a hard assertion, so their e2e lines did not run on the old jar; their Vitest tests (`Prices.test.tsx`) were checked red by planting the pre-fix `OlderPricesNote.tsx` and `WealthOverTime.tsx` (restored with cmp): `Unable to find role="list" and name "Price changes"` and the Archived label test failed, 5 others passed. The e2e plant for 2 and 3 is below. After the fix 368 e2e pass (3.1m).
+Count against 8, 8, 5, 5, 5, 7, 9, 9, 8, 5, 6, 2, 5, 1, 1 and 1. Not counted: Q-080, the status-sentence date split, taste items. 19a's fault (partly known cost) looks fixed. Red-first evidence, as actually seen: fault 1 failed on the old jar in e2e (`27-prices.spec.ts` "Cowork 19b", the review sentence and the Prices card note). Faults 2 and 3: the first e2e run stopped at a hard assertion, so their e2e lines did not run on the old jar; their Vitest tests (`Prices.test.tsx`) were checked red by planting the pre-fix `OlderPricesNote.tsx` and `WealthOverTime.tsx` (restored with cmp): `Unable to find role="list" and name "Price changes"` and the Archived label test failed, 5 others passed. The e2e plant (same two files, jar repackaged) then failed at the `Price changes` line (362) and the `Archived` line (372) and passed fault 1's lines; restored with cmp. After the fix 368 e2e pass (3.1m).
 
 | # | Fault | Fix |
 | --- | --- | --- |
@@ -313,3 +313,15 @@ Drafted by a read-only agent, then checked against the code and the migration (t
 4. **One price definition.** `HoldingDeltaSql` gives the effective price of each opening line on a date: the latest of the opening price and recorded prices on or before the date; a recorded price wins a tie; replaced rows never count. The price term is added (not substituted) in `ActivityStore.deltaOf`, `deltasByAccount`, `changeUpTo` and both `WealthStore` reads, so every Balance, group, person view and the household total follows and each account counts once. The change explanation has its own `priceChange` term and still balances (`other` stays 0).
 5. **Also.** An account with recorded prices (replaced ones count) cannot be deleted (validator finding). Decisions: D-071; Q-066 to Q-080 (Q-080, Q-081 open). Removal of a price is slice 24 (`removed_at` exists, unused).
 6. **Verify.** `HoldingPrice*ApiTests` (backend), `Prices.test.tsx` x2 (Vitest), `e2e/tests/27-prices.spec.ts`; screens as in the Cowork list.
+
+## 19b proof at Land (final code, `3108a80`, `48a7645`, `cf57de5`)
+
+| Check | Result | Elapsed |
+| --- | --- | --- |
+| Vitest loop, 8 runs | 516 x 8, 0 failures | about 11s each, 91s in all |
+| `scripts/flake-check.sh 3` (flake-out4, `cleanTest`) | 923 tests x 3; **run 1: 1 failure**, runs 2 and 3: 0 | 24m36s in all (16:44:07 to 17:08:43) |
+| `LoanCorrectionRaceApiTests` alone, 10 runs after that | 10 of 10 green | 12-13s each, 2m06s in all |
+| Full e2e on the final code | 368 passed | 3m11s |
+| Cowork fix plants | fault 1 red on the old jar (e2e), faults 2 and 3 red in Vitest and in e2e | see above |
+
+**New open flake (not 19b code):** run 1 of the flake check failed `LoanCorrectionRaceApiTests.twoInitialAmounts` (V2_LOAN_004): two different initial amounts at once answered `[201, 409]`, expected `[201, 201]` (line 103). Output kept in `slice-19b-flake-loan-correction.txt`. Not reproduced alone in 10 runs, so it needs the full suite's load; the 409 body was not captured. So the flake check did NOT come back clean: 2 of 3 runs green. Open next to the Flyway failure (two hits) and the single `OwnerCorrection` Vitest failure. A next session should capture the 409 body in that test's failure message.
