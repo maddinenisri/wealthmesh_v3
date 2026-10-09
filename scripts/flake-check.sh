@@ -10,7 +10,8 @@ here="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$out"
 failed=0
 for i in $(seq 1 "$runs"); do
-  "$here/scripts/gradle.sh" test >"$out/run$i.log" 2>&1
+  # cleanTest: without it Gradle answers runs 2 and 3 "UP-TO-DATE" in under a second and nothing is repeated.
+  "$here/scripts/gradle.sh" cleanTest test >"$out/run$i.log" 2>&1
   python3 - "$here/backend/build/test-results/test" >"$out/failures$i.txt" <<'PY'
 import glob, html, re, sys
 total = failed = 0

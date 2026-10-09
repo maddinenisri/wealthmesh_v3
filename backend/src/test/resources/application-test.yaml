@@ -3,3 +3,8 @@ spring:
     password: test
   flyway:
     password: test
+# A random test port must be free on the address the client dials. Without this the server binds the wildcard
+# address, and a port that another process (a VS Code helper) already holds on 127.0.0.1 still binds, so the
+# test client reaches that process and gets 401 or 404 (slice 19b, pitfall 51).
+server:
+  address: 127.0.0.1
