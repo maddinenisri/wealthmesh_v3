@@ -189,6 +189,26 @@ class HoldingPriceApiTests extends PriceTestBase {
                         .contains("It replaces the $130.00 price").contains("Maya recorded"));
     }
 
+    @Order(5)
+    @Test
+    @DisplayName("V2_HOLDINGS_008 a price dated on the opening price date says it replaces the opening price")
+    void sameDateAsTheOpeningPrice() {
+        String account = redwood("Redwood Opening Tie", samId);
+        reviewPrice(account, priceBody("HOME", "0", "2026-09-01", samId)).expectStatus().isOk().expectBody()
+                .jsonPath("$.replaces").isEmpty().jsonPath("$.message").value(text -> assertThat(String.valueOf(text))
+                        .contains("It replaces the $100.00 opening price dated 2026-09-01; the opening price stays"));
+        record(account, "ot-1", "HOME", "0", "2026-09-01");
+        prices(account).expectStatus().isOk().expectBody().jsonPath("$.overridden.length()").isEqualTo(1)
+                .jsonPath("$.overridden[0].symbol").isEqualTo("HOME").jsonPath("$.overridden[0].price")
+                .isEqualTo("100.00").jsonPath("$.overridden[0].valueOn").isEqualTo("2026-09-01");
+        // A later price replaces nothing: no sentence, nothing overridden on a different date.
+        String other = redwood("Redwood Opening Later", samId);
+        reviewPrice(other, priceBody("HOME", "130.00", "2026-09-30", samId)).expectStatus().isOk().expectBody()
+                .jsonPath("$.message").value(text -> assertThat(String.valueOf(text)).doesNotContain("opening price"));
+        record(other, "ot-2", "HOME", "130.00", "2026-09-30");
+        prices(other).expectStatus().isOk().expectBody().jsonPath("$.overridden.length()").isEqualTo(0);
+    }
+
     private static Stream<Arguments> badRequests() {
         return Stream.of(
                 Arguments.of("a negative price", "HOME", "-1.00", "2026-09-30", true,

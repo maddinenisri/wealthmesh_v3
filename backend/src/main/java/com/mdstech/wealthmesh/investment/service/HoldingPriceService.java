@@ -150,8 +150,21 @@ public class HoldingPriceService {
         if (replaces != null) {
             text.append(" It replaces the $").append(replaces.price()).append(" price for this date that ")
                     .append(replaces.enteredByName()).append(" recorded; that one stays in the history.");
+        } else {
+            String opening = openingPricesOn(judged.lines(), shape.symbol(), shape.valueOn());
+            if (!opening.isEmpty()) {
+                text.append(" It replaces the ").append(opening).append(" opening price dated ")
+                        .append(shape.valueOn()).append("; the opening price stays in the opening holdings.");
+            }
         }
         return text.toString();
+    }
+
+    /** The opening prices of the symbol dated exactly on the date ("$100.00" or "$100.00 and $110.00"), or empty. */
+    private static String openingPricesOn(List<OpeningComponents.Line> lines, String symbol, LocalDate on) {
+        return lines.stream().filter(l -> l.symbol().equals(symbol) && l.valueOn().equals(on))
+                .map(l -> "$" + OpeningComponents.priceText(l.price())).distinct()
+                .collect(java.util.stream.Collectors.joining(" and "));
     }
 
     // ---- the save -----------------------------------------------------------------------------------------------
@@ -227,23 +240,31 @@ public class HoldingPriceService {
             if (!AccountType.isInvestment(account.type())) {
                 return Mono.<PriceHistory>error(EntryValidator.bad("Prices are recorded for investment accounts only"));
             }
-            return prices.history(accountId).collectList().flatMap(all -> {
-                List<LocalDate> dates = new ArrayList<>();
-                dates.add(account.openedOn());
-                all.stream().filter(p -> !p.replaced() && !p.valueOn().isBefore(account.openedOn()))
-                        .map(PriceView::valueOn).distinct().sorted().filter(d -> !dates.contains(d))
-                        .forEach(dates::add);
-                return Mono.zip(dates.stream().map(date -> lock.changeUpTo(accountId, date, null)
-                        .map(change -> new BalancePoint(date, Money.format(account.openingAmount().add(change)))))
-                        .toList(), parts -> {
-                            List<BalancePoint> points = new ArrayList<>();
-                            for (Object part : parts) {
-                                points.add((BalancePoint) part);
-                            }
-                            return new PriceHistory(all, points);
-                        });
-            });
+            return Mono.zip(prices.history(accountId).collectList(), openings.of(accountId)
+                    .map(o -> o.components().lines()).defaultIfEmpty(List.of()))
+                    .flatMap(both -> historyOf(account, both.getT1(), both.getT2()));
         });
+    }
+
+    private Mono<PriceHistory> historyOf(Account account, List<PriceView> all, List<OpeningComponents.Line> lines) {
+        List<PriceHistory.Overridden> overridden = lines.stream()
+                .filter(l -> all.stream().anyMatch(p -> !p.replaced() && p.symbol().equals(l.symbol())
+                        && p.valueOn().equals(l.valueOn())))
+                .map(l -> new PriceHistory.Overridden(l.symbol(), OpeningComponents.priceText(l.price()),
+                        l.valueOn())).toList();
+        List<LocalDate> dates = new ArrayList<>();
+        dates.add(account.openedOn());
+        all.stream().filter(p -> !p.replaced() && !p.valueOn().isBefore(account.openedOn()))
+                .map(PriceView::valueOn).distinct().sorted().filter(d -> !dates.contains(d)).forEach(dates::add);
+        return Mono.zip(dates.stream().map(date -> lock.changeUpTo(account.id(), date, null)
+                .map(change -> new BalancePoint(date, Money.format(account.openingAmount().add(change))))).toList(),
+                parts -> {
+                    List<BalancePoint> points = new ArrayList<>();
+                    for (Object part : parts) {
+                        points.add((BalancePoint) part);
+                    }
+                    return new PriceHistory(all, points, overridden);
+                });
     }
 
     // ---- the rules ----------------------------------------------------------------------------------------------
