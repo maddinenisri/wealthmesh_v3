@@ -1,4 +1,6 @@
 import type { Wealth } from '../../api/wealth'
+import { Badge } from '../../design-system'
+import { STATUS_LABEL } from '../accounts/statusLabel'
 
 /** More accounts than this are folded into a "Show the accounts" disclosure, so the note stays one line long. */
 const LISTED = 3
@@ -10,12 +12,20 @@ const LISTED = 3
  */
 export function OlderPricesNote({ wealth }: { wealth: Wealth }) {
   const older = wealth.olderPrices
+  const statusOf = (accountId: string) =>
+    wealth.investments.accounts.find((line) => line.accountId === accountId)?.status ?? 'active'
   if (older.length === 0) return null
   const list = (
     <ul className="mt-1 list-disc pl-5">
       {older.map((item) => (
         <li key={item.accountId}>
           {item.name}: prices last updated <span className="whitespace-nowrap">{item.priceOn}</span>
+          {statusOf(item.accountId) !== 'active' && (
+            <>
+              {' '}
+              <Badge>{STATUS_LABEL[statusOf(item.accountId)] ?? statusOf(item.accountId)}</Badge>
+            </>
+          )}
         </li>
       ))}
     </ul>

@@ -282,6 +282,20 @@ function Explanation({
           ))}
         </ul>
       )}
+      {change.priceMoves.length > 0 && (
+        <ul className="text-sm" aria-label="Price changes">
+          {change.priceMoves.map((move) => {
+            const delta = Number(move.change)
+            return (
+              <li key={move.accountId}>
+                {move.name} price {delta > 0 ? 'increase' : 'decrease'} of{' '}
+                {formatMoney(Math.abs(delta))} ({formatMoney(Number(move.start))} to{' '}
+                {formatMoney(Number(move.end))}), a price move rather than income or spending.
+              </li>
+            )
+          })}
+        </ul>
+      )}
       {change.valueMoves.length > 0 && (
         <ul className="text-sm" aria-label="Value changes">
           {change.valueMoves.map((move) => {

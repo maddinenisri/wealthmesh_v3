@@ -59,6 +59,8 @@ export type PriceResult = {
 export type PriceHistory = {
   prices: PriceView[]
   points: { on: string; balance: string }[]
+  /** Opening prices that a recorded price of the same date replaced; they stay in the opening holdings. */
+  overridden: { symbol: string; price: string; valueOn: string }[]
 }
 
 export type PriceInput = {
@@ -125,6 +127,10 @@ function parseHistory(value: unknown): PriceHistory {
     points: data.points.map((item) => {
       const point = record(item)
       return { on: str(point.on), balance: str(point.balance) }
+    }),
+    overridden: (Array.isArray(data.overridden) ? data.overridden : []).map((item: unknown) => {
+      const line = record(item)
+      return { symbol: str(line.symbol), price: str(line.price), valueOn: str(line.valueOn) }
     }),
   }
 }

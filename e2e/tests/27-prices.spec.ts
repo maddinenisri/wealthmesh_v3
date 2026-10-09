@@ -313,5 +313,63 @@ for (const width of [710, 1280]) {
         '$20,000.00',
       )
     })
+
+    test(`V2_HOLDINGS_008 V2_WEALTH_004 Cowork 19b: a price on the opening price date says it replaces the opening price, the change explanation names each account, and an archived account is labeled in the older-prices list (${width}px)`, async ({
+      page,
+    }) => {
+      const owner = await ownerId(page)
+      const name = `Cowork Tie ${width}`
+      const id = await make(page, 'brokerage', name, '200.00', owner)
+
+      // 1. A price dated the same day as the opening price takes its place, and says so.
+      await page.goto(`/accounts/${id}`)
+      await page.getByRole('button', { name: 'Record a price' }).click()
+      await page.getByLabel('Market price').fill('0')
+      await page.getByLabel('Price date').fill('2026-09-01')
+      await page.getByRole('button', { name: 'Review price' }).click()
+      const review = page.locator('section', {
+        has: page.getByRole('heading', { name: /Review the HOME price/ }),
+      })
+      await expect
+        .soft(review)
+        .toContainText(
+          'It replaces the $100.00 opening price dated 2026-09-01; the opening price stays in the opening holdings.',
+        )
+      await page.getByRole('button', { name: 'Confirm price' }).click()
+      await expect(
+        page.getByRole('status').filter({ hasText: 'HOME is priced at $0.00' }),
+      ).toBeFocused()
+      const prices = page.getByRole('region', { name: 'Prices', exact: true })
+      await expect
+        .soft(prices)
+        .toContainText(
+          'Opening price replaced: HOME $100.00 for 2026-09-01. It stays in the opening holdings.',
+        )
+
+      // 2. A later price: What changed names the account behind the price move.
+      const later = await page.request.post(`/api/v1/accounts/${id}/prices`, {
+        headers: { 'Idempotency-Key': `cowork-tie-${width}` },
+        data: { symbol: 'HOME', price: '130.00', valueOn: '2026-09-15', enteredByMemberId: owner },
+      })
+      expect(later.ok()).toBeTruthy()
+      await page.goto('/')
+      const card = page.getByRole('region', { name: 'Wealth on a date' })
+      await card.getByLabel('From').fill('2026-09-01')
+      await card.getByLabel('To').fill('2026-10-03')
+      const moves = card.getByRole('list', { name: 'Price changes' })
+      await expect
+        .soft(moves.getByRole('listitem').filter({ hasText: name }))
+        .toContainText(`${name} price increase of $1,300.00`)
+
+      // 3. An archived account in the older-prices list carries its label.
+      const archived = await page.request.post(`/api/v1/accounts/${id}/archive`, {
+        data: { enteredByMemberId: owner },
+      })
+      expect(archived.ok()).toBeTruthy()
+      await page.goto('/')
+      await card.getByLabel('Show wealth on').fill('2026-09-20')
+      const note = card.getByText(`${name}`).filter({ hasText: 'prices last updated' })
+      await expect.soft(note.first()).toContainText('Archived')
+    })
   })
 }

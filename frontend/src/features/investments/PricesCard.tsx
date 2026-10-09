@@ -53,6 +53,18 @@ export function PricesCard({
               ))}
             </ul>
           )}
+          {history.data.overridden.length > 0 && (
+            <ul aria-label="Replaced opening prices" className="text-sm">
+              {history.data.overridden.map((line) => (
+                <li key={`${line.symbol}-${line.valueOn}-${line.price}`}>
+                  <Badge>Opening price replaced</Badge>: {line.symbol}{' '}
+                  <span className="normal-nums">{dollars(line.price)}</span> for{' '}
+                  <span className="whitespace-nowrap">{line.valueOn}</span>. It stays in the opening
+                  holdings.
+                </li>
+              ))}
+            </ul>
+          )}
           {history.data.points.length > 1 && (
             <section aria-labelledby="balance-history-heading">
               <h3 id="balance-history-heading" className="font-medium">

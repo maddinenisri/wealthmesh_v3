@@ -142,6 +142,33 @@ describe('older prices on the Household page (WEALTH_004)', () => {
     expect(within(change).getByText('Spending').closest('li')).toHaveTextContent('$0.00')
   })
 
+  it('V2_WEALTH_004 the change explanation names the account behind the price move, as the other lines do', async () => {
+    mockApi(seed([price('2026-09-30', '130.00')], '21500.00'))
+    renderRoute('/')
+    const card = await screen.findByRole('region', { name: 'Wealth on a date' })
+    fireEvent.change(within(card).getByLabelText('From'), { target: { value: '2026-09-01' } })
+    fireEvent.change(within(card).getByLabelText('To'), { target: { value: '2026-09-30' } })
+    const moves = await within(card).findByRole('list', { name: 'Price changes' })
+    expect(moves).toHaveTextContent(
+      'Redwood Brokerage price increase of $1,500.00 ($0.00 to $1,500.00), a price move rather than income or spending.',
+    )
+  })
+
+  it('V2_ACCOUNT_LIFECYCLE_001 an archived account in the older-prices list carries its Archived label', async () => {
+    const data = seed()
+    mockApi({
+      ...data,
+      accounts: data.accounts.map((a) => (a.id === BROKERAGE ? { ...a, status: 'archived' } : a)),
+    })
+    renderRoute('/')
+    const card = await screen.findByRole('region', { name: 'Wealth on a date' })
+    fireEvent.change(within(card).getByLabelText('Show wealth on'), {
+      target: { value: '2026-09-30' },
+    })
+    const note = await within(card).findByText(/Redwood Brokerage: prices last updated/)
+    expect(note.closest('li')).toHaveTextContent('Archived')
+  })
+
   it('V2_WEALTH_004 four accounts on older prices are a count and a folded list, not one long paragraph', async () => {
     const data = seed()
     const more = ['A', 'B', 'C'].map((letter, index) => {
