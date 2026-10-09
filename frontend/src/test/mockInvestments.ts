@@ -156,9 +156,21 @@ export function viewBody(opening: MockOpening, statementRemoved: boolean) {
 const percent = (known: number, shares: number) => `${((known * 100) / shares).toFixed(2)}%`
 
 /** The holdings read of a completed account, mirroring `Holdings.view`: lines of one symbol are added together. */
-export function holdingsBody(opening: MockOpening, balance: string, balanceOn: string) {
+export function holdingsBody(
+  opening: MockOpening,
+  balance: string,
+  balanceOn: string,
+  prices: MockPrice[] = [],
+) {
   const bySymbol = new Map<string, MockHolding[]>()
-  for (const line of opening.holdings)
+  const now = effectiveLines(opening, prices, '9999-12-31')
+  // The lines at the price that counts now (a recorded price, else the opening one) and its date.
+  const effective = opening.holdings.map((line, i) => ({
+    ...line,
+    price: now[i].price,
+    valueOn: now[i].priceOn,
+  }))
+  for (const line of effective)
     bySymbol.set(line.symbol, [...(bySymbol.get(line.symbol) ?? []), line])
   const securities = [...bySymbol.entries()].map(([symbol, lines]) => {
     const shares = lines.reduce((sum, l) => sum + Number(l.quantity), 0)
@@ -188,11 +200,63 @@ export function holdingsBody(opening: MockOpening, balance: string, balanceOn: s
   const cost = full ? cents(securities.reduce((sum, s) => sum + Number(s.cost), 0)) : null
   return {
     cash: opening.cash ?? '0.00',
-    holdingsValue: two(holdingsValue(opening)),
+    holdingsValue: two(effective.reduce((sum, l) => sum + holdingValue(l), 0)),
     balance,
     balanceOn,
     securities,
     cost: cost === null ? null : two(cost),
-    gain: cost === null ? null : two(holdingsValue(opening) - cost),
+    gain: cost === null ? null : two(effective.reduce((sum, l) => sum + holdingValue(l), 0) - cost),
   }
+}
+
+/** A price recorded on one holding after setup, as the mock server keeps it (slice 19b). */
+export type MockPrice = {
+  id: string
+  accountId: string
+  symbol: string
+  price: string
+  valueOn: string
+  enteredByMemberId: string
+  enteredByName: string
+  enteredAt: string
+  replacedAt: string | null
+  key: string
+}
+
+/**
+ * Each opening line's effective price on a date, mirroring `HoldingDeltaSql`: the latest of the line's own opening
+ * price and the recorded price of that symbol dated on or before the date; a recorded price wins a tie.
+ */
+export function effectiveLines(opening: MockOpening, prices: MockPrice[], on: string) {
+  return opening.holdings.map((line) => {
+    const recorded = prices
+      .filter((p) => !p.replacedAt && p.symbol === line.symbol && p.valueOn <= on)
+      .sort((a, b) =>
+        a.valueOn === b.valueOn
+          ? a.enteredAt < b.enteredAt
+            ? 1
+            : -1
+          : a.valueOn < b.valueOn
+            ? 1
+            : -1,
+      )[0]
+    const uses = !!recorded && recorded.valueOn >= line.valueOn
+    return {
+      price: uses ? recorded.price : line.price,
+      priceOn: uses ? recorded.valueOn : line.valueOn,
+      recordedOn: uses ? recorded.valueOn : null,
+    }
+  })
+}
+
+/** The price part of a Balance on a date: each line to the cent against its opening price. */
+export function priceDelta(opening: MockOpening, prices: MockPrice[], on: string): number {
+  const lines = effectiveLines(opening, prices, on)
+  return cents(
+    opening.holdings.reduce(
+      (sum, line, i) =>
+        sum + cents(Number(line.quantity) * Number(lines[i].price)) - holdingValue(line),
+      0,
+    ),
+  )
 }

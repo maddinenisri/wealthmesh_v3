@@ -13,6 +13,8 @@ import { Panel } from '../activity/Panel'
 import { StatementsCard } from '../statements/StatementsCard'
 import { FinishSetup } from './FinishSetup'
 import { HoldingsCard } from './HoldingsCard'
+import { PricesCard } from './PricesCard'
+import { RecordPrice } from './RecordPrice'
 import { HoldingTable } from './OpeningReview'
 
 const dollars = (text: string) => formatMoney(Number(text))
@@ -85,8 +87,9 @@ export function InvestmentAccount({
   const arrived = (useLocation().state as { notice?: string } | null)?.notice
   const [finishing, setFinishing] = useState(false)
   const [asking, setAsking] = useState(false)
+  const [pricing, setPricing] = useState(false)
   const { message, statusRef, begin, changed, clear, abandon } = useStateChangeFocus(
-    finishing || asking,
+    finishing || asking || pricing,
     arrived,
   )
   useEffect(() => {
@@ -95,6 +98,7 @@ export function InvestmentAccount({
       abandon()
       setFinishing(false)
       setAsking(false)
+      setPricing(false)
       clear()
     }
     // `clear` is a fresh function each render; only a new review should run this.
@@ -116,6 +120,18 @@ export function InvestmentAccount({
           today={today.data}
           onDone={(sentence) => {
             setFinishing(false)
+            if (sentence) changed(sentence)
+          }}
+        />
+      )}
+      {pricing && opening.data && members && today.data && (
+        <RecordPrice
+          account={account}
+          symbols={[...new Set(opening.data.holdings.map((line) => line.symbol))]}
+          members={members}
+          today={today.data}
+          onDone={(sentence) => {
+            setPricing(false)
             if (sentence) changed(sentence)
           }}
         />
@@ -213,6 +229,17 @@ export function InvestmentAccount({
         </Card>
       )}
       {!draft && <HoldingsCard account={account} />}
+      {!draft && (
+        <PricesCard
+          account={account}
+          canRecord={(opening.data?.holdings.length ?? 0) > 0}
+          onRecord={() => {
+            begin()
+            onReview?.()
+            setPricing(true)
+          }}
+        />
+      )}
       <OpeningCard account={account} />
       {!draft && (
         <StatementsCard

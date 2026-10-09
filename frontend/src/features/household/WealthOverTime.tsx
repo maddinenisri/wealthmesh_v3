@@ -6,6 +6,7 @@ import { formatMoney } from '../../lib/money'
 import { accountTypeLabel, isDebt } from '../accounts/accountTypes'
 import { balanceText } from '../accounts/cardBalance'
 import { Dated } from '../values/Dated'
+import { OlderPricesNote } from './OlderPricesNote'
 
 /**
  * Wealth on an earlier date (W4) and what changed between two dates (W5). A manually valued account shows the date of
@@ -58,6 +59,35 @@ export function WealthOverTime({ person }: { person?: string }) {
           <p>
             Household wealth on {wealth.data.asOf} <Amount value={Number(wealth.data.netWorth)} />
           </p>
+          <p>
+            Financial assets <Amount value={Number(wealth.data.financialAssets)} />
+          </p>
+          <OlderPricesNote wealth={wealth.data} />
+          {wealth.data.investments.accounts.length > 0 && (
+            <section aria-label="Investments on this date">
+              <h3 className="font-medium">Investments</h3>
+              <ul className="mt-2 divide-y divide-line border-y border-line">
+                {wealth.data.investments.accounts.map((line) => (
+                  <li key={line.accountId} className="py-2">
+                    <span className="flex flex-wrap items-baseline justify-between gap-x-4">
+                      <span>
+                        {line.name}{' '}
+                        <span className="text-sm text-ink-muted">
+                          {accountTypeLabel(line.type)}
+                        </span>
+                      </span>
+                      <Amount value={Number(line.balance)} />
+                    </span>
+                    {line.valueDate && (
+                      <span className="block text-sm text-ink-muted">
+                        Prices last updated <Dated on={line.valueDate} />
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {wealth.data.propertyAndOther.accounts.length > 0 && (
             <section aria-label="Property and other assets on this date">
               <h3 className="font-medium">Property and other assets</h3>
@@ -151,6 +181,11 @@ function Explanation({
       value: Number(change.valueChange),
       note: 'Property, other assets and plans re-valued: an estimate, never income or spending',
       always: true,
+    },
+    {
+      label: 'Investment price changes',
+      value: Number(change.priceChange),
+      note: 'Holdings re-priced: a price move is never income or spending',
     },
     {
       label: 'Pay credits',

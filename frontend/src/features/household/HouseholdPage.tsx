@@ -20,6 +20,7 @@ import { accountTypeLabel, isDebt, typeTraits } from '../accounts/accountTypes'
 import { BalanceFigure } from '../accounts/BalanceFigure'
 import { cardSide, isCard } from '../accounts/cardBalance'
 import { STATUS_LABEL } from '../accounts/statusLabel'
+import { OlderPricesNote } from './OlderPricesNote'
 import { memberLabel, ownerNames } from '../accounts/ownerNames'
 import { useAccountContext } from '../accounts/useAccountContext'
 import { CreateHouseholdForm, RenameHouseholdForm } from './HouseholdForms'
@@ -182,6 +183,7 @@ function AccountsAndWealth({
           <p>
             Net worth <Amount value={Number(wealth.data.netWorth)} />
           </p>
+          <OlderPricesNote wealth={wealth.data} />
         </div>
       )}
       {accounts.data?.length === 0 && (
@@ -443,21 +445,30 @@ function AccountGroup({
               <span className="text-right">
                 <BalanceFigure type={account.type} amount={account.balance.amount} />
                 {typeTraits(account.type).kind === 'investment' && (
+                  // One date phrase per account: the date its prices were last updated, or the Balance date while
+                  // it has no holdings (slice 19b; the generic "Value dated" below is for manually valued accounts).
                   <span className="block text-sm text-ink-muted">
-                    Balance dated <span className="whitespace-nowrap">{account.balance.asOf}</span>
-                  </span>
-                )}
-                {lines?.find((line) => line.accountId === account.id)?.valueDate && (
-                  <span className="block text-sm text-ink-muted">
-                    {account.type === 'defined_benefit' ? 'As of' : 'Value dated'}{' '}
+                    {lines?.find((line) => line.accountId === account.id)?.valueDate
+                      ? 'Prices last updated'
+                      : 'Balance dated'}{' '}
                     <span className="whitespace-nowrap">
-                      {lines.find((line) => line.accountId === account.id)?.valueDate}
-                    </span>{' '}
-                    {lines.find((line) => line.accountId === account.id)?.stale && (
-                      <Badge>Older value</Badge>
-                    )}
+                      {lines?.find((line) => line.accountId === account.id)?.valueDate ??
+                        account.balance.asOf}
+                    </span>
                   </span>
                 )}
+                {typeTraits(account.type).kind !== 'investment' &&
+                  lines?.find((line) => line.accountId === account.id)?.valueDate && (
+                    <span className="block text-sm text-ink-muted">
+                      {account.type === 'defined_benefit' ? 'As of' : 'Value dated'}{' '}
+                      <span className="whitespace-nowrap">
+                        {lines.find((line) => line.accountId === account.id)?.valueDate}
+                      </span>{' '}
+                      {lines.find((line) => line.accountId === account.id)?.stale && (
+                        <Badge>Older value</Badge>
+                      )}
+                    </span>
+                  )}
               </span>
             </li>
           ))}

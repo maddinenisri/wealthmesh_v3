@@ -15,6 +15,9 @@ import {
   viewBody,
   type MockOpening,
   holdingsBody,
+  effectiveLines,
+  priceDelta,
+  type MockPrice,
 } from './mockInvestments'
 
 type MockHousehold = { id: string; name: string }
@@ -429,6 +432,8 @@ export function mockApi(
     openingRevisions?: MockOpeningRevision[]
     /** Opening cash and holdings of investment accounts already saved, by account id. */
     openings?: Record<string, MockOpening>
+    /** Prices already recorded on holdings (slice 19b). */
+    prices?: MockPrice[]
     /** Suggestions the server would find: the bills are the account's matching expenses. */
     suggestions?: { accountId: string; categoryId: string; description: string }[]
   } = {},
@@ -449,6 +454,8 @@ export function mockApi(
     openingRevisions: [...(seed.openingRevisions ?? [])] as MockOpeningRevision[],
     /** Opening cash and holdings of investment accounts, by account id. */
     openings: new Map<string, MockOpening>(Object.entries(seed.openings ?? {})),
+    /** Prices recorded on holdings after setup, newest last (slice 19b). */
+    prices: [...(seed.prices ?? [])] as MockPrice[],
     /** Save keys seen on POST expenses, in order. */
     keys: [] as string[],
     /** When true the next expense is stored but its response is lost (a slow or dropped answer). */
@@ -672,6 +679,169 @@ export function mockApi(
     total: rows.reduce((sum, a) => sum + Number(a.amount), 0).toFixed(2),
   })
   const currentBalance = (account: MockAccount) => balanceOn(account, '9999-12-31')
+  type PriceBody = {
+    symbol?: string
+    price?: unknown
+    valueOn?: string
+    enteredByMemberId?: string
+  }
+  const priceView = (p: MockPrice) => ({
+    id: p.id,
+    symbol: p.symbol,
+    price: p.price,
+    valueOn: p.valueOn,
+    enteredByMemberId: p.enteredByMemberId,
+    enteredByName: p.enteredByName,
+    enteredAt: p.enteredAt,
+    replaced: !!p.replacedAt,
+    replacedAt: p.replacedAt,
+  })
+  /** The Balance of an investment account counts the prices recorded on it; its date moves with the latest one. */
+  const refreshInvestmentBalance = (account: MockAccount) => {
+    const opening = state.openings.get(account.id)
+    if (!opening) return
+    const mine = state.prices.filter((p) => p.accountId === account.id)
+    const recorded = effectiveLines(opening, mine, '9999-12-31')
+      .map((l) => l.recordedOn)
+      .filter((d): d is string => d !== null)
+      .sort()
+    account.balance = {
+      amount: (Number(account.openingAmount) + priceDelta(opening, mine, '9999-12-31')).toFixed(2),
+      asOf: recorded.length ? recorded[recorded.length - 1] : account.openedOn,
+    }
+  }
+  /** The rules a price meets, mirroring `HoldingPriceService` (messages are the server's own). */
+  const judgePrice = (accountId: string, body: PriceBody) => {
+    const account = state.accounts.find((a) => a.id === accountId)
+    if (!account) return { problem: problem(404, `Account not found: ${accountId}`) }
+    const opening = state.openings.get(accountId)
+    const symbol = (body.symbol ?? '').trim()
+    if (symbol === '') return { problem: problem(400, 'Choose the holding') }
+    const text = typeof body.price === 'string' ? body.price.trim() : ''
+    if (!/^-?\d{1,15}(\.\d{1,4})?$/.test(text))
+      return { problem: problem(400, 'Enter a valid amount') }
+    if (text.startsWith('-'))
+      return { problem: problem(400, 'Holding market price must be zero or greater') }
+    if (!body.valueOn) return { problem: problem(400, 'Enter the price date') }
+    if (!body.enteredByMemberId) return { problem: problem(400, 'Choose who entered this') }
+    if (account.status !== 'active')
+      return {
+        problem: problem(
+          409,
+          `${account.name} is ${account.status === 'draft' ? 'a draft. Finish setting it up first.' : account.status === 'archived' ? 'archived. Restore it first.' : 'closed. Reopen it first.'}`,
+        ),
+      }
+    const lines = opening?.holdings.filter((l) => l.symbol === symbol) ?? []
+    if (lines.length === 0)
+      return { problem: problem(400, `${symbol} is not held in ${account.name}`) }
+    if (body.valueOn > today)
+      return { problem: problem(400, 'Future values are not completed account history') }
+    if (body.valueOn < account.openedOn)
+      return {
+        problem: problem(
+          400,
+          `Review the earlier tracking start before saving. The Setup date is ${account.openedOn}.`,
+        ),
+      }
+    const earliest = lines.map((l) => l.valueOn).sort()[0]
+    if (body.valueOn < earliest)
+      return {
+        problem: problem(
+          400,
+          `${symbol}'s opening price is dated ${earliest}; record a price on or after it`,
+        ),
+      }
+    const member = state.members.find((m) => m.id === body.enteredByMemberId && m.active !== false)
+    if (!member) return { problem: problem(400, 'Choose who entered this from this household') }
+    return {
+      account,
+      opening: opening!,
+      member,
+      shape: { symbol, price: Number(text), valueOn: body.valueOn },
+    }
+  }
+  const priceText = (n: number) => {
+    const t = String(n)
+    const [w, f = ''] = t.split('.')
+    return `${w}.${f.padEnd(2, '0')}`
+  }
+  const priceReview = (judged: Exclude<ReturnType<typeof judgePrice>, { problem: Response }>) => {
+    const { account, opening, shape } = judged as {
+      account: MockAccount
+      opening: MockOpening
+      shape: { symbol: string; price: number; valueOn: string }
+    }
+    const mine = state.prices.filter((p) => p.accountId === account.id)
+    const now = effectiveLines(opening, mine, '9999-12-31')
+    let before = 0
+    let after = 0
+    let shares = 0
+    opening.holdings.forEach((line, i) => {
+      if (line.symbol !== shape.symbol) return
+      const next = shape.valueOn < now[i].priceOn ? Number(now[i].price) : shape.price
+      before += Math.round(Number(line.quantity) * Number(now[i].price) * 100) / 100
+      after += Math.round(Number(line.quantity) * next * 100) / 100
+      shares += Number(line.quantity)
+    })
+    const moved = Math.round((after - before) * 100) / 100
+    const wealthNow = state.accounts
+      .filter((a) => a.status !== 'draft')
+      .reduce((sum, a) => sum + Number(a.balance.amount), 0)
+    const replaces = mine.find(
+      (p) => !p.replacedAt && p.symbol === shape.symbol && p.valueOn === shape.valueOn,
+    )
+    const zero = shape.price === 0
+    const message =
+      (zero
+        ? `${shape.symbol} will be worth $0.00 on ${shape.valueOn}. Your ${shares} ${shares === 1 ? 'share stays' : 'shares stay'} recorded; only their value becomes $0.00.`
+        : `${shape.symbol} will be priced at ${priceText(shape.price)} on ${shape.valueOn}.`) +
+      (moved === 0
+        ? ' The Balance does not change: a later price already counts, or this is the same price.'
+        : '') +
+      (replaces
+        ? ` It replaces the ${replaces.price} price for this date that ${replaces.enteredByName} recorded; that one stays in the history.`
+        : '')
+    const bal = Number(account.balance.amount)
+    return {
+      symbol: shape.symbol,
+      shares: String(shares),
+      price: priceText(shape.price),
+      valueOn: shape.valueOn,
+      zero,
+      changesBalance: moved !== 0,
+      holdingBefore: before.toFixed(2),
+      holdingAfter: after.toFixed(2),
+      balanceBefore: bal.toFixed(2),
+      balanceAfter: (bal + moved).toFixed(2),
+      netWorthBefore: wealthNow.toFixed(2),
+      netWorthAfter: (wealthNow + moved).toFixed(2),
+      replaces: replaces ? priceView(replaces) : null,
+      message,
+    }
+  }
+  const priceResult = (account: MockAccount, saved: MockPrice) => {
+    const opening = state.openings.get(account.id)!
+    const now = effectiveLines(
+      opening,
+      state.prices.filter((p) => p.accountId === account.id),
+      '9999-12-31',
+    )
+    let shares = 0
+    let held = 0
+    opening.holdings.forEach((line, i) => {
+      if (line.symbol !== saved.symbol) return
+      shares += Number(line.quantity)
+      held += Math.round(Number(line.quantity) * Number(now[i].price) * 100) / 100
+    })
+    return {
+      price: priceView(saved),
+      shares: String(shares),
+      holdingValue: held.toFixed(2),
+      balance: account.balance.amount,
+      balanceOn: account.balance.asOf,
+      message: `${saved.symbol} is priced at ${saved.price} on ${saved.valueOn}. ${account.name}'s Balance is ${Number(account.balance.amount).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} as of ${account.balance.asOf}.`,
+    }
+  }
   /** What counts toward a month figure: spending is expenses minus refunds (the server defines it once). */
   const counted = (a: MockActivity, kind: string) =>
     kind === 'expense' ? a.kind === 'expense' || a.kind === 'refund' : a.kind === kind
@@ -2313,8 +2483,98 @@ export function mockApi(
       const opening = state.openings.get(account.id)
       if (!opening) return problem(404, `${account.name} has no cash and holdings`)
       return HttpResponse.json(
-        holdingsBody(opening, currentBalance(account).toFixed(2), account.openedOn),
+        holdingsBody(
+          opening,
+          account.balance.amount,
+          account.balance.asOf,
+          state.prices.filter((p) => p.accountId === account.id),
+        ),
       )
+    }),
+    http.get('*/api/v1/accounts/:id/prices', ({ request, params }) => {
+      log(request)
+      const account = state.accounts.find((a) => a.id === params.id)
+      if (!account) return problem(404, `Account not found: ${String(params.id)}`)
+      const mine = state.prices.filter((p) => p.accountId === account.id)
+      const dates = [
+        account.openedOn,
+        ...new Set(
+          mine.filter((p) => !p.replacedAt && p.valueOn >= account.openedOn).map((p) => p.valueOn),
+        ),
+      ].sort()
+      const opening = state.openings.get(account.id)
+      return HttpResponse.json({
+        prices: [...mine]
+          .sort((a, b) =>
+            a.valueOn === b.valueOn
+              ? a.enteredAt < b.enteredAt
+                ? 1
+                : -1
+              : a.valueOn < b.valueOn
+                ? 1
+                : -1,
+          )
+          .map(priceView),
+        points: dates.map((on) => ({
+          on,
+          balance: (
+            Number(account.openingAmount) + (opening ? priceDelta(opening, mine, on) : 0)
+          ).toFixed(2),
+        })),
+      })
+    }),
+    http.post('*/api/v1/accounts/:id/prices/review', async ({ request, params }) => {
+      log(request)
+      const judged = judgePrice(String(params.id), (await request.json()) as PriceBody)
+      if ('problem' in judged) return judged.problem
+      return HttpResponse.json(priceReview(judged))
+    }),
+    http.post('*/api/v1/accounts/:id/prices', async ({ request, params }) => {
+      log(request)
+      const key = request.headers.get('Idempotency-Key')
+      if (!key) return problem(400, 'Missing save key')
+      const body = (await request.json()) as PriceBody
+      const same = state.prices.find((p) => p.key === key)
+      if (same) {
+        const account = state.accounts.find((a) => a.id === params.id)!
+        if (
+          same.symbol !== body.symbol ||
+          Number(same.price) !== Number(body.price) ||
+          same.valueOn !== body.valueOn
+        )
+          return problem(
+            409,
+            'This save was already used with different details. Start a new entry.',
+          )
+        return HttpResponse.json(priceResult(account, same))
+      }
+      const judged = judgePrice(String(params.id), body)
+      if ('problem' in judged) return judged.problem
+      const { account, shape, member } = judged
+      const now = new Date(`${today}T12:00:00Z`).toISOString()
+      for (const p of state.prices)
+        if (
+          !p.replacedAt &&
+          p.accountId === account.id &&
+          p.symbol === shape.symbol &&
+          p.valueOn === shape.valueOn
+        )
+          p.replacedAt = now
+      const saved: MockPrice = {
+        id: `price-${nextId++}`,
+        accountId: account.id,
+        symbol: shape.symbol,
+        price: priceText(shape.price),
+        valueOn: shape.valueOn,
+        enteredByMemberId: member.id,
+        enteredByName: member.name,
+        enteredAt: new Date(Date.now()).toISOString(),
+        replacedAt: null,
+        key,
+      }
+      state.prices.push(saved)
+      refreshInvestmentBalance(account)
+      return HttpResponse.json(priceResult(account, saved), { status: 201 })
     }),
     http.put('*/api/v1/accounts/:id/opening', async ({ request, params }) => {
       log(request)
@@ -2794,6 +3054,24 @@ export function mockApi(
           }
         })
         .filter((m) => Number(m.change) !== 0)
+      const priceMoves = state.accounts
+        .filter((a) => typeTraits(a.type).kind === 'investment' && state.openings.has(a.id))
+        .map((a) => {
+          const opening = state.openings.get(a.id)!
+          const mine = state.prices.filter((p) => p.accountId === a.id)
+          const start = a.openedOn > from ? 0 : priceDelta(opening, mine, from)
+          const end = priceDelta(opening, mine, to)
+          return {
+            accountId: a.id,
+            name: a.name,
+            type: a.type,
+            start: start.toFixed(2),
+            end: end.toFixed(2),
+            change: (end - start).toFixed(2),
+          }
+        })
+        .filter((m) => Number(m.change) !== 0)
+      const priced = priceMoves.reduce((x, m) => x + Number(m.change), 0)
       const moved = moves.reduce((x, m) => x + Number(m.change), 0)
       const pay = creditRows.reduce((x, c) => x + Number(c.payCredit), 0)
       const interest = creditRows.reduce((x, c) => x + Number(c.interestCredit), 0)
@@ -2801,8 +3079,10 @@ export function mockApi(
         from,
         to,
         startWealth: '0.00',
-        endWealth: (moved + pay + interest).toFixed(2),
-        change: (moved + pay + interest).toFixed(2),
+        endWealth: (moved + priced + pay + interest).toFixed(2),
+        change: (moved + priced + pay + interest).toFixed(2),
+        priceChange: priced.toFixed(2),
+        priceMoves,
         income: '0.00',
         spending: '0.00',
         valueChange: moved.toFixed(2),
@@ -2868,14 +3148,30 @@ export function mockApi(
       const lines = tracked.map((a) => {
         const valued = isValuedType(a.type)
         const point = valued ? valuedPoint(state.values, a, asOf) : null
-        const dated = point?.on ?? null
-        const days = dated ? (Date.parse(asOf) - Date.parse(dated)) / 86_400_000 : 0
+        // An investment account: its price part as of the date, and the date of its latest price (slice 19b).
+        const holdings =
+          typeTraits(a.type).kind === 'investment' ? state.openings.get(a.id) : undefined
+        const mine = state.prices.filter((p) => p.accountId === a.id)
+        const priced = holdings
+          ? effectiveLines(holdings, mine, asOf)
+              .map((l) => l.priceOn)
+              .sort()
+              .at(-1)
+          : undefined
+        const dated = point?.on ?? priced ?? null
+        const days = dated && valued ? (Date.parse(asOf) - Date.parse(dated)) / 86_400_000 : 0
         return {
           accountId: a.id,
           name: a.name,
           type: a.type,
           status: a.status,
-          balance: Number(point ? point.amount : a.balance.amount).toFixed(2),
+          balance: Number(
+            point
+              ? point.amount
+              : holdings
+                ? Number(a.openingAmount) + priceDelta(holdings, mine, asOf)
+                : a.balance.amount,
+          ).toFixed(2),
           valueDate: dated,
           stale: valued && days > 30,
           groups: mockGroups(a.type),
@@ -2913,6 +3209,11 @@ export function mockApi(
         notTracked: state.accounts
           .filter((a) => a.openedOn > asOf)
           .map((a) => ({ accountId: a.id, name: a.name, type: a.type, openedOn: a.openedOn })),
+        olderPrices: lines
+          .filter(
+            (l) => typeTraits(l.type).kind === 'investment' && l.valueDate && l.valueDate < asOf,
+          )
+          .map((l) => ({ accountId: l.accountId, name: l.name, priceOn: l.valueDate })),
       })
     }),
     http.get('*/api/v1/spending/history', ({ request }) => {

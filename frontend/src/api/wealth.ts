@@ -7,7 +7,10 @@ export type WealthLine = {
   type: string
   status: string
   balance: string
-  /** A manually valued account: the date of the value it counts (null for every other account). */
+  /**
+   * A manually valued account: the date of the value it counts. An investment account with holdings: the date of its
+   * latest price ("prices last updated"). Null for every other account.
+   */
   valueDate: string | null
   /** True when that value is dated more than 30 days before the wealth date. */
   stale: boolean
@@ -43,6 +46,11 @@ export type Wealth = {
   propertyAndOther: WealthGroup
   debtLines: WealthLine[]
   notTracked: NotTracked[]
+  /**
+   * Investment accounts whose latest price is dated before the wealth date: their Balance uses an older price, so
+   * the total mixes dates (not the 30-day stale flag of a manually valued account).
+   */
+  olderPrices: { accountId: string; name: string; priceOn: string }[]
 }
 
 /** What explains the change in wealth between two dates; every figure is a money string. */
@@ -86,6 +94,16 @@ export type WealthChange = {
     change: string
     reason: string | null
     madeOn: string
+  }[]
+  /** Price moves of investment holdings: a term of its own, never income. */
+  priceChange: string
+  priceMoves: {
+    accountId: string
+    name: string
+    type: string
+    start: string
+    end: string
+    change: string
   }[]
   /** A defined benefit's pay credits and benefit interest in the period: their own terms, never income. */
   payCredits: string
@@ -161,6 +179,10 @@ function parseWealth(value: unknown): Wealth {
         openedOn: text(missing.openedOn),
       }
     }),
+    olderPrices: (Array.isArray(data.olderPrices) ? data.olderPrices : []).map((item: unknown) => {
+      const line = record(item)
+      return { accountId: text(line.accountId), name: text(line.name), priceOn: text(line.priceOn) }
+    }),
   }
 }
 
@@ -168,7 +190,7 @@ function parseChange(value: unknown): WealthChange {
   const data = record(value)
   if (!Array.isArray(data.valueMoves)) throw bad()
   if (!Array.isArray(data.correctionLines) || !Array.isArray(data.restatements)) throw bad()
-  if (!Array.isArray(data.creditLines)) throw bad()
+  if (!Array.isArray(data.creditLines) || !Array.isArray(data.priceMoves)) throw bad()
   return {
     from: text(data.from),
     to: text(data.to),
@@ -215,6 +237,18 @@ function parseChange(value: unknown): WealthChange {
         change: text(line.change),
         reason: line.reason == null ? null : text(line.reason),
         madeOn: text(line.madeOn),
+      }
+    }),
+    priceChange: text(data.priceChange),
+    priceMoves: data.priceMoves.map((item) => {
+      const line = record(item)
+      return {
+        accountId: text(line.accountId),
+        name: text(line.name),
+        type: text(line.type),
+        start: text(line.start),
+        end: text(line.end),
+        change: text(line.change),
       }
     }),
     payCredits: text(data.payCredits),

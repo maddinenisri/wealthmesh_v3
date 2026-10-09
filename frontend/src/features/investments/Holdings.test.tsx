@@ -131,13 +131,16 @@ describe.each(types.map((type, index) => ({ type, index })))(
       expect(row).toHaveTextContent('as of 2026-09-01')
     })
 
-    it(`${type.ids} the Household page names the Balance date beside the account`, async () => {
+    it(`${type.ids} the Household page names the date the prices were last updated beside the account`, async () => {
       mockApi({ ...seed, accounts: [account], openings: { [account.id]: openingOf(type) } })
       renderRoute('/')
       const group = await screen.findByRole('region', { name: 'Investments' })
       const item = (await within(group).findByText(type.name)).closest('li')!
       expect(item).toHaveTextContent(dollars(type.total))
-      expect(item).toHaveTextContent('Balance dated 2026-09-01')
+      // One date phrase: the opening price date is the latest price, so "Balance dated" is not shown beside it (19b).
+      expect(item).toHaveTextContent('Prices last updated 2026-09-01')
+      expect(item).not.toHaveTextContent('Balance dated')
+      expect(item).not.toHaveTextContent('Value dated')
     })
   },
 )
