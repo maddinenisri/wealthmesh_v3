@@ -77,3 +77,4 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
 ## Report
 
 One line per item: pass or fail, and the evidence.
+- [ ] A "red first" or repeated-run claim in the notes names the failing test and line per fault, or the elapsed time per run, pasted from the output (19a "872 x 3" was one run; 19b faults 2 and 3 had no red line).
