@@ -39,7 +39,12 @@ public class WealthStore {
     }
 
     public Flux<Balance> balancesAsOf(LocalDate asOf) {
-        return client.sql("""
+        return balancesAsOf(asOf, null);
+    }
+
+    /** The same for the accounts one member owns (a joint account is in each owner's list, in full). */
+    public Flux<Balance> balancesAsOf(LocalDate asOf, UUID memberId) {
+        DatabaseClient.GenericExecuteSpec spec = client.sql("""
                         SELECT a.id, a.name, a.type, a.status, a.opened_on, a.opening_amount,
                                COALESCE((SELECT SUM(%s) FROM activity WHERE account_id = a.id AND removed_at IS NULL
                                          AND occurred_on <= :on), 0) AS delta,
@@ -49,9 +54,10 @@ public class WealthStore {
                                            WHERE account_id = a.id AND removed_at IS NULL AND replaced_at IS NULL
                                            AND NOT planned AND value_on <= :on
                                            ORDER BY value_on DESC, created_at DESC LIMIT 1) v ON TRUE
-                        WHERE a.deleted_at IS NULL AND a.status <> 'draft' AND a.opened_on <= :on
-                        ORDER BY a.name, a.created_at""".formatted(ActivityStore.SIGNED))
-                .bind("on", asOf)
+                        WHERE a.deleted_at IS NULL AND a.status <> 'draft' AND a.opened_on <= :on%s
+                        ORDER BY a.name, a.created_at""".formatted(ActivityStore.SIGNED, ownedBy(memberId)))
+                .bind("on", asOf);
+        return (memberId == null ? spec : spec.bind("member", memberId))
                 .map((row, meta) -> new Balance(row.get("id", UUID.class), row.get("name", String.class),
                         row.get("type", String.class), row.get("status", String.class),
                         row.get("opened_on", LocalDate.class), row.get("opening_amount", BigDecimal.class),
@@ -61,16 +67,30 @@ public class WealthStore {
     }
 
     /** Accounts that had not begun tracking by the date: named, never counted as zero. */
-    public Flux<Balance> notYetTracked(LocalDate asOf) {
-        return client.sql("""
-                        SELECT id, name, type, status, opened_on, opening_amount FROM account
-                        WHERE deleted_at IS NULL AND status <> 'draft' AND opened_on > :on ORDER BY name, created_at""")
-                .bind("on", asOf)
+    public Flux<Balance> notYetTracked(LocalDate asOf, UUID memberId) {
+        DatabaseClient.GenericExecuteSpec spec = client.sql("""
+                        SELECT a.id, a.name, a.type, a.status, a.opened_on, a.opening_amount FROM account a
+                        WHERE a.deleted_at IS NULL AND a.status <> 'draft' AND a.opened_on > :on%s
+                        ORDER BY a.name, a.created_at""".formatted(ownedBy(memberId)))
+                .bind("on", asOf);
+        return (memberId == null ? spec : spec.bind("member", memberId))
                 .map((row, meta) -> new Balance(row.get("id", UUID.class), row.get("name", String.class),
                         row.get("type", String.class), row.get("status", String.class),
                         row.get("opened_on", LocalDate.class), row.get("opening_amount", BigDecimal.class),
                         BigDecimal.ZERO, null, null))
                 .all();
+    }
+
+    /** True when the member exists (the per-person view of a member that is not in the household is refused). */
+    public Mono<Boolean> memberExists(UUID memberId) {
+        return client.sql("SELECT 1 FROM household_member WHERE id = :id").bind("id", memberId)
+                .map((row, meta) -> true).one().defaultIfEmpty(false);
+    }
+
+    /** The condition that keeps the accounts a member owns; empty for the whole household. */
+    private static String ownedBy(UUID memberId) {
+        return memberId == null ? "" : " AND EXISTS (SELECT 1 FROM account_owner o WHERE o.account_id = a.id "
+                + "AND o.member_id = :member)";
     }
 
     /** One Balance correction row in a period, as a line of the explanation. */

@@ -58,10 +58,20 @@ class AccountGroupsTest {
     }
 
     @Test
-    @DisplayName("V2_DB_006 only a defined benefit is a one-participant type so far")
+    @DisplayName("V2_DB_006 V2_401K_007 V2_HSA_007 V2_ROTH_IRA_007 V2_TRAD_IRA_007 a defined benefit, 401(k), IRA, "
+            + "Roth IRA and HSA each have one owner; a brokerage can be joint, and a type that records its creator is "
+            + "exactly an investment type or the plan")
     void singleOwnerTypes() {
+        java.util.Set<AccountType> one = java.util.EnumSet.of(AccountType.DEFINED_BENEFIT, AccountType.K401,
+                AccountType.TRADITIONAL_IRA, AccountType.ROTH_IRA, AccountType.HSA);
         for (AccountType type : AccountType.values()) {
-            assertThat(type.singleOwner()).as(type.name()).isEqualTo(type == AccountType.DEFINED_BENEFIT);
+            assertThat(type.singleOwner()).as(type.name()).isEqualTo(one.contains(type));
         }
+        assertThat(AccountType.K401.singleOwnerMessage()).isEqualTo("A 401(k) has one owner. Choose one member.");
+        assertThat(AccountType.TRADITIONAL_IRA.singleOwnerMessage()).startsWith("A Traditional IRA has one owner");
+        assertThat(AccountType.ROTH_IRA.singleOwnerMessage()).startsWith("A Roth IRA has one owner");
+        assertThat(AccountType.HSA.singleOwnerMessage()).startsWith("An HSA has one owner");
+        assertThat(AccountType.DEFINED_BENEFIT.singleOwnerMessage())
+                .startsWith("A defined benefit has one participant");
     }
 }

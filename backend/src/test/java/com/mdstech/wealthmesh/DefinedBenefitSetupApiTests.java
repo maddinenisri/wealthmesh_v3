@@ -100,15 +100,17 @@ class DefinedBenefitSetupApiTests extends DefinedBenefitTestBase {
                 .bodyValue(planBody("Joint Plan", "Harbor Benefits", quoted(mayaId) + "," + quoted(samId), "1.00",
                         "2026-09-01", samId)).exchange().expectStatus().isBadRequest().expectBody()
                 .jsonPath("$.message").isEqualTo(message);
+        // The plain Edit no longer changes the participant (Q-064); the reviewed correction does, and refuses two.
         editAccount(plan, "Harbor Cash Balance Main", "Harbor Benefits Services", quoted(mayaId) + "," + quoted(samId))
-                .expectStatus().isBadRequest().expectBody().jsonPath("$.message").isEqualTo(message);
+                .expectStatus().isBadRequest();
+        correct(plan, quoted(mayaId) + "," + quoted(samId), mayaId).expectStatus().isBadRequest().expectBody()
+                .jsonPath("$.message").isEqualTo(message);
         webTestClient.get().uri("/api/v1/accounts/{id}", plan).exchange().expectBody()
                 .jsonPath("$.ownerMemberIds.length()").isEqualTo(1).jsonPath("$.ownerMemberIds[0]").isEqualTo(samId);
         // Another member may be the single participant: the choice is one named member.
-        editAccount(plan, "Harbor Cash Balance Main", "Harbor Benefits Services", quoted(mayaId)).expectStatus()
-                .isOk().expectBody().jsonPath("$.ownerMemberIds[0]").isEqualTo(mayaId);
-        editAccount(plan, "Harbor Cash Balance Main", "Harbor Benefits Services", quoted(samId)).expectStatus()
-                .isOk();
+        correct(plan, quoted(mayaId), mayaId).expectStatus().isOk().expectBody()
+                .jsonPath("$.ownerMemberIds[0]").isEqualTo(mayaId);
+        correct(plan, quoted(samId), mayaId).expectStatus().isOk();
         assertAccountCount(2);
     }
 
@@ -164,14 +166,14 @@ class DefinedBenefitSetupApiTests extends DefinedBenefitTestBase {
 
     @Order(9)
     @Test
-    @DisplayName("V2_DB_006 an edit that names a new participant waits for that member being deactivated, then "
+    @DisplayName("V2_DB_006 a correction that names a new participant waits for that member being deactivated, then "
             + "refuses them, and the participant stays Sam")
     void editWaitsForParticipantRow() throws Exception {
         io.r2dbc.spi.Connection other = holdUncommitted(
                 "UPDATE wealthmesh.household_member SET active = false WHERE id = $1", mayaId);
         try {
-            java.util.concurrent.CompletableFuture<Integer> status = async(() -> statusOf(editAccount(plan,
-                    "Harbor Cash Balance Main", "Harbor Benefits Services", quoted(mayaId))));
+            java.util.concurrent.CompletableFuture<Integer> status = async(() -> statusOf(correct(plan,
+                    quoted(mayaId), samId)));
             Thread.sleep(600);
             assertThat(status).as("the edit waits for the member row").isNotDone();
             commit(other);

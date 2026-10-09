@@ -24,11 +24,12 @@ public class WealthController {
         this.service = service;
     }
 
-    /** Wealth as of a date (today when `asOf` is left out). */
+    /** Wealth as of a date (today when `asOf` is left out), for the whole household or one member's accounts. */
     @GetMapping
     public Mono<WealthSummary> summary(
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
-        return service.summary(asOf);
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf,
+            @RequestParam(required = false) java.util.UUID memberId) {
+        return service.summary(asOf, memberId);
     }
 
     /** What explains the change in wealth from one date to another. */

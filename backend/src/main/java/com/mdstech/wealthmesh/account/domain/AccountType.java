@@ -20,10 +20,10 @@ public enum AccountType {
     LOAN(Kind.DEBT, WealthGroup.LOANS),
     MORTGAGE(Kind.DEBT, WealthGroup.MORTGAGES),
     BROKERAGE(Kind.INVESTMENT, WealthGroup.INVESTMENTS),
-    K401(Kind.INVESTMENT, WealthGroup.RETIREMENT, false, "401k"),
-    TRADITIONAL_IRA(Kind.INVESTMENT, WealthGroup.RETIREMENT),
-    ROTH_IRA(Kind.INVESTMENT, WealthGroup.RETIREMENT),
-    HSA(Kind.INVESTMENT, WealthGroup.HEALTH_SAVINGS);
+    K401(Kind.INVESTMENT, WealthGroup.RETIREMENT, true, "401k"),
+    TRADITIONAL_IRA(Kind.INVESTMENT, WealthGroup.RETIREMENT, true),
+    ROTH_IRA(Kind.INVESTMENT, WealthGroup.RETIREMENT, true),
+    HSA(Kind.INVESTMENT, WealthGroup.HEALTH_SAVINGS, true);
 
     /**
      * How a type's Balance is read: opening plus signed activity (ledger), the latest dated value (valued), or the
@@ -79,7 +79,10 @@ public enum AccountType {
         return fromWire(wire).filter(type -> type.groups().contains(group)).isPresent();
     }
 
-    /** True for a type held by exactly one member (a defined benefit's participant); the rule is enforced on save. */
+    /**
+     * True for a type held by exactly one member (a defined benefit's participant, the owner of a 401(k), IRA or HSA);
+     * the rule is enforced on save. Everyone in the household can still see the account.
+     */
     public boolean singleOwner() {
         return singleOwner;
     }
@@ -91,7 +94,14 @@ public enum AccountType {
 
     /** The refusal when a one-owner type is given several owners. */
     public String singleOwnerMessage() {
-        return "A defined benefit has one participant. Choose one member.";
+        return switch (this) {
+            case DEFINED_BENEFIT -> "A defined benefit has one participant. Choose one member.";
+            case K401 -> "A 401(k) has one owner. Choose one member.";
+            case TRADITIONAL_IRA -> "A Traditional IRA has one owner. Choose one member.";
+            case ROTH_IRA -> "A Roth IRA has one owner. Choose one member.";
+            case HSA -> "An HSA has one owner. Choose one member.";
+            default -> "This account has one owner. Choose one member.";
+        };
     }
 
     /** How this type's Balance is read. */

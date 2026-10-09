@@ -50,11 +50,29 @@ public class WealthService {
 
     /** Wealth as of a date (today when none is given). */
     public Mono<WealthSummary> summary(LocalDate asOf) {
-        return Mono.fromCallable(() -> requireDate(asOf, "The date")).flatMap(date -> store.balancesAsOf(date)
+        return summary(asOf, null);
+    }
+
+    /**
+     * Wealth for one member's accounts (MEMBERS_002), or the whole household when `memberId` is null. A joint account
+     * is in the view of each of its owners, in full and never split, and once in the household; the figures are summed
+     * from the account lines of the view, so the people's totals are never added to one another.
+     */
+    public Mono<WealthSummary> summary(LocalDate asOf, java.util.UUID memberId) {
+        return Mono.fromCallable(() -> requireDate(asOf, "The date")).flatMap(date -> requireMember(memberId)
+                .then(store.balancesAsOf(date, memberId)
                 .map(balance -> line(balance, date)).collectList()
-                .flatMap(lines -> store.notYetTracked(date)
+                .flatMap(lines -> store.notYetTracked(date, memberId)
                         .map(b -> new NotTracked(b.id().toString(), b.name(), b.type(), b.openedOn())).collectList()
-                        .map(missing -> summarize(date, lines, missing))));
+                        .map(missing -> summarize(date, lines, missing)))));
+    }
+
+    private Mono<Void> requireMember(java.util.UUID memberId) {
+        if (memberId == null) {
+            return Mono.empty();
+        }
+        return store.memberExists(memberId).flatMap(found -> found ? Mono.<Void>empty()
+                : Mono.error(bad("Choose a member from this household")));
     }
 
     /** What explains the change in wealth from one date to another (W5). */

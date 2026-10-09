@@ -20,6 +20,8 @@ import com.mdstech.wealthmesh.account.dto.LifecycleRequest;
 import com.mdstech.wealthmesh.account.dto.AccountRequest;
 import com.mdstech.wealthmesh.account.dto.AccountResponse;
 import com.mdstech.wealthmesh.account.dto.AccountUpdateRequest;
+import com.mdstech.wealthmesh.account.dto.OwnerCorrectionRequest;
+import com.mdstech.wealthmesh.account.dto.OwnerReview;
 import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.service.AccountLifecycleService;
 import com.mdstech.wealthmesh.investment.dto.FinishRequest;
@@ -91,6 +93,19 @@ public class AccountController {
     @PutMapping("/{id}")
     public Mono<AccountResponse> update(@PathVariable UUID id, @RequestBody AccountUpdateRequest request) {
         return service.update(id, request);
+    }
+
+    /** The review of an owner correction: the same checks as the save, writing nothing (slice 18c). */
+    @PostMapping("/{id}/owner-correction/review")
+    public Mono<OwnerReview> reviewOwnerCorrection(@PathVariable UUID id,
+            @RequestBody OwnerCorrectionRequest request) {
+        return service.reviewOwnerCorrection(id, request);
+    }
+
+    /** Changes who owns the account; cash, holdings and Balance stay and the history keeps the previous owners. */
+    @PostMapping("/{id}/owner-correction")
+    public Mono<AccountResponse> correctOwners(@PathVariable UUID id, @RequestBody OwnerCorrectionRequest request) {
+        return service.correctOwners(id, request);
     }
 
     @PostMapping("/{id}/archive")

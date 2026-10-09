@@ -44,6 +44,14 @@ abstract class DefinedBenefitTestBase extends InvestmentTestBase {
                         .formatted(name, institution, owners)).exchange();
     }
 
+    /** The reviewed owner correction (slice 18c) of an account, entered by `enteredBy`. */
+    protected WebTestClient.ResponseSpec correct(String id, String owners, String enteredBy) {
+        return webTestClient.post().uri("/api/v1/accounts/{id}/owner-correction", id)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"ownerMemberIds\": [%s], \"enteredByMemberId\": \"%s\"}".formatted(owners, enteredBy))
+                .exchange();
+    }
+
     /** A plan statement body: pay credit and benefit interest credit (either may be null), no plan value typed. */
     protected String statementBody(String member, String pay, String interest, String valueOn, String reason) {
         String payField = pay == null ? "" : ", \"payCredit\": \"" + pay + "\"";

@@ -105,15 +105,18 @@ class AccountEditApiTests extends DefinedBenefitTestBase {
 
     @Order(4)
     @Test
-    @DisplayName("Q-062 a rename adds one history row saying what it was renamed from and who did it; an edit that "
-            + "keeps the name adds none (the owner-change history waits for 18c)")
+    @DisplayName("Q-062 Q-064 a rename adds one history row saying what it was renamed from and who did it, a change "
+            + "of owners adds one saying who owned it before and after; an edit that keeps both adds none")
     void renameIsInTheHistory() {
         webTestClient.get().uri("/api/v1/accounts/{id}/events", car).exchange().expectBody()
-                .jsonPath("$.length()").isEqualTo(1).jsonPath("$[0].action").isEqualTo("renamed")
-                .jsonPath("$[0].detail").isEqualTo("Family Car").jsonPath("$[0].memberId").isEqualTo(mayaId);
-        edit(car, "Blue Car", quoted(mayaId), mayaId).expectStatus().isOk();
+                .jsonPath("$.length()").isEqualTo(2)
+                .jsonPath("$[?(@.action == 'renamed')].detail").isEqualTo("Family Car")
+                .jsonPath("$[?(@.action == 'renamed')].memberId").isEqualTo(mayaId)
+                .jsonPath("$[?(@.action == 'owner_changed')].detail").isEqualTo("Maya → Maya and Sam")
+                .jsonPath("$[?(@.action == 'owner_changed')].memberId").isEqualTo(mayaId);
+        edit(car, "Blue Car", quoted(mayaId) + ", " + quoted(samId), mayaId).expectStatus().isOk();
         webTestClient.get().uri("/api/v1/accounts/{id}/events", car).exchange().expectBody()
-                .jsonPath("$.length()").isEqualTo(1);
+                .jsonPath("$.length()").isEqualTo(2);
     }
 
     @Order(5)
