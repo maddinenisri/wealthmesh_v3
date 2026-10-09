@@ -140,7 +140,7 @@ public class HoldingPriceService {
                     .append(shares.compareTo(BigDecimal.ONE) == 0 ? " share stays" : " shares stay")
                     .append(" recorded; only their value becomes $0.00.");
         } else {
-            text.append(shape.symbol()).append(" will be priced at ")
+            text.append(shape.symbol()).append(" will be priced at $")
                     .append(OpeningComponents.priceText(shape.price()))
                     .append(" on ").append(shape.valueOn()).append('.');
         }
@@ -148,7 +148,7 @@ public class HoldingPriceService {
             text.append(" The Balance does not change: a later price already counts, or this is the same price.");
         }
         if (replaces != null) {
-            text.append(" It replaces the ").append(replaces.price()).append(" price for this date that ")
+            text.append(" It replaces the $").append(replaces.price()).append(" price for this date that ")
                     .append(replaces.enteredByName()).append(" recorded; that one stays in the history.");
         }
         return text.toString();
@@ -211,7 +211,7 @@ public class HoldingPriceService {
                             held = held.add(value(lines.get(i).quantity(), all.getT4().get(i).price()));
                         }
                     }
-                    String message = view.symbol() + " is priced at " + view.price() + " on " + view.valueOn() + ". "
+                    String message = view.symbol() + " is priced at $" + view.price() + " on " + view.valueOn() + ". "
                             + account.name() + "'s Balance is " + Money.dollars(new BigDecimal(
                                     account.balance().amount())) + " as of " + account.balance().asOf() + ".";
                     return new Saved(new PriceResult(view, shown(shares), Money.format(held),
@@ -286,12 +286,18 @@ public class HoldingPriceService {
                         throw EntryValidator.bad(shape.symbol() + " is not held in " + account.name());
                     }
                     LocalDate today = LocalDate.now(clock);
-                    OpeningComponents.valueDate(shape.valueOn(), account.openedOn(), today);
+                    if (shape.valueOn().isAfter(today)) {
+                        throw EntryValidator.bad("A price cannot be dated in the future.");
+                    }
+                    if (shape.valueOn().isBefore(account.openedOn())) {
+                        throw EntryValidator.bad("A price cannot be dated before tracking began on "
+                                + account.openedOn() + ".");
+                    }
                     LocalDate earliest = held.stream().map(OpeningComponents.Line::valueOn)
                             .min(LocalDate::compareTo).orElseThrow();
                     if (shape.valueOn().isBefore(earliest)) {
                         throw EntryValidator.bad(shape.symbol() + "'s opening price is dated " + earliest
-                                + "; record a price on or after it");
+                                + ". Record a price on or after that date.");
                     }
                     return lines;
                 })).flatMap(lines -> (locked ? validator.memberLocked(account, shape.memberId())

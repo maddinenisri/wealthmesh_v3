@@ -163,8 +163,12 @@ class HoldingPriceApiTests extends PriceTestBase {
     @DisplayName("V2_HOLDINGS_008 a price older than the one that counts changes no Balance, and the review says so")
     void olderPriceChangesNothing() {
         String account = redwood("Redwood Older", samId);
-        record(account, "o-1", "HOME", "130.00", "2026-09-30");
+        savePrice(account, "o-1", priceBody("HOME", "130.00", "2026-09-30", mayaId)).expectStatus().isCreated()
+                .expectBody().jsonPath("$.message").value(text -> assertThat(String.valueOf(text))
+                        .contains("HOME is priced at $130.00 on 2026-09-30."));
         reviewPrice(account, priceBody("HOME", "120.00", "2026-09-10", mayaId)).expectStatus().isOk().expectBody()
+                .jsonPath("$.message").value(text -> assertThat(String.valueOf(text))
+                        .contains("HOME will be priced at $120.00 on 2026-09-10."))
                 .jsonPath("$.changesBalance").isEqualTo(false).jsonPath("$.balanceBefore").isEqualTo("21500.00")
                 .jsonPath("$.balanceAfter").isEqualTo("21500.00").jsonPath("$.message")
                 .value(text -> assertThat(String.valueOf(text)).contains("The Balance does not change"));
@@ -182,7 +186,7 @@ class HoldingPriceApiTests extends PriceTestBase {
         reviewPrice(account, priceBody("HOME", "135.00", "2026-09-30", samId)).expectStatus().isOk().expectBody()
                 .jsonPath("$.replaces.price").isEqualTo("130.00").jsonPath("$.replaces.enteredByName")
                 .isEqualTo("Maya").jsonPath("$.message").value(text -> assertThat(String.valueOf(text))
-                        .contains("It replaces the 130.00 price").contains("Maya recorded"));
+                        .contains("It replaces the $130.00 price").contains("Maya recorded"));
     }
 
     private static Stream<Arguments> badRequests() {
@@ -195,11 +199,11 @@ class HoldingPriceApiTests extends PriceTestBase {
                         "NOPE is not held in"),
                 Arguments.of("a blank symbol", " ", "10.00", "2026-09-30", true, "Choose the holding"),
                 Arguments.of("a future date", "HOME", "10.00", "2026-10-04", true,
-                        "Future values are not completed account history"),
+                        "A price cannot be dated in the future."),
                 Arguments.of("a date before tracking began", "HOME", "10.00", "2026-08-31", true,
-                        "Review the earlier tracking start before saving. The Setup date is 2026-09-01."),
+                        "A price cannot be dated before tracking began on 2026-09-01."),
                 Arguments.of("a date before the opening price date", "HOME", "10.00", "2026-09-10", true,
-                        "HOME's opening price is dated 2026-09-20; record a price on or after it"),
+                        "HOME's opening price is dated 2026-09-20. Record a price on or after that date."),
                 Arguments.of("no date", "HOME", "10.00", null, true, "Enter the price date"),
                 Arguments.of("no member", "HOME", "10.00", "2026-09-30", false, "Choose who entered this"));
     }
