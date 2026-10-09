@@ -199,7 +199,9 @@ for (const width of [710, 1280]) {
         const group = page.getByRole('region', { name: 'Investments', exact: true })
         const item = group.getByRole('listitem').filter({ hasText: name })
         await expect(item).toContainText(type.money)
-        await expect(item).toContainText('Balance dated 2026-09-01')
+        // One date phrase (19b): the date the prices were last updated, never a second "Value dated".
+        await expect(item).toContainText('Prices last updated 2026-09-01')
+        await expect(item).not.toContainText('Value dated')
         const after = await financialAssets(page)
         expect(Number(after) - Number(before)).toBe(Number(type.total))
 

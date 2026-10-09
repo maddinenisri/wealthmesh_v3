@@ -77,7 +77,9 @@ describe('older prices on the Household page (WEALTH_004)', () => {
       '$25,120.00',
     )
     expect(within(card).getByText(/Financial assets/)).toHaveTextContent('$25,120.00')
-    const investments = within(card).getByRole('region', { name: 'Investments on this date' })
+    const investments = within(card).getByRole('region', {
+      name: 'Investment balances on this date',
+    })
     expect(investments).toHaveTextContent('Redwood Brokerage')
     expect(investments).toHaveTextContent('$20,000.00')
     expect(investments).toHaveTextContent('Prices last updated 2026-09-01')
@@ -97,7 +99,9 @@ describe('older prices on the Household page (WEALTH_004)', () => {
     expect(await within(card).findByText(/Household wealth on 2026-09-30/)).toHaveTextContent(
       '$26,620.00',
     )
-    const investments = within(card).getByRole('region', { name: 'Investments on this date' })
+    const investments = within(card).getByRole('region', {
+      name: 'Investment balances on this date',
+    })
     expect(investments).toHaveTextContent('$21,500.00')
     expect(investments).toHaveTextContent('Prices last updated 2026-09-30')
     expect(card).not.toHaveTextContent('come from different dates')

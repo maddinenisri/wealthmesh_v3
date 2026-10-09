@@ -64,7 +64,7 @@ export function WealthOverTime({ person }: { person?: string }) {
           </p>
           <OlderPricesNote wealth={wealth.data} />
           {wealth.data.investments.accounts.length > 0 && (
-            <section aria-label="Investments on this date">
+            <section aria-label="Investment balances on this date">
               <h3 className="font-medium">Investments</h3>
               <ul className="mt-2 divide-y divide-line border-y border-line">
                 {wealth.data.investments.accounts.map((line) => (
