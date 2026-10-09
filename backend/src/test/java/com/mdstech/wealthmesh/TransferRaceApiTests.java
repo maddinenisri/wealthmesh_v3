@@ -27,7 +27,7 @@ import reactor.core.publisher.Mono;
 class TransferRaceApiTests extends TransferTestBase {
 
     private static final String DATE = "2026-09-10";
-    private static int n;
+    private static final java.util.concurrent.atomic.AtomicInteger N = new java.util.concurrent.atomic.AtomicInteger();
 
     @Order(0)
     @Test
@@ -421,7 +421,7 @@ class TransferRaceApiTests extends TransferTestBase {
     // ---- helpers ----
 
     private String key() {
-        return "k-race-" + (++n);
+        return "k-race-" + N.incrementAndGet();
     }
 
     /** Runs the call while a second connection holds the account's row lock; returns its status after release. */

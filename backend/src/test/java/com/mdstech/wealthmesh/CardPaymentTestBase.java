@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -17,10 +19,25 @@ import io.r2dbc.spi.Connection;
 /** Helpers for card payment tests (slice 08 group C): a payment is a transfer-shaped pair, bank to card. */
 abstract class CardPaymentTestBase extends TransferTestBase {
 
-    private static int paymentKeys;
+    private static final AtomicInteger PAYMENT_KEYS = new AtomicInteger();
 
+    /** Bodies of the last `both` call's responses that were not 2xx, in finish order, for a failure message. */
+    protected final List<String> refusals = new CopyOnWriteArrayList<>();
+
+    /** One key per call, even when two threads ask at once (a plain counter handed both the same key: 19c group 0). */
     protected String key() {
-        return "k-card-" + (++paymentKeys);
+        return "k-card-" + PAYMENT_KEYS.incrementAndGet();
+    }
+
+    /** The status of a response; the body of a refusal is kept in `refusals` so a failure can say why. */
+    private int outcome(WebTestClient.ResponseSpec spec) {
+        org.springframework.test.web.reactive.server.EntityExchangeResult<String> result = spec
+                .expectBody(String.class).returnResult();
+        int status = result.getStatus().value();
+        if (status >= 300) {
+            refusals.add(status + " " + result.getResponseBody());
+        }
+        return status;
     }
 
     protected WebTestClient.ResponseSpec postPayment(String key, String bank, String card, String amount,
@@ -84,11 +101,12 @@ abstract class CardPaymentTestBase extends TransferTestBase {
     /** Starts two requests while the account's lock is held, releases it, and returns both statuses. */
     protected List<Integer> both(String lockedAccount, Supplier<WebTestClient.ResponseSpec> first,
             Supplier<WebTestClient.ResponseSpec> second) throws Exception {
+        refusals.clear();
         Connection other = holdLock(lockedAccount);
         List<CompletableFuture<Integer>> calls = new ArrayList<>();
         try {
-            calls.add(async(() -> statusOf(first.get())));
-            calls.add(async(() -> statusOf(second.get())));
+            calls.add(async(() -> outcome(first.get())));
+            calls.add(async(() -> outcome(second.get())));
             Thread.sleep(700);
             calls.forEach(call -> assertThat(call).as("both wait for the lock").isNotDone());
             commit(other);

@@ -86,7 +86,7 @@ class LoanCorrectionRaceApiTests extends DebtTestBase {
         assertActivityCount(own, 1);
         List<Integer> two = both(own, () -> correctOn(own, key(), "800.00", "2026-09-11", "Second"),
                 () -> correctOn(own, key(), "700.00", "2026-09-12", "Third"));
-        assertThat(two).containsExactlyInAnyOrder(201, 201);
+        assertThat(two).as("refusals: %s", refusals).containsExactlyInAnyOrder(201, 201);
         assertActivityCount(own, 3);
         // Each difference is read under the lock, against the Balance on its own date, so the order decides the end.
         assertThat(balanceOf(own)).isIn("-700.00", "-600.00");
@@ -100,7 +100,7 @@ class LoanCorrectionRaceApiTests extends DebtTestBase {
         String own = loan("Chain Loan", "1000.00", "2026-09-01");
         List<Integer> two = both(own, () -> correctInitial(own, key(), "900.00", "First"),
                 () -> correctInitial(own, key(), "800.00", "Second"));
-        assertThat(two).containsExactlyInAnyOrder(201, 201);
+        assertThat(two).as("refusals: %s", refusals).containsExactlyInAnyOrder(201, 201);
         List<String> previous = new java.util.ArrayList<>();
         List<String> set = new java.util.ArrayList<>();
         webTestClient.get().uri("/api/v1/accounts/{id}/starting-balance-corrections", own).exchange().expectBody()
