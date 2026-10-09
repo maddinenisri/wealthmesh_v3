@@ -499,3 +499,24 @@ Deviation: no e2e for this fault. A joint 401(k) cannot be created through the A
 - Proof: backend 854 × 3, Vitest 470 × 3 after the last change (8 earlier), e2e 338 before the wording fix, lint and typecheck clean.
 - Logged, not built: 13px radios and 32px status buttons (app-wide); a mortgage or house reads "joint account"; the View select truncates a long name; "Maya, Sam" against "Maya and Sam"; Finish setup on a legacy joint draft refuses without naming Edit; the member filter accepts an inactive member; `ValuedAccount` and `Activity` reviews sit outside the one-review guard; no e2e seed path for a pre-rule joint row.
 - Dev data: "VR18c" and "CW" accounts remain.
+
+## How it works (18c)
+
+Written after the build by a read-only agent and checked against the code (diff `b602ea5..HEAD`, D-068, D-069).
+
+**The one-owner rule**
+- `AccountType.singleOwner` is true for the 401(k), Traditional IRA, Roth IRA, HSA and defined benefit, not the brokerage. "Maya and Sam" is not offered for the four; both members can still view the account. `singleOwnerMessage()` names the type.
+- A row that was joint before the rule stays joint, shows, counts once and is editable for other fields: `checkOwners` takes an `enforceSingle` flag, off when the plain Edit sends owners unchanged. Its owner correction must name one member.
+
+**The owner correction**
+- A page, `/accounts/:id/owner` (`OwnerCorrection.tsx`). `POST /accounts/{id}/owner-correction/review` writes nothing; the review and the save both call `planOwners`, so a refusal in the save is also made in the review.
+- Refusals: same owner ("Choose a different owner" / "participant"), several owners for a one-owner type, a draft (409, Finish setup), a type without its own history (use Edit account).
+- `correctOwners` takes `activity.lockAccount` first, reloads, takes the entering member `FOR SHARE`, replaces the owners and adds one `owner_changed` event ("Sam → Maya", V32). Cash, holdings and Balance are untouched.
+- Plain Edit on a `recordsCreator()` type refuses an owner change ("Use Change owner…", `checkEditOwners`). Other types keep the plain Edit and also record `owner_changed`. A draft takes its owner in the plain Edit.
+- Confirm ends on a sentence (`ownerSentence`); a refusal takes focus; Back returns to the first choice; Cancel returns with `state={{returned: true}}`. Finish setup / Cancel draft close the status card's review (`closeWhen`).
+
+**The per-person view**
+- `GET /wealth?memberId=` filters the lines with an `EXISTS` on `account_owner` (`WealthStore.ownedBy`); an unknown member gets 400. Figures are summed from that view's lines. A joint account is in each owner's view in full and once in the household; people's totals are never added. `/wealth/change` stays household-wide and says so.
+- Household page: View select kept in `?view=`, "Accounts in this view" (`viewAccounts`), `viewSentence` with the joint sentence, only that person's drafts under Finish setup.
+
+**Tests:** `OwnerCorrectionApiTests`, `PersonViewApiTests`, `OwnerCorrection.test.tsx`, `PersonView.test.tsx`, `TwoReviews.test.tsx`, `e2e/tests/25-owner-person.spec.ts`; older tests moved because `singleOwner` is on (table above).
