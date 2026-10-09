@@ -261,8 +261,8 @@ export function AccountSetupForm({ members, today }: { members: Member[]; today:
           details={
             <>
               {values.institution.trim() !== '' && `Institution: ${values.institution.trim()}. `}
-              Owners: {owners(values.ownerMemberIds)}.
-              {member && ` Set up by: ${memberLabel(member)}.`}
+              {ownerLabelFor(typeTraits(values.type), values.ownerMemberIds.length)}:{' '}
+              {owners(values.ownerMemberIds)}.{member && ` Set up by: ${memberLabel(member)}.`}
             </>
           }
           error={create.error?.message}

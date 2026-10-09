@@ -12,6 +12,7 @@ import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
 import { StatementsCard } from '../statements/StatementsCard'
 import { FinishSetup } from './FinishSetup'
+import { HoldingsCard } from './HoldingsCard'
 import { HoldingTable } from './OpeningReview'
 
 const dollars = (text: string) => formatMoney(Number(text))
@@ -124,7 +125,7 @@ export function InvestmentAccount({
           ref={statusRef}
           role="status"
           tabIndex={-1}
-          className="max-w-xl rounded-control border border-line p-3 text-sm outline-none"
+          className="max-w-2xl rounded-control border border-line p-3 text-sm outline-none"
         >
           {message}
         </p>
@@ -211,6 +212,7 @@ export function InvestmentAccount({
           )}
         </Card>
       )}
+      {!draft && <HoldingsCard account={account} />}
       <OpeningCard account={account} />
       {!draft && (
         <StatementsCard

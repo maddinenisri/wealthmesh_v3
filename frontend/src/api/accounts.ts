@@ -37,6 +37,8 @@ export type HoldingInput = {
   price: string
   /** The date of the price; null means the setup date. */
   valueOn: string | null
+  /** The purchase cost of these shares; null or left out is "not available", which is not zero. */
+  cost?: string | null
 }
 
 /** Cash and holdings as typed. A null cash is "not answered" (a draft when anything else was entered). */

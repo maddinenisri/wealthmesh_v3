@@ -2,7 +2,14 @@ import type { HoldingInput, OpeningInput } from '../../api/accounts'
 import { parseAmount } from '../../lib/money'
 
 /** One holding line as typed in the form. */
-export type HoldingValues = { symbol: string; quantity: string; price: string; valueOn: string }
+export type HoldingValues = {
+  symbol: string
+  quantity: string
+  price: string
+  valueOn: string
+  /** The purchase cost of these shares; blank means the cost is not known. */
+  cost: string
+}
 
 /** The opening components as typed: a blank cash is "not answered", and a blank total is "no total typed". */
 export type OpeningValues = { total: string; cash: string; holdings: HoldingValues[] }
@@ -12,6 +19,7 @@ export const blankHolding = (valueOn: string): HoldingValues => ({
   quantity: '',
   price: '',
   valueOn,
+  cost: '',
 })
 
 /** The most an opening amount can be (the server refuses more than this, to the cent). */
@@ -38,6 +46,7 @@ export function toOpening(values: OpeningValues, setupOn: string): OpeningInput 
       quantity: holding.quantity.trim(),
       price: cleanPrice(holding.price),
       valueOn: holding.valueOn.trim() === '' ? setupOn : holding.valueOn,
+      cost: holding.cost.trim() === '' ? null : parseAmount(holding.cost),
     })),
   }
 }
@@ -78,6 +87,7 @@ export function holdingRules(setupOn: () => string, today: string, index: number
         return !(shares * Number(text) > LARGEST) || 'That amount is too large to record'
       },
     },
+    cost: amountRules('Purchase cost must be zero or greater'),
     valueOn: {
       validate: (value: string) => {
         if (value.trim() === '') return true

@@ -437,6 +437,11 @@ function AccountGroup({
               </span>
               <span className="text-right">
                 <BalanceFigure type={account.type} amount={account.balance.amount} />
+                {typeTraits(account.type).kind === 'investment' && (
+                  <span className="block text-sm text-ink-muted">
+                    Balance dated <span className="whitespace-nowrap">{account.balance.asOf}</span>
+                  </span>
+                )}
                 {lines?.find((line) => line.accountId === account.id)?.valueDate && (
                   <span className="block text-sm text-ink-muted">
                     {account.type === 'defined_benefit' ? 'As of' : 'Value dated'}{' '}

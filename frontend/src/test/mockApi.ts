@@ -14,6 +14,7 @@ import {
   stateOf,
   viewBody,
   type MockOpening,
+  holdingsBody,
 } from './mockInvestments'
 
 type MockHousehold = { id: string; name: string }
@@ -2302,6 +2303,18 @@ export function mockApi(
       if (!opening) return problem(404, 'This account has no opening cash and holdings')
       const linked = state.statements.find((s) => s.id === opening.statementId)
       return HttpResponse.json(viewBody(opening, !!linked?.removedAt))
+    }),
+    http.get('*/api/v1/accounts/:id/holdings', ({ request, params }) => {
+      log(request)
+      const account = state.accounts.find((a) => a.id === params.id)
+      if (!account) return problem(404, `Account not found: ${String(params.id)}`)
+      if (account.status === 'draft')
+        return problem(409, `${account.name} is a draft with no Balance yet. Finish setup first.`)
+      const opening = state.openings.get(account.id)
+      if (!opening) return problem(404, `${account.name} has no cash and holdings`)
+      return HttpResponse.json(
+        holdingsBody(opening, currentBalance(account).toFixed(2), account.openedOn),
+      )
     }),
     http.put('*/api/v1/accounts/:id/opening', async ({ request, params }) => {
       log(request)

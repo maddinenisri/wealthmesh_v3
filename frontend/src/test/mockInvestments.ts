@@ -1,5 +1,11 @@
 /** The opening components of an investment account, as the mock server keeps them (slice 17), mirroring `OpeningComponents`. */
-export type MockHolding = { symbol: string; quantity: string; price: string; valueOn: string }
+export type MockHolding = {
+  symbol: string
+  quantity: string
+  price: string
+  valueOn: string
+  cost?: string | null
+}
 
 export type MockOpening = {
   total: string | null
@@ -61,7 +67,15 @@ export function judgeOpening(
       return {
         error: `Review the earlier tracking start before saving. The Setup date is ${setupOn}.`,
       }
-    holdings.push({ symbol, quantity: String(Number(quantity)), price: priceText(price), valueOn })
+    const cost = amount(line.cost, 'Purchase cost must be zero or greater')
+    if (cost !== null && typeof cost === 'object') return cost
+    holdings.push({
+      symbol,
+      quantity: String(Number(quantity)),
+      price: priceText(price),
+      valueOn,
+      cost,
+    })
   }
   const blank = total === null && cash === null && holdings.length === 0
   return {
@@ -95,7 +109,12 @@ export const mismatchMessage = (opening: MockOpening) =>
   )}. Correct the components or the opening total; no difference becomes cash.`
 
 const linesOf = (opening: MockOpening) =>
-  opening.holdings.map((line) => ({ ...line, value: two(holdingValue(line)) }))
+  opening.holdings.map((line) => ({
+    ...line,
+    value: two(holdingValue(line)),
+    cost: line.cost ?? null,
+    gain: line.cost == null ? null : two(holdingValue(line) - Number(line.cost)),
+  }))
 
 export function previewBody(opening: MockOpening) {
   const state = stateOf(opening)
@@ -131,5 +150,49 @@ export function viewBody(opening: MockOpening, statementRemoved: boolean) {
     holdings: linesOf(opening),
     statementId: opening.statementId,
     statementRemoved,
+  }
+}
+
+const percent = (known: number, shares: number) => `${((known * 100) / shares).toFixed(2)}%`
+
+/** The holdings read of a completed account, mirroring `Holdings.view`: lines of one symbol are added together. */
+export function holdingsBody(opening: MockOpening, balance: string, balanceOn: string) {
+  const bySymbol = new Map<string, MockHolding[]>()
+  for (const line of opening.holdings)
+    bySymbol.set(line.symbol, [...(bySymbol.get(line.symbol) ?? []), line])
+  const securities = [...bySymbol.entries()].map(([symbol, lines]) => {
+    const shares = lines.reduce((sum, l) => sum + Number(l.quantity), 0)
+    const value = cents(lines.reduce((sum, l) => sum + holdingValue(l), 0))
+    const known = lines.filter((l) => l.cost != null)
+    const knownShares = known.reduce((sum, l) => sum + Number(l.quantity), 0)
+    const knownValue = cents(known.reduce((sum, l) => sum + holdingValue(l), 0))
+    const knownCost = cents(known.reduce((sum, l) => sum + Number(l.cost), 0))
+    const all = known.length === lines.length
+    const prices = new Set(lines.map((l) => l.price))
+    return {
+      symbol,
+      shares: String(shares),
+      price: prices.size === 1 ? lines[0].price : null,
+      priceOn: lines.map((l) => l.valueOn).sort()[lines.length - 1],
+      value: two(value),
+      knownShares: String(knownShares),
+      knownValue: known.length ? two(knownValue) : null,
+      knownCost: known.length ? two(knownCost) : null,
+      knownGain: known.length ? two(knownValue - knownCost) : null,
+      coverage: percent(knownShares, shares),
+      cost: all ? two(knownCost) : null,
+      gain: all ? two(value - knownCost) : null,
+    }
+  })
+  const full = securities.length > 0 && securities.every((s) => s.cost !== null)
+  const cost = full ? cents(securities.reduce((sum, s) => sum + Number(s.cost), 0)) : null
+  return {
+    cash: opening.cash ?? '0.00',
+    holdingsValue: two(holdingsValue(opening)),
+    balance,
+    balanceOn,
+    securities,
+    cost: cost === null ? null : two(cost),
+    gain: cost === null ? null : two(holdingsValue(opening) - cost),
   }
 }

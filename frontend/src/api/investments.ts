@@ -22,6 +22,10 @@ export type HoldingLine = {
   price: string
   value: string
   valueOn: string
+  /** The purchase cost of this line's shares, or null when it is not known. */
+  cost: string | null
+  /** Value minus cost, or null while the cost is not known. */
+  gain: string | null
 }
 
 /**
@@ -52,6 +56,66 @@ export type OpeningView = {
   statementRemoved: boolean
 }
 
+/**
+ * One security in an account, its lines added together. `cost` and `gain` are null unless every share has a known
+ * cost; the `known*` figures are for the shares whose cost is known. `price` is null when its lines differ.
+ */
+export type Security = {
+  symbol: string
+  shares: string
+  price: string | null
+  priceOn: string
+  value: string
+  knownShares: string
+  knownValue: string | null
+  knownCost: string | null
+  knownGain: string | null
+  coverage: string
+  cost: string | null
+  gain: string | null
+}
+
+/** The holdings of an investment account with the one Balance and what is known of cost. */
+export type Holdings = {
+  cash: string
+  holdingsValue: string
+  balance: string
+  balanceOn: string
+  securities: Security[]
+  cost: string | null
+  gain: string | null
+}
+
+function parseHoldings(value: unknown): Holdings {
+  const data = record(value)
+  if (!Array.isArray(data.securities)) throw bad()
+  return {
+    cash: str(data.cash),
+    holdingsValue: str(data.holdingsValue),
+    balance: str(data.balance),
+    balanceOn: str(data.balanceOn),
+    securities: data.securities.map((item) => {
+      const s = record(item)
+      return {
+        symbol: str(s.symbol),
+        shares: str(s.shares),
+        price: strOrNull(s.price),
+        priceOn: str(s.priceOn),
+        value: str(s.value),
+        knownShares: str(s.knownShares),
+        knownValue: strOrNull(s.knownValue),
+        knownCost: strOrNull(s.knownCost),
+        knownGain: strOrNull(s.knownGain),
+        coverage: str(s.coverage),
+        cost: strOrNull(s.cost),
+        gain: strOrNull(s.gain),
+      }
+    }),
+    cost: strOrNull(data.cost),
+    gain: strOrNull(data.gain),
+  }
+}
+
 function parseLines(value: unknown): HoldingLine[] {
   if (!Array.isArray(value)) throw bad()
   return value.map((item) => {
@@ -62,6 +126,8 @@ function parseLines(value: unknown): HoldingLine[] {
       price: str(data.price),
       value: str(data.value),
       valueOn: str(data.valueOn),
+      cost: strOrNull(data.cost),
+      gain: strOrNull(data.gain),
     }
   })
 }
@@ -117,6 +183,10 @@ export const previewOpening = (account: NewAccount, accountId?: string) =>
 
 export const getOpening = (accountId: string) =>
   request(`/accounts/${accountId}/opening`, { parse: parseView })
+
+/** The holdings of a completed investment account (a draft has none: Finish setup first). */
+export const getHoldings = (accountId: string) =>
+  request(`/accounts/${accountId}/holdings`, { parse: parseHoldings })
 
 /** Finish setup of a draft: the components again; the account becomes active when they are complete. */
 export const finishSetup = (accountId: string, opening: NewAccount['opening'], memberId: string) =>

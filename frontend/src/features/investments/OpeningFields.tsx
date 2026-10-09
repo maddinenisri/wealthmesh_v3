@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react'
 import { useFieldArray, type Control, type UseFormSetFocus } from 'react-hook-form'
 import { Button, TextField } from '../../design-system'
 import {
@@ -30,6 +31,16 @@ export function OpeningFields({
   finishing?: boolean
 }) {
   const { fields, append, remove } = useFieldArray({ control, name: 'holdings' })
+  // Focus moves in an effect, after React has committed the change: a frame callback could run late and take focus
+  // from a field the person has since moved to (slice 19a: a cost typed into the symbol field).
+  const focusAfter = useRef<'last' | number | 'add' | null>(null)
+  useLayoutEffect(() => {
+    const target = focusAfter.current
+    focusAfter.current = null
+    if (target === 'last') setFocus(`holdings.${fields.length - 1}.symbol`)
+    else if (target === 'add') document.getElementById('add-holding')?.focus()
+    else if (typeof target === 'number') setFocus(`holdings.${target}.symbol`)
+  }, [fields.length, setFocus])
 
   return (
     <>
@@ -97,6 +108,15 @@ export function OpeningFields({
               />
               <TextField
                 control={control}
+                name={`holdings.${index}.cost`}
+                label={`Holding ${n} purchase cost`}
+                inputMode="decimal"
+                placeholder="Unknown"
+                hint="Optional. The cost of these shares. Leave blank if it is not known."
+                rules={rules.cost}
+              />
+              <TextField
+                control={control}
                 name={`holdings.${index}.valueOn`}
                 label={`Holding ${n} value date`}
                 type="date"
@@ -107,14 +127,11 @@ export function OpeningFields({
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    remove(index)
                     // The button is gone: focus goes to the holding that took its place, or the one before, or
                     // the button that adds one when none is left.
-                    requestAnimationFrame(() => {
-                      const next = Math.min(index, fields.length - 2)
-                      if (next >= 0) setFocus(`holdings.${next}.symbol`)
-                      else document.getElementById('add-holding')?.focus()
-                    })
+                    const next = Math.min(index, fields.length - 2)
+                    focusAfter.current = next >= 0 ? next : 'add'
+                    remove(index)
                   }}
                 >
                   Remove holding {n}
@@ -130,8 +147,9 @@ export function OpeningFields({
             size="sm"
             disabled={fields.length >= MAX_HOLDINGS}
             onClick={() => {
-              append(blankHolding(setupOn()))
-              requestAnimationFrame(() => setFocus(`holdings.${fields.length}.symbol`))
+              focusAfter.current = 'last'
+              // The effect above owns focus; the field array would also focus the new item, a second time.
+              append(blankHolding(setupOn()), { shouldFocus: false })
             }}
           >
             Add a holding

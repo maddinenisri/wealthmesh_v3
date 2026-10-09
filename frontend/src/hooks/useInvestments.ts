@@ -1,10 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { NewAccount } from '../api/accounts'
-import { discardDraft, finishSetup, getOpening, previewOpening } from '../api/investments'
+import {
+  discardDraft,
+  finishSetup,
+  getHoldings,
+  getOpening,
+  previewOpening,
+} from '../api/investments'
 import { accountsKey } from './useAccounts'
 import { wealthKey } from './useWealth'
 
 export const openingKey = (accountId: string) => ['opening', accountId] as const
+export const holdingsKey = (accountId: string) => ['holdings', accountId] as const
 
 /** The review of an opening: the same checks as the save, writing nothing. */
 export function usePreviewOpening() {
@@ -19,6 +26,15 @@ export function useOpening(accountId: string) {
   return useQuery({ queryKey: openingKey(accountId), queryFn: () => getOpening(accountId) })
 }
 
+/** The holdings of a completed investment account: shares, value, cost and gain, "not available" when unknown. */
+export function useHoldings(accountId: string, enabled = true) {
+  return useQuery({
+    queryKey: holdingsKey(accountId),
+    queryFn: () => getHoldings(accountId),
+    enabled,
+  })
+}
+
 /** Finish setup: the account (and wealth, once it is complete) and its opening all refresh. */
 export function useFinishSetup(accountId: string, memberId: string) {
   const queryClient = useQueryClient()
@@ -29,6 +45,7 @@ export function useFinishSetup(accountId: string, memberId: string) {
         queryClient.invalidateQueries({ queryKey: accountsKey }),
         queryClient.invalidateQueries({ queryKey: wealthKey }),
         queryClient.invalidateQueries({ queryKey: openingKey(accountId) }),
+        queryClient.invalidateQueries({ queryKey: holdingsKey(accountId) }),
       ]),
   })
 }

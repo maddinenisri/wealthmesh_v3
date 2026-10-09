@@ -23,6 +23,7 @@ function valuesOf(opening: OpeningView): OpeningValues {
       quantity: line.quantity,
       price: line.price,
       valueOn: line.valueOn,
+      cost: line.cost ?? '',
     })),
   }
 }

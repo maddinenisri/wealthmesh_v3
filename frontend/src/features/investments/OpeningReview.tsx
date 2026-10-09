@@ -18,16 +18,24 @@ export function HoldingTable({ lines }: { lines: OpeningPreview['holdings'] }) {
             <th className="pr-3 text-right font-normal">Quantity</th>
             <th className="pr-3 text-right font-normal">Market price</th>
             <th className="pr-3 text-right font-normal">Value</th>
+            <th className="pr-3 text-right font-normal">Purchase cost</th>
+            <th className="pr-3 text-right font-normal">Gain</th>
             <th className="font-normal">Price date</th>
           </tr>
         </thead>
         <tbody>
           {lines.map((line, index) => (
             <tr key={`${line.symbol}-${index}`}>
-              <td className="pr-3">{line.symbol}</td>
+              <td className="min-w-28 break-words pr-3">{line.symbol}</td>
               <td className="pr-3 text-right normal-nums">{line.quantity}</td>
               <td className="pr-3 text-right normal-nums">{dollars(line.price)}</td>
               <td className="pr-3 text-right normal-nums">{dollars(line.value)}</td>
+              <td className="whitespace-nowrap pr-3 text-right normal-nums">
+                {line.cost === null ? 'Not available' : dollars(line.cost)}
+              </td>
+              <td className="whitespace-nowrap pr-3 text-right normal-nums">
+                {line.gain === null ? 'Not available' : dollars(line.gain)}
+              </td>
               <td className="whitespace-nowrap">{line.valueOn}</td>
             </tr>
           ))}
@@ -73,7 +81,7 @@ export function OpeningReview({
   const mismatch = preview.state === 'mismatch'
   const draft = preview.state === 'draft'
   return (
-    <section aria-labelledby="setup-review-heading" className="flex max-w-xl flex-col gap-3">
+    <section aria-labelledby="setup-review-heading" className="flex max-w-2xl flex-col gap-3">
       <h2 id="setup-review-heading" tabIndex={-1} className="text-lg font-semibold outline-none">
         {heading}
       </h2>

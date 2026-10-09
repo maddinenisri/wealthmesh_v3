@@ -676,7 +676,12 @@ describe('a supporting statement and the opening', () => {
     expect(screen.getByText(/Removed by Maya/)).toBeVisible()
     // A removed statement no longer supports anything (Cowork fault 5).
     expect(screen.queryByText(/supports the opening/)).not.toBeInTheDocument()
-    expect(screen.getByText('$15,000.00', { selector: 'dd' })).toBeVisible()
+    // The Holdings card shows the cash too (slice 19a), so the opening breakdown is read inside its own card.
+    expect(
+      within(screen.getByRole('region', { name: 'Opening' })).getByText('$15,000.00', {
+        selector: 'dd',
+      }),
+    ).toBeVisible()
     expect(screen.getByRole('cell', { name: 'HOME' })).toBeVisible()
     expect(api.accounts[0].balance.amount).toBe('20000.00')
   })
