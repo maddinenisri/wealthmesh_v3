@@ -13,7 +13,7 @@ Check a session with `npm run coverage -- --require --slice NN`; a file is compl
 ## Where we are (2026-10-07)
 
 - **Done:** slices 00a to 16b (Milestones A and B complete, property and other assets with dated values, loans and mortgages with payments, corrections and plans). `npm run coverage`: 133 of 262 scenarios covered, 3 deferred, 126 missing. 
-- **Next:** slice 19b (prices), then 19c, 19d, then 20 to 25 (investments, Milestone D).
+- **Next:** slice 19c, then 19d, then 20 to 25 (investments, Milestone D).
 - **Tests on `main`:** frontend 343, e2e 257, backend suite green on the final code (run it with the dev stack stopped, pitfall 35).
 - **Open for the owner:** reviews of a property still say "Balance now/after" (decisions use Balance across the app); Q-004 (TypeScript 7, msw 3, Gradle 9.8) deferred; a process review is scheduled for the start of Milestone D (the Cowork fault count has been 8, 8, 5, 5, 5, 7, 9, 9, and slice 15 added a `visual-reviewer` screenshot step to lower it).
 - **Open in the code:** the removable "Value when tracking began" row; slice 14's untested inventory cells and the shorter-batch retry; three unexplained backend flakes (`scripts/flake-check.sh`, pitfall 33).
