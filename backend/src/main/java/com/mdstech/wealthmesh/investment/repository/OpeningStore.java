@@ -51,13 +51,15 @@ public class OpeningStore {
             for (int i = 0; i < lines.size(); i++) {
                 OpeningComponents.Line line = lines.get(i);
                 int position = i;
-                chain = chain.then(client.sql("""
+                DatabaseClient.GenericExecuteSpec insert = client.sql("""
                                 INSERT INTO account_opening_holding
-                                    (account_id, position, symbol, quantity, price, value_on)
-                                VALUES (:id, :position, :symbol, :quantity, :price, :on)""")
+                                    (account_id, position, symbol, quantity, price, value_on, cost)
+                                VALUES (:id, :position, :symbol, :quantity, :price, :on, :cost)""")
                         .bind("id", accountId).bind("position", position).bind("symbol", line.symbol())
-                        .bind("quantity", line.quantity()).bind("price", line.price()).bind("on", line.valueOn())
-                        .then());
+                        .bind("quantity", line.quantity()).bind("price", line.price()).bind("on", line.valueOn());
+                insert = line.cost() == null ? insert.bindNull("cost", BigDecimal.class)
+                        : insert.bind("cost", line.cost());
+                chain = chain.then(insert.then());
             }
             return chain;
         });
@@ -77,12 +79,12 @@ public class OpeningStore {
                         row.get("statement_id", UUID.class), row.get("statement_removed", Boolean.class) })
                 .one()
                 .flatMap(head -> client.sql("""
-                                SELECT symbol, quantity, price, value_on FROM account_opening_holding
+                                SELECT symbol, quantity, price, value_on, cost FROM account_opening_holding
                                 WHERE account_id = :id ORDER BY position""")
                         .bind("id", accountId)
                         .map((row, meta) -> new OpeningComponents.Line(row.get("symbol", String.class),
                                 row.get("quantity", BigDecimal.class), row.get("price", BigDecimal.class),
-                                row.get("value_on", LocalDate.class)))
+                                row.get("value_on", LocalDate.class), row.get("cost", BigDecimal.class)))
                         .all().collectList().map(lines -> new Stored(
                                 new OpeningComponents((BigDecimal) head[0], (BigDecimal) head[1],
                                         new ArrayList<>(lines), (Boolean) head[2]),

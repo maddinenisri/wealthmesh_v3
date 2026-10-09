@@ -23,11 +23,23 @@ import com.mdstech.wealthmesh.money.Money;
  */
 public record OpeningComponents(BigDecimal total, BigDecimal cash, List<Line> lines, boolean blank) {
 
-    /** One parsed holding line; `value` is quantity x price rounded to the cent. */
-    public record Line(String symbol, BigDecimal quantity, BigDecimal price, LocalDate valueOn) {
+    /**
+     * One parsed holding line; `value` is quantity x price rounded to the cent. `cost` is the purchase cost of the
+     * line's shares, or null when it is not known (never zero for unknown; a known zero is a real cost).
+     */
+    public record Line(String symbol, BigDecimal quantity, BigDecimal price, LocalDate valueOn, BigDecimal cost) {
+
+        public Line(String symbol, BigDecimal quantity, BigDecimal price, LocalDate valueOn) {
+            this(symbol, quantity, price, valueOn, null);
+        }
 
         public BigDecimal value() {
             return quantity.multiply(price).setScale(2, RoundingMode.HALF_UP);
+        }
+
+        /** Value minus cost, or null while the cost is not known. */
+        public BigDecimal gain() {
+            return cost == null ? null : value().subtract(cost);
         }
     }
 
@@ -96,8 +108,9 @@ public record OpeningComponents(BigDecimal total, BigDecimal cash, List<Line> li
             throw bad("A holding's name or symbol must be 120 characters or fewer");
         }
         Line line = new Line(symbol, quantity(holding.quantity()), price(holding.price()),
-                valueDate(holding.valueOn(), setupOn, today));
-        if (line.value().compareTo(LARGEST) > 0) {
+                valueDate(holding.valueOn(), setupOn, today),
+                amount(holding.cost(), "Purchase cost must be zero or greater"));
+        if (line.value().compareTo(LARGEST) > 0 || line.cost() != null && line.cost().compareTo(LARGEST) > 0) {
             throw bad("That amount is too large to record");
         }
         return line;
@@ -185,8 +198,9 @@ public record OpeningComponents(BigDecimal total, BigDecimal cash, List<Line> li
 
     public static HoldingLine shown(Line line) {
         return new HoldingLine(line.symbol(), line.quantity().stripTrailingZeros().toPlainString(),
-                priceText(line.price()),
-                Money.format(line.value()), line.valueOn());
+                priceText(line.price()), Money.format(line.value()), line.valueOn(),
+                line.cost() == null ? null : Money.format(line.cost()),
+                line.gain() == null ? null : Money.format(line.gain()));
     }
 
     /** A price keeps at least two decimals and at most four: "100.00", "12.3456". */

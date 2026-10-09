@@ -26,6 +26,7 @@ import com.mdstech.wealthmesh.household.domain.Household;
 import com.mdstech.wealthmesh.household.repository.HouseholdRepository;
 import com.mdstech.wealthmesh.investment.dto.FinishRequest;
 import com.mdstech.wealthmesh.investment.dto.HoldingLine;
+import com.mdstech.wealthmesh.investment.dto.HoldingsView;
 import com.mdstech.wealthmesh.investment.dto.OpeningPreview;
 import com.mdstech.wealthmesh.investment.dto.OpeningView;
 import com.mdstech.wealthmesh.investment.repository.OpeningStore;
@@ -180,6 +181,23 @@ public class InvestmentSetupService {
                             c.cash() == null ? null : Money.format(c.cash()), Money.format(c.holdingsValue()),
                             c.blank(), lines, stored.statementId(), stored.statementRemoved());
                 });
+    }
+
+    /**
+     * The holdings of a completed investment account: cash, holdings, the one Balance and what is known of cost. A
+     * draft has no Balance, so it has no holdings view (use Finish setup); another type has none to show.
+     */
+    public Mono<HoldingsView> holdings(UUID id) {
+        return accountService.findById(id).flatMap(account -> {
+            if ("draft".equals(account.status())) {
+                return Mono.<HoldingsView>error(new ResponseStatusException(HttpStatus.CONFLICT,
+                        account.name() + " is a draft with no Balance yet. Finish setup first."));
+            }
+            return store.of(id).switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    account.name() + " has no cash and holdings"))).map(stored -> Holdings.view(
+                            stored.components().cash(), stored.components().lines(),
+                            new BigDecimal(account.balance().amount()), account.balance().asOf()));
+        });
     }
 
     private static BigDecimal openingAmount(OpeningComponents components) {

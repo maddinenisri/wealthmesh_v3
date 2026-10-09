@@ -26,6 +26,7 @@ import com.mdstech.wealthmesh.account.domain.AccountType;
 import com.mdstech.wealthmesh.account.service.AccountLifecycleService;
 import com.mdstech.wealthmesh.investment.dto.FinishRequest;
 import com.mdstech.wealthmesh.investment.dto.OpeningPreview;
+import com.mdstech.wealthmesh.investment.dto.HoldingsView;
 import com.mdstech.wealthmesh.investment.dto.OpeningView;
 import com.mdstech.wealthmesh.investment.service.InvestmentSetupService;
 import com.mdstech.wealthmesh.account.service.AccountService;
@@ -75,6 +76,12 @@ public class AccountController {
     @GetMapping("/{id}/opening")
     public Mono<OpeningView> opening(@PathVariable UUID id) {
         return investments.opening(id);
+    }
+
+    /** The holdings of a completed investment account with what is known of their purchase cost. */
+    @GetMapping("/{id}/holdings")
+    public Mono<HoldingsView> holdings(@PathVariable UUID id) {
+        return investments.holdings(id);
     }
 
     /** Finish setup: a draft takes its components again and becomes active when they are complete. */

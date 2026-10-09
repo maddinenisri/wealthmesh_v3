@@ -20,6 +20,12 @@ abstract class InvestmentTestBase extends DebtTestBase {
                 priced);
     }
 
+    /** The same line with a known purchase cost for its shares (slice 19a). */
+    protected static String holding(String symbol, String quantity, String price, String valueOn, String cost) {
+        String line = holding(symbol, quantity, price, valueOn);
+        return line.substring(0, line.length() - 1) + ", \"cost\": \"" + cost + "\"}";
+    }
+
     /** An `opening` object; any of `total` and `cash` may be null (left out), and `holdings` may be empty. */
     protected static String opening(String total, String cash, String... holdings) {
         StringBuilder out = new StringBuilder("{");
