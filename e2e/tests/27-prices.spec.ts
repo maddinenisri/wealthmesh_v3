@@ -199,6 +199,32 @@ for (const width of [710, 1280]) {
       })
     }
 
+    test(`V2_HOLDINGS_008 a refused price field is in view and focused, and Cancel from the review returns focus to its opener (${width}px)`, async ({
+      page,
+    }) => {
+      const owner = await ownerId(page)
+      const name = `Redwood Errors P19b ${width}`
+      const id = await make(page, 'brokerage', name, null, owner)
+      await page.goto(`/accounts/${id}`)
+      const opener = page.getByRole('button', { name: 'Record a price' })
+      await opener.click()
+      await page.getByLabel('Market price').fill('-1')
+      await page.getByLabel('Price date').fill('2026-09-30')
+      await page.getByRole('button', { name: 'Review price' }).click()
+      const field = page.getByLabel('Market price')
+      await expect(page.getByText('Holding market price must be zero or greater')).toBeInViewport()
+      await expect(field).toBeFocused()
+      await expectNoSidewaysScroll(page)
+      await field.fill('130')
+      await page.getByRole('button', { name: 'Review price' }).click()
+      await expect(page.getByRole('heading', { name: /Review the HOME price/ })).toBeVisible()
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await expect(opener).toBeFocused()
+      expect((await (await page.request.get(`/api/v1/accounts/${id}`)).json()).balance.amount).toBe(
+        '2000.00',
+      )
+    })
+
     test(`V2_WEALTH_004 an older price is noticed on Sep 30, recording HOME at $130.00 moves the Balance to $21,500.00 and keeps $20,000.00 in the history (${width}px)`, async ({
       page,
     }) => {
@@ -233,6 +259,19 @@ for (const width of [710, 1280]) {
       await expect(card).toContainText('These balances come from different dates')
       await expectNoSidewaysScroll(page)
 
+      // A long price history first, so a new row is not in view just because the list is short.
+      for (let day = 2; day <= 13; day += 1) {
+        const recorded = await page.request.post(`/api/v1/accounts/${id}/prices`, {
+          headers: { 'Idempotency-Key': `w4-long-${width}-${day}` },
+          data: {
+            symbol: 'HOME',
+            price: '100.00',
+            valueOn: `2026-09-${String(day).padStart(2, '0')}`,
+            enteredByMemberId: owner,
+          },
+        })
+        expect(recorded.ok()).toBeTruthy()
+      }
       await page.goto(`/accounts/${id}`)
       await page.getByRole('button', { name: 'Record a price' }).click()
       await page.getByLabel('Market price').fill('130')
@@ -248,6 +287,12 @@ for (const width of [710, 1280]) {
         hasText: `HOME is priced at 130.00 on 2026-09-30. ${name}'s Balance is $21,500.00 as of 2026-09-30.`,
       })
       await expect(status).toBeFocused()
+      await expect(status).toBeInViewport()
+      const newest = page
+        .getByRole('list', { name: 'Recorded prices' })
+        .getByRole('listitem')
+        .first()
+      await expect(newest).toContainText('HOME $130.00 for 2026-09-30')
       const holdings = page.getByRole('region', { name: 'Holdings', exact: true })
       await expect(holdings).toContainText('$15,000.00')
       await expect(holdings).toContainText('$6,500.00')

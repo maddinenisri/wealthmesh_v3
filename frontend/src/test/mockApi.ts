@@ -2534,6 +2534,11 @@ export function mockApi(
       const key = request.headers.get('Idempotency-Key')
       if (!key) return problem(400, 'Missing save key')
       const body = (await request.json()) as PriceBody
+      if (state.failNextSave) {
+        const message = state.failNextSave
+        state.failNextSave = null
+        return problem(409, message)
+      }
       const same = state.prices.find((p) => p.key === key)
       if (same) {
         const account = state.accounts.find((a) => a.id === params.id)!

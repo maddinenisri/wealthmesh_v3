@@ -185,7 +185,7 @@ describe('record a price', () => {
     expect(screen.queryByRole('button', { name: 'Record a price' })).not.toBeInTheDocument()
   })
 
-  it('Q-069 a second price for the same date replaces the first: the history keeps it, marked Replaced, with who and when; the Balance history keeps the older Balance', async () => {
+  it('V2_HOLDINGS_008 Q-069 a second price for the same date replaces the first: the history keeps it, marked Replaced, with who and when; the Balance history keeps the older Balance', async () => {
     const earlier: MockPrice = {
       id: 'p-1',
       accountId: id,
@@ -224,5 +224,66 @@ describe('record a price', () => {
     const history = screen.getByRole('region', { name: 'Balance history' })
     expect(history).toHaveTextContent('2026-09-01 $2,000.00')
     expect(history).toHaveTextContent('2026-09-30 $2,400.00')
+  })
+
+  it('V2_HOLDINGS_008 Cancel from the review saves nothing and returns focus to the Record a price button', async () => {
+    const api = mockApi(base())
+    const { user } = renderRoute(`/accounts/${id}`)
+    await fillPrice(user, '130', '2026-09-30')
+    await user.click(screen.getByRole('button', { name: 'Review price' }))
+    await screen.findByRole('heading', { name: /Review the HOME price/ })
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    const opener = await screen.findByRole('button', { name: 'Record a price' })
+    await vi.waitFor(() => expect(opener).toHaveFocus())
+    expect(api.requests.filter((r) => r.startsWith('POST') && !r.endsWith('/review'))).toHaveLength(
+      0,
+    )
+    expect(screen.queryByRole('heading', { name: /Review the HOME price/ })).not.toBeInTheDocument()
+  })
+
+  it('V2_HOLDINGS_008 a refused save shows its message in the review, and Back clears it', async () => {
+    const api = mockApi(base())
+    const { user } = renderRoute(`/accounts/${id}`)
+    await fillPrice(user, '130', '2026-09-30')
+    await user.click(screen.getByRole('button', { name: 'Review price' }))
+    await screen.findByRole('heading', { name: /Review the HOME price/ })
+    api.failNextSave = 'Redwood Brokerage is archived. Restore it first.'
+    await user.click(screen.getByRole('button', { name: 'Confirm price' }))
+    expect(
+      await screen.findByText('Redwood Brokerage is archived. Restore it first.'),
+    ).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    const form = await screen.findByRole('heading', { name: /Record a price for/ })
+    await vi.waitFor(() => expect(form).toHaveFocus())
+    expect(
+      screen.queryByText('Redwood Brokerage is archived. Restore it first.'),
+    ).not.toBeInTheDocument()
+    // Reviewing again shows no stale error.
+    await user.click(screen.getByRole('button', { name: 'Review price' }))
+    await screen.findByRole('heading', { name: /Review the HOME price/ })
+    expect(
+      screen.queryByText('Redwood Brokerage is archived. Restore it first.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('V2_HOLDINGS_008 the review of a $0.00 price for one share says "Your 1 share stays recorded"', async () => {
+    mockApi({
+      ...base(),
+      openings: {
+        [id]: {
+          ...openingOf(null),
+          holdings: [
+            { symbol: 'HOME', quantity: '1', price: '100.00', valueOn: '2026-09-01', cost: null },
+          ],
+        },
+      },
+    })
+    const { user } = renderRoute(`/accounts/${id}`)
+    await fillPrice(user, '0', '2026-09-30')
+    await user.click(screen.getByRole('button', { name: 'Review price' }))
+    const heading = await screen.findByRole('heading', { name: /Review the HOME price/ })
+    expect(within(heading.closest('section')!).getByRole('note')).toHaveTextContent(
+      'Your 1 share stays recorded',
+    )
   })
 })
