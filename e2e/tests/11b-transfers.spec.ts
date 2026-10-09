@@ -367,8 +367,12 @@ test.describe.serial('linked transfers between accounts', () => {
     await page.goto('/')
     const wealth = page.getByRole('region', { name: 'Accounts and wealth' })
     await expect(wealth).toContainText('Month Savings')
-    await expect(wealth.getByRole('listitem').filter({ hasText: 'Month Savings' })).toContainText(
-      'Savings',
-    )
+    // The Bank money group lists the type beside the name (the flat list of the view does not).
+    await expect(
+      wealth
+        .getByRole('region', { name: 'Bank money' })
+        .getByRole('listitem')
+        .filter({ hasText: 'Month Savings' }),
+    ).toContainText('Savings')
   })
 })

@@ -93,7 +93,10 @@ test.describe.serial('credit cards', () => {
 
     await expect(row(page, 'Rewards Credit Card')).toContainText('$50.00 Card credit')
     await page.goto('/')
-    const card = page.getByRole('listitem').filter({ hasText: 'Rewards Credit Card' })
+    const card = page
+      .getByRole('region', { name: 'Cards' })
+      .getByRole('listitem')
+      .filter({ hasText: 'Rewards Credit Card' })
     await expect(card).toContainText('$50.00 Card credit')
     await expect(card).not.toContainText('owed')
   })

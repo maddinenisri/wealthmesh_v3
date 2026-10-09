@@ -102,10 +102,15 @@ async function fillSetup(
   await page.getByLabel('Account type').selectOption(type.wire)
   await page.getByLabel('Account name').fill(name)
   await page.getByLabel('Institution').fill(type.institution)
-  const owners = page.getByRole('group', { name: 'Owners' })
-  const named = owners.getByRole('checkbox', { name: type.owner })
+  // A brokerage can be joint (checkboxes under Owners); the other four have one owner (radios under Owner, 18c).
+  const owners = page.getByRole('group', {
+    name: (type.wire as string) === 'brokerage' ? 'Owners' : 'Owner',
+    exact: true,
+  })
+  const choice = (type.wire as string) === 'brokerage' ? 'checkbox' : 'radio'
+  const named = owners.getByRole(choice, { name: type.owner })
   if ((await named.count()) > 0) await named.check()
-  else await owners.getByRole('checkbox').first().check()
+  else await owners.getByRole(choice).first().check()
   await page.getByLabel('Setup date').fill('2026-09-01')
   if (fields.total) await page.getByLabel('Opening total').fill(fields.total)
   if (fields.cash) await page.getByLabel('Cash').fill(fields.cash)

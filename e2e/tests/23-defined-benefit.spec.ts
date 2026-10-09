@@ -379,8 +379,13 @@ test('V2_DB_006 a second participant is refused by the server and the plan keeps
   const id = await makePlan(page, 'One participant', '1000.00')
   const owners = found.slice(0, 2).map((member) => member.id)
   test.skip(owners.length < 2, 'The shared household has one active member')
-  const refused = await page.request.put(`/api/v1/accounts/${id}`, {
+  // The plain Edit no longer changes the participant (Q-064): it is refused, and the reviewed correction names the rule.
+  const edit = await page.request.put(`/api/v1/accounts/${id}`, {
     data: { name: 'One participant', institution: 'Harbor Benefits', ownerMemberIds: owners },
+  })
+  expect(edit.status()).toBe(400)
+  const refused = await page.request.post(`/api/v1/accounts/${id}/owner-correction`, {
+    data: { ownerMemberIds: owners, enteredByMemberId: owners[0] },
   })
   expect(refused.status()).toBe(400)
   expect(((await refused.json()) as { message: string }).message).toBe(

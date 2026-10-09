@@ -65,7 +65,9 @@ test.describe.serial('household journey', () => {
     await expect(page.getByRole('region', { name: 'Review rename' })).toHaveCount(0)
     await expect(page.getByText('Earlier name: Sam Rivera (Child)')).toBeVisible()
 
-    await expect(page.getByRole('main').getByText('Samira Rivera')).toBeVisible()
+    await expect(
+      page.getByRole('region', { name: 'Members' }).getByText('Samira Rivera', { exact: true }),
+    ).toBeVisible()
     await expect(page.getByRole('main').getByText('Sam Rivera', { exact: true })).toHaveCount(0)
   })
 
@@ -82,8 +84,10 @@ test.describe.serial('household journey', () => {
     await page.goto('/')
 
     await expect(page.getByRole('heading', { name: 'Doe-Rivera Family' })).toBeVisible()
-    await expect(page.getByRole('main').getByText('Alex Doe')).toBeVisible()
-    await expect(page.getByRole('main').getByText('Samira Rivera')).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Members' }).getByText('Alex Doe')).toBeVisible()
+    await expect(
+      page.getByRole('region', { name: 'Members' }).getByText('Samira Rivera', { exact: true }),
+    ).toBeVisible()
   })
 
   test('V2_HOUSEHOLD_SETUP_003 shows an empty household with no accounts and no money', async ({
