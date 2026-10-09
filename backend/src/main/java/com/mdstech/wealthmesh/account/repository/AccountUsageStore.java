@@ -18,13 +18,16 @@ import reactor.core.publisher.Mono;
 @Repository
 public class AccountUsageStore {
 
-    /** Saved history by kind. `entries` counts every activity row, removed and replaced ones too. */
+    /**
+     * Saved history by kind. `entries` counts every activity row, removed and replaced ones too; `prices` counts the
+     * prices recorded on holdings (slice 19b), replaced ones too: a price moves the Balance, so it is history.
+     */
     public record Usage(long entries, long reminders, long statements, long revisions, long schedules,
-            long values) {
+            long values, long prices) {
 
         public boolean unused() {
             return entries == 0 && reminders == 0 && statements == 0 && revisions == 0 && schedules == 0
-                    && values == 0;
+                    && values == 0 && prices == 0;
         }
     }
 
@@ -42,11 +45,13 @@ public class AccountUsageStore {
                                (SELECT COUNT(*) FROM opening_revision WHERE account_id = :id) AS revisions,
                                (SELECT COUNT(*) FROM recurring_schedule
                                 WHERE account_id = :id AND removed_at IS NULL) AS schedules,
-                               (SELECT COUNT(*) FROM account_value WHERE account_id = :id) AS dated_values""")
+                               (SELECT COUNT(*) FROM account_value WHERE account_id = :id) AS dated_values,
+                               (SELECT COUNT(*) FROM holding_price WHERE account_id = :id) AS prices""")
                 .bind("id", accountId)
                 .map((row, meta) -> new Usage(row.get("entries", Long.class), row.get("reminders", Long.class),
                         row.get("statements", Long.class), row.get("revisions", Long.class),
-                        row.get("schedules", Long.class), row.get("dated_values", Long.class)))
+                        row.get("schedules", Long.class), row.get("dated_values", Long.class),
+                        row.get("prices", Long.class)))
                 .one();
     }
 

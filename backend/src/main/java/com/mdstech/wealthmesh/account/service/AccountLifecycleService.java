@@ -219,6 +219,9 @@ public class AccountLifecycleService {
         if (found.statements() > 0) {
             reasons.add(counted(found.statements(), "statement", "statements") + " (removed ones count)");
         }
+        if (found.prices() > 0) {
+            reasons.add(counted(found.prices(), "recorded price", "recorded prices") + " (replaced ones count)");
+        }
         if (found.schedules() > 0) {
             reasons.add(counted(found.schedules(), "recurring bill", "recurring bills"));
         }

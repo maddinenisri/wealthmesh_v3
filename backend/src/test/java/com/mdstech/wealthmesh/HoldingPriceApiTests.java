@@ -287,4 +287,63 @@ class HoldingPriceApiTests extends PriceTestBase {
         webTestClient.get().uri("/api/v1/accounts/{id}/opening", account).exchange().expectBody()
                 .jsonPath("$.holdings[0].price").isEqualTo("100.00").jsonPath("$.cash").isEqualTo("15000.00");
     }
+
+    @Order(10)
+    @Test
+    @DisplayName("V2_HOLDINGS_008 an account whose Balance comes from a recorded price cannot be deleted: the price is "
+            + "saved history (validator D1), in the delete review and at delete")
+    void pricedAccountCannotBeDeleted() {
+        // Opening $0.00 with 10 HOME at $0.00, so only the recorded price gives it a Balance.
+        String account = held("brokerage", "Priced Not Deletable", samId, "2026-09-01", "0.00",
+                holding("HOME", "10", "0.00", "2026-09-01"));
+        webTestClient.get().uri("/api/v1/accounts/{id}/lifecycle", account).exchange().expectBody()
+                .jsonPath("$.canDelete").isEqualTo(true);
+        record(account, "del-1", "HOME", "50.00", "2026-09-30");
+        assertBalance(account, "500.00");
+        webTestClient.get().uri("/api/v1/accounts/{id}/lifecycle", account).exchange().expectBody()
+                .jsonPath("$.canDelete").isEqualTo(false).jsonPath("$.deleteBlockedBy[0]")
+                .value(text -> assertThat(String.valueOf(text)).contains("1 recorded price"));
+        assertRefusedWith(act(account, "delete"), 409, "1 recorded price");
+        assertBalance(account, "500.00");
+        // Replaced prices count too: the history keeps them.
+        record(account, "del-2", "HOME", "60.00", "2026-09-30");
+        assertRefusedWith(act(account, "delete"), 409, "2 recorded prices");
+    }
+
+    @Order(11)
+    @Test
+    @DisplayName("V2_HOLDINGS_008 D-071 a recorded price wins a tie with the opening price on the same date")
+    void recordedPriceWinsTheTie() {
+        String account = redwood("Tie Opening Date", samId);
+        record(account, "tie-1", "HOME", "130.00", "2026-09-01");
+        assertBalanceAsOf(account, "2026-09-01", "21500.00");
+        assertBalance(account, "21500.00");
+    }
+
+    @Order(12)
+    @Test
+    @DisplayName("V2_HOLDINGS_008 Q-069 with the clock moved between saves, the later save for a holding and date "
+            + "counts and the earlier is replaced")
+    void laterSaveCountsWhenTheClockMoves() {
+        String account = redwood("Tie Clock", samId);
+        record(account, "clk-1", "HOME", "130.00", "2026-09-30");
+        clock.setAt(java.time.LocalDate.of(2026, 10, 3), java.time.LocalTime.of(15, 0));
+        record(account, "clk-2", "HOME", "140.00", "2026-09-30");
+        assertBalanceAsOf(account, "2026-09-30", "22000.00");
+        clock.setAt(java.time.LocalDate.of(2026, 10, 3), java.time.LocalTime.of(16, 0));
+        record(account, "clk-3", "HOME", "135.00", "2026-09-30");
+        assertBalanceAsOf(account, "2026-09-30", "21750.00");
+        prices(account).expectBody().jsonPath("$.prices[?(@.replaced == false)].price").value(List.class,
+                found -> assertThat(found).containsExactly("135.00"));
+    }
+
+    @Order(13)
+    @Test
+    @DisplayName("V2_HOLDINGS_008 the review of a $0.00 price for one share says \"Your 1 share stays recorded\"")
+    void singularShare() {
+        String account = held("brokerage", "One Share", samId, "2026-09-01", "100.00",
+                holding("HOME", "1", "100.00", "2026-09-01"));
+        reviewPrice(account, priceBody("HOME", "0.00", "2026-09-30", mayaId)).expectBody().jsonPath("$.message")
+                .value(text -> assertThat(String.valueOf(text)).contains("Your 1 share stays recorded"));
+    }
 }
