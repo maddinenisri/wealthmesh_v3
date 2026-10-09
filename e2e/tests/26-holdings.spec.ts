@@ -246,8 +246,16 @@ for (const width of [710, 1280]) {
         'The cost is known for 2 of 14 shares (14.29% of the shares)',
       )
       await expect(care).toContainText('worth $500.00, cost $400.00 and show a gain of $100.00')
-      for (const label of await care.getByText('Purchase cost', { exact: true }).all())
-        await expect(label.locator('xpath=following-sibling::dd[1]')).toHaveText('Not available')
+      // Cowork 19a: the full cost is labelled as the full cost, beside the known part's sentence.
+      await expect(care.getByText('Purchase cost', { exact: true })).toHaveCount(0)
+      await expect(
+        care
+          .getByText('Full purchase cost', { exact: true })
+          .locator('xpath=following-sibling::dd[1]'),
+      ).toHaveText('Not available')
+      await expect(
+        care.getByText('Full gain', { exact: true }).locator('xpath=following-sibling::dd[1]'),
+      ).toHaveText('Not available')
       await expect(page.getByRole('region', { name: 'Holdings', exact: true })).toContainText(
         '$4,000.00 dated 2026-09-01',
       )

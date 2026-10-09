@@ -142,3 +142,40 @@ Found by grep on 2026-10-09 (`opening_amount`, `openingAmount()`, `deltaOf`, `de
 - Logged, not built: a long name can still split a date in the status sentence; Cancel on Add account lands on the page body; Back on the review lands on Account name; an institution-only Edit adds no history row; three phrasings of one date ("as of", "dated", "on"); the Opening card repeats the Holdings card.
 - Proof: backend 872 x 3 (`scripts/flake-check.sh`, 0 failures), Vitest 492 x 3, e2e 350 on the final code, lint, format and typecheck clean.
 - Dev data: "VR19a ..." accounts remain.
+
+## Cowork pass (19a, owner, 2026-10-09)
+
+**1 fault** (against 8, 8, 5, 5, 5, 7, 9, 9, 8, 5, 6, 2, 5, 1, 1); the four excluded items (the date mismatch, "Owners" with one owner, the status-sentence split, the institution-only Edit) were not counted.
+
+| # | Step | Width | What the owner saw | Severity | Fix |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 2 Holdings card | 710 and 1280 | CARE cost and gain say "Not available" right above a sentence saying the cost is known for 2 of 14 shares ($400.00); the account-level cost and gain read the same | Low | When a security's cost is only partly known, its labels and the account's read "Full purchase cost" and "Full gain" (value stays "Not available", as HOLDINGS_004 words it); Vitest and e2e assert it, red when planted |
+
+Owner's question, not counted: a purchase cost of 0 is accepted and reviews as "$0.00" with the whole value as gain. Kept as built (a gifted or vested share has a real zero cost, and HOLDINGS_008 treats a known zero as a value); the review shows the zero openly. Open for the owner if a confirmation is wanted.
+Outside 19a, logged: the Household "Accounts in this view" list (18c) shows archived accounts with no Archived label (the groups do label them).
+
+## How it works (19a)
+
+Written after the build by a read-only agent and checked against the code (diff `61140fb..HEAD`, D-070).
+
+**Cost on an opening line**
+- Each opening holding line can carry an optional purchase cost, a nullable `cost` column (`V33__holding_cost.sql`). Blank is unknown (null); a typed 0 is a known zero cost. A cost never enters a Balance.
+- `OpeningComponents` refuses a bad cost with "Purchase cost must be zero or greater"; `HoldingRequest` takes it as an object, so a JSON number is refused. Preview and save judge it alike.
+- The setup form (`OpeningFields.tsx`, `openingForm.ts`) has an optional cost field (placeholder "Unknown"); the review (`OpeningReview.tsx`) has Purchase cost and Gain columns reading "Not available" when unknown; `FinishSetup.tsx` starts from the cost a draft kept.
+- A partly known cost is two lines of one symbol.
+
+**The holdings read**
+- `GET /accounts/{id}/holdings` (`InvestmentSetupService.holdings`) returns a `HoldingsView`; a draft is 409 (Finish setup first), an unknown account 404.
+- `Holdings` groups lines by symbol and derives known shares, known value, known cost, known gain and coverage (2 of 14 is 14.29%). A security's full cost and gain, and the account's, exist only when every share has a known cost.
+
+**What the Holdings card shows**
+- `HoldingsCard.tsx` on a completed investment account: cash, holdings, the one Balance with its date, then one block per security (shares, price and its date, value, cost, gain). Partly known cost: the "known for 2 of 14 shares" sentence and "Full" labels.
+- The Household page shows "Balance dated <date>" on investment accounts.
+- Not built yet: prices after setup, group views, as-of reads (19b to 19d).
+
+**Focus and layout fixes**
+- Add and Remove holding move focus in a layout effect and pass `shouldFocus: false` to `append` (pitfall 49; a late frame callback is the likely cause of the cost typed into the symbol field, not proven).
+- Cost and Gain cells do not wrap, the name has a minimum width, the review and status boxes are `max-w-2xl`.
+
+**Tests**
+- `HoldingsApiTests` (five types' `_001`, HOLDINGS_004 rules, preview, Finish setup, draft), `Holdings.test.tsx`, `e2e/tests/26-holdings.spec.ts` at 710px and 1280px. Final counts: backend 872 x 3, Vitest 492 x 3 (then 493 with the last test), e2e 350.

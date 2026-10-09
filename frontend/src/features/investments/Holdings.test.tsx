@@ -192,8 +192,16 @@ describe('opening cost', () => {
     expect(care).toHaveTextContent('The cost is known for 2 of 14 shares (14.29% of the shares)')
     expect(care).toHaveTextContent('worth $500.00, cost $400.00 and show a gain of $100.00')
     expect(within(care).getByText('$3,500.00', { selector: 'dd' })).toBeVisible()
-    for (const label of within(care).getAllByText('Purchase cost', { selector: 'dt' }))
-      expect(label.nextElementSibling).toHaveTextContent('Not available')
+    // Cowork 19a: a partly known cost must not read as "Purchase cost: Not available" above a known $400.00.
+    expect(within(care).queryByText('Purchase cost', { selector: 'dt' })).not.toBeInTheDocument()
+    expect(
+      within(care).getByText('Full purchase cost', { selector: 'dt' }).nextElementSibling,
+    ).toHaveTextContent('Not available')
+    expect(
+      within(care).getByText('Full gain', { selector: 'dt' }).nextElementSibling,
+    ).toHaveTextContent('Not available')
+    // The whole-account figures are the full ones too: one for CARE, one for the account.
+    expect(within(card).getAllByText('Full purchase cost', { selector: 'dt' })).toHaveLength(2)
     expect(within(card).getByText('$4,000.00')).toBeVisible()
   })
 

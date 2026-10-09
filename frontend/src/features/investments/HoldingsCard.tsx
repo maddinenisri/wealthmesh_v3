@@ -26,11 +26,11 @@ function SecurityBlock({ security }: { security: Security }) {
         </dd>
         <dt className="text-ink-muted">Value</dt>
         <dd className="normal-nums">{dollars(security.value)}</dd>
-        <dt className="text-ink-muted">Purchase cost</dt>
+        <dt className="text-ink-muted">{partly ? 'Full purchase cost' : 'Purchase cost'}</dt>
         <dd className="normal-nums">
           {security.cost === null ? NOT_AVAILABLE : dollars(security.cost)}
         </dd>
-        <dt className="text-ink-muted">Gain</dt>
+        <dt className="text-ink-muted">{partly ? 'Full gain' : 'Gain'}</dt>
         <dd className="normal-nums">
           {security.gain === null ? NOT_AVAILABLE : dollars(security.gain)}
         </dd>
@@ -54,6 +54,10 @@ function SecurityBlock({ security }: { security: Security }) {
  */
 export function HoldingsCard({ account }: { account: Account }) {
   const holdings = useHoldings(account.id)
+  // Some shares have a known cost and some do not: the whole-account figures are then the full cost and gain.
+  const anyPartly = !!holdings.data?.securities.some(
+    (s) => s.cost === null && Number(s.knownShares) > 0,
+  )
   return (
     <Card aria-labelledby="holdings-heading">
       <CardTitle id="holdings-heading" tabIndex={-1} className="text-lg outline-none">
@@ -77,11 +81,13 @@ export function HoldingsCard({ account }: { account: Account }) {
             </dd>
             {holdings.data.securities.length > 0 && (
               <>
-                <dt className="text-ink-muted">Purchase cost</dt>
+                <dt className="text-ink-muted">
+                  {anyPartly ? 'Full purchase cost' : 'Purchase cost'}
+                </dt>
                 <dd className="normal-nums">
                   {holdings.data.cost === null ? NOT_AVAILABLE : dollars(holdings.data.cost)}
                 </dd>
-                <dt className="text-ink-muted">Gain</dt>
+                <dt className="text-ink-muted">{anyPartly ? 'Full gain' : 'Gain'}</dt>
                 <dd className="normal-nums">
                   {holdings.data.gain === null ? NOT_AVAILABLE : dollars(holdings.data.gain)}
                 </dd>
