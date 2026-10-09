@@ -233,8 +233,14 @@ function parseChange(value: unknown): WealthChange {
 }
 
 /** Wealth today, or as of a date (YYYY-MM-DD) up to today. */
-export const getWealth = (asOf?: string) =>
-  request(asOf ? `/wealth?asOf=${asOf}` : '/wealth', { parse: parseWealth })
+/** Wealth for the household, or for the accounts one member owns (a joint account is in each owner's view). */
+export const getWealth = (asOf?: string, memberId?: string) => {
+  const query = new URLSearchParams()
+  if (asOf) query.set('asOf', asOf)
+  if (memberId) query.set('memberId', memberId)
+  const text = query.toString()
+  return request(text ? `/wealth?${text}` : '/wealth', { parse: parseWealth })
+}
 
 export const getWealthChange = (from: string, to: string) =>
   request(`/wealth/change?from=${from}&to=${to}`, { parse: parseChange })

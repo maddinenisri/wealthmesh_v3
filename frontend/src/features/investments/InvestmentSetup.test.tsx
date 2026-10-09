@@ -613,7 +613,7 @@ describe('a brokerage in its own words', () => {
     expect(await screen.findByLabelText('Institution')).toHaveValue('Harbor Benefits')
     expect(
       screen.getByText(
-        'Change the name, institution or owner. The opening cash and holdings are not changed here.',
+        'Change the name or institution. The opening cash and holdings are not changed here, and a new owner is chosen with Change owner, which is reviewed first.',
       ),
     ).toBeVisible()
     expect(screen.queryByLabelText('Bank')).not.toBeInTheDocument()

@@ -1,5 +1,5 @@
 import type { Account } from '../../api/accounts'
-import type { WealthGroup, WealthLine } from '../../api/wealth'
+import type { Wealth, WealthGroup, WealthLine } from '../../api/wealth'
 
 /**
  * The accounts a wealth group lists: the ones the server counted in it. The server decides group membership once
@@ -58,4 +58,50 @@ export function overlapText(
   const sentences = others.map((other) => overlapNote(group, groupKey, other)).filter(Boolean)
   if (sentences.length === 0) return undefined
   return `${sentences.join(' ')} A group total is a view and is not added again to financial assets or net worth.`
+}
+
+/** Every group key of a wealth view that lists accounts. */
+const GROUP_KEYS = [
+  'bankMoney',
+  'cards',
+  'loans',
+  'mortgages',
+  'investments',
+  'retirement',
+  'healthSavings',
+  'propertyAndOther',
+] as const
+
+/**
+ * The accounts of a view, each exactly once and by name (MEMBERS_002). Groups overlap on purpose (a 401(k) is in
+ * Investments and Retirement), so this is the list that "counted once" is read from.
+ */
+export function viewAccounts(wealth: Wealth): WealthLine[] {
+  const once = new Map<string, WealthLine>()
+  for (const key of GROUP_KEYS) {
+    for (const line of wealth[key].accounts) once.set(line.accountId, line)
+  }
+  return [...once.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * The sentence under the view chooser: whose accounts are shown, how many, and that a joint account is in each
+ * owner's view and counted once for the household (MEMBERS_002).
+ */
+export function viewSentence(
+  who: string | null,
+  lines: WealthLine[],
+  jointNames: string[],
+): string {
+  const count = lines.length
+  const head = who
+    ? `Showing the accounts of ${who}: ${count} ${count === 1 ? 'account' : 'accounts'}.`
+    : `Showing the whole household: ${count} ${count === 1 ? 'account' : 'accounts'}, each counted once.`
+  if (jointNames.length === 0) return head
+  const listed =
+    jointNames.length > 3
+      ? [...jointNames.slice(0, 3), `${jointNames.length - 3} more`]
+      : jointNames
+  const many = jointNames.length > 1
+  return `${head} ${joined(listed)} ${many ? 'are joint accounts' : 'is a joint account'}: ${many ? 'they appear' : 'it appears'} in each person's view and ${many ? 'are' : 'is'} counted once for the household.`
 }

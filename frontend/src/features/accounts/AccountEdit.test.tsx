@@ -122,7 +122,7 @@ describe('Edit account ends with a sentence and focus (Q-062)', () => {
     )
   })
 
-  it('V2_DB_006 a plan names the participant, and a loan says its amount is unchanged', async () => {
+  it('V2_DB_006 a plan keeps its participant outside the form, and a loan says its amount is unchanged', async () => {
     mockApi({
       ...seed(),
       accounts: [
@@ -138,11 +138,15 @@ describe('Edit account ends with a sentence and focus (Q-062)', () => {
       ],
     })
     const { user } = renderRoute(`/accounts/${CAR_ID}/edit`)
-    await screen.findByLabelText('Account name')
-    await user.click(screen.getByRole('radio', { name: 'Sam' }))
+    const planName = await screen.findByLabelText('Account name')
+    // The participant is shown, not edited: a change is the reviewed Change participant (slice 18c).
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Change participant' })).toBeVisible()
+    await user.clear(planName)
+    await user.type(planName, 'Harbor Cash Balance Main')
     await user.click(screen.getByRole('button', { name: 'Save details' }))
     expect(await screen.findByRole('status')).toHaveTextContent(
-      'Harbor Cash Balance was updated. Participant is now Sam. Its plan value of $40,000.00 is unchanged.',
+      'Harbor Cash Balance Main was updated. It was Harbor Cash Balance. Its plan value of $40,000.00 is unchanged.',
     )
     const second = renderRoute(`/accounts/${HOME_ID}/edit`)
     const loanName = await second.findAllByLabelText('Account name')

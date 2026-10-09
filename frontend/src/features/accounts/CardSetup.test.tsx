@@ -153,9 +153,10 @@ describe('the Household card', () => {
     mockApi({ ...seed, accounts: [{ ...everyday }, credit] })
     renderRoute('/')
 
-    const owed = (await screen.findByRole('link', { name: 'Everyday Credit Card' })).closest('li')!
+    const cards = await screen.findByRole('region', { name: 'Cards' })
+    const owed = within(cards).getByRole('link', { name: 'Everyday Credit Card' }).closest('li')!
     expect(owed).toHaveTextContent('$1,000.00 owed')
-    const rewards = screen.getByRole('link', { name: 'Rewards Credit Card' }).closest('li')!
+    const rewards = within(cards).getByRole('link', { name: 'Rewards Credit Card' }).closest('li')!
     expect(rewards).toHaveTextContent('$50.00 Card credit')
     expect(owed).not.toHaveTextContent('Overdrawn')
   })

@@ -3,11 +3,11 @@ import { getWealth, getWealthChange } from '../api/wealth'
 
 export const wealthKey = ['wealth'] as const
 
-/** Wealth today, or as of a date (one query per date; a save refreshes them all). */
-export function useWealth(asOf?: string, enabled = true) {
+/** Wealth today, or as of a date, for the household or one member (one query each; a save refreshes them all). */
+export function useWealth(asOf?: string, enabled = true, memberId?: string) {
   return useQuery({
-    queryKey: [...wealthKey, asOf ?? 'today'],
-    queryFn: () => getWealth(asOf),
+    queryKey: [...wealthKey, asOf ?? 'today', memberId ?? 'household'],
+    queryFn: () => getWealth(asOf, memberId),
     enabled,
   })
 }

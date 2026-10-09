@@ -24,9 +24,10 @@ import { toOpening, type OpeningValues } from '../investments/openingForm'
 import { ACCOUNT_TYPES, isDebt, typeNoun, typeTraits, valuedNoun } from './accountTypes'
 import { isCard } from './cardBalance'
 import { editSentence } from './editSentence'
-import { memberLabel } from './ownerNames'
+import { memberLabel, ownerNames } from './ownerNames'
 
-type DetailsValues = { name: string; institution: string; ownerMemberIds: string[] }
+export type OwnerValues = { ownerMemberIds: string[] }
+type DetailsValues = OwnerValues & { name: string; institution: string }
 type SetupValues = DetailsValues &
   OpeningValues & {
     type: string
@@ -46,13 +47,16 @@ const ownerRules = {
 const participantRules = {
   validate: (value: string[]) => value.length === 1 || 'Choose one participant',
 }
+const singleOwnerRules = {
+  validate: (value: string[]) => value.length === 1 || 'Choose one owner',
+}
 
 /**
  * Owner choices: active members, plus any member who already owns the account (so an inactive owner stays
  * visible and checked). One or more owners makes the account joint, except a type held by one member (a defined
  * benefit's participant), which is a choice of one.
  */
-function OwnerChoices<T extends DetailsValues>({
+export function OwnerChoices<T extends OwnerValues>({
   members,
   control,
   type,
@@ -69,22 +73,55 @@ function OwnerChoices<T extends DetailsValues>({
     .map((member) => ({ value: member.id, label: memberLabel(member) }))
   return (
     <CheckboxGroupField
-      control={control as unknown as Control<DetailsValues>}
+      control={control as unknown as Control<OwnerValues>}
       name="ownerMemberIds"
       label={traits.ownerLabel}
       single={traits.singleOwner}
       hint={
-        traits.singleOwner
+        traits.plan
           ? 'Choose the one member who participates in this plan.'
-          : traits.kind === 'debt'
-            ? 'Choose everyone who owes this debt.'
-            : traits.kind === 'valued'
-              ? 'Choose everyone who owns this property or asset.'
-              : 'Choose everyone who owns this account. Two or more makes it a joint account.'
+          : traits.singleOwner
+            ? `Choose the one member who owns this ${typeNoun(type)}. Everyone in the household can still see it.`
+            : traits.kind === 'debt'
+              ? 'Choose everyone who owes this debt.'
+              : traits.kind === 'valued'
+                ? 'Choose everyone who owns this property or asset.'
+                : 'Choose everyone who owns this account. Two or more makes it a joint account.'
       }
       options={options}
-      rules={traits.singleOwner ? participantRules : ownerRules}
+      rules={traits.plan ? participantRules : traits.singleOwner ? singleOwnerRules : ownerRules}
     />
+  )
+}
+
+/**
+ * Who owns an account that keeps its own history is shown here, not edited: a change is a reviewed correction
+ * (slice 18c, Q-064) with its own page, so the plain Edit never changes it.
+ */
+function ownerLabelFor(traits: { plan: boolean; ownerLabel: string }, count: number) {
+  if (count < 2) return traits.ownerLabel
+  return traits.plan ? 'Participants' : 'Owners'
+}
+
+function OwnerNote({ account, members }: { account: Account; members: Member[] }) {
+  const traits = typeTraits(account.type)
+  return (
+    <div className="text-sm">
+      <p>
+        <span className="text-ink-muted">
+          {ownerLabelFor(traits, account.ownerMemberIds.length)}:
+        </span>{' '}
+        <strong>{ownerNames(account.ownerMemberIds, members)}</strong>
+      </p>
+      {account.status !== 'draft' && (
+        <Link
+          to={`/accounts/${account.id}/owner`}
+          className={buttonStyles({ variant: 'secondary' })}
+        >
+          {traits.plan ? 'Change participant' : 'Change owner'}
+        </Link>
+      )}
+    </div>
   )
 }
 
@@ -422,7 +459,13 @@ export function AccountEditForm({ account, members }: { account: Account; member
     defaultValues: {
       name: account.name,
       institution: account.institution ?? '',
-      ownerMemberIds: account.ownerMemberIds,
+      // A draft that was joint before a one-owner rule starts with nobody chosen: it needs one named member.
+      ownerMemberIds:
+        account.status === 'draft' &&
+        typeTraits(account.type).singleOwner &&
+        account.ownerMemberIds.length > 1
+          ? []
+          : account.ownerMemberIds,
     },
   })
 
@@ -460,17 +503,25 @@ export function AccountEditForm({ account, members }: { account: Account; member
           rules={bankRules}
         />
       )}
-      <OwnerChoices
-        members={members}
-        control={control}
-        type={account.type}
-        current={account.ownerMemberIds}
-      />
+      {typeTraits(account.type).recordsCreator && account.status !== 'draft' ? (
+        <OwnerNote account={account} members={members} />
+      ) : (
+        <OwnerChoices
+          members={members}
+          control={control}
+          type={account.type}
+          current={account.ownerMemberIds}
+        />
+      )}
       <div className="flex gap-2">
         <Button type="submit" disabled={update.isPending}>
           {update.isPending ? 'Saving' : 'Save details'}
         </Button>
-        <Link to={`/accounts/${account.id}`} className={buttonStyles({ variant: 'ghost' })}>
+        <Link
+          to={`/accounts/${account.id}`}
+          state={{ returned: true }}
+          className={buttonStyles({ variant: 'ghost' })}
+        >
           Cancel
         </Link>
       </div>

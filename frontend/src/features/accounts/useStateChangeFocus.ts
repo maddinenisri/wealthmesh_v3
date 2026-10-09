@@ -49,5 +49,8 @@ export function useStateChangeFocus(reviewOpen: boolean, arrivedWith?: string) {
     setChanges((count) => count + 1)
   }
 
-  return { message, statusRef, begin, changed, clear }
+  /** A review closed because another opened: focus stays with the new review, not back on this one's trigger. */
+  const abandon = () => returnFocus.cancel()
+
+  return { message, statusRef, begin, changed, clear, abandon }
 }

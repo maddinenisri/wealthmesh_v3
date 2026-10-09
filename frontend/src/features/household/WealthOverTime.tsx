@@ -12,7 +12,7 @@ import { Dated } from '../values/Dated'
  * its value and is flagged when that value is old; an account that had not begun tracking is named, never counted as
  * zero. The change is explained as income minus spending, asset value changes, corrections and accounts added.
  */
-export function WealthOverTime() {
+export function WealthOverTime({ person }: { person?: string }) {
   const today = useToday()
   const max = today.data
   const [asOf, setAsOf] = useState('')
@@ -26,6 +26,11 @@ export function WealthOverTime() {
   return (
     <Card aria-labelledby="over-time-heading">
       <CardTitle id="over-time-heading">Wealth on a date</CardTitle>
+      {person && (
+        <p className="mt-1 text-sm text-ink-muted">
+          This is for the whole household, not {person}&apos;s accounts alone.
+        </p>
+      )}
       <div className="mt-3 flex max-w-md flex-wrap items-end gap-4">
         <label className="flex flex-col gap-1 text-sm">
           Show wealth on

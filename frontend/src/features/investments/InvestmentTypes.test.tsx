@@ -76,7 +76,10 @@ async function fill(
   await user.selectOptions(await screen.findByLabelText('Account type'), type.wire)
   await user.type(screen.getByLabelText('Account name'), type.name)
   await user.type(screen.getByLabelText('Institution'), type.institution)
-  await user.click(screen.getByRole('checkbox', { name: type.owner }))
+  // A brokerage can be joint (checkboxes); the other four have one owner (radios, 18c).
+  await user.click(
+    screen.getByRole(type.wire === 'brokerage' ? 'checkbox' : 'radio', { name: type.owner }),
+  )
   fireEvent.change(screen.getByLabelText('Setup date'), { target: { value: '2026-09-01' } })
   if (fields.total) await user.type(screen.getByLabelText('Opening total'), fields.total)
   if (fields.cash) await user.type(screen.getByLabelText('Cash'), fields.cash)

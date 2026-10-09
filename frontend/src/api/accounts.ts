@@ -130,6 +130,61 @@ export const changeAccountStatus = (
     parse: parseAccount,
   })
 
+/** What an owner correction would do: the owners now and after, and the Balance it keeps (nothing is written). */
+export type OwnerReview = {
+  accountId: string
+  name: string
+  type: string
+  from: { id: string; name: string }[]
+  to: { id: string; name: string }[]
+  balance: string
+}
+
+const parseOwners = (value: unknown) =>
+  (Array.isArray(value) ? value : []).map((item) => {
+    const data = record(item)
+    return { id: str(data.id), name: str(data.name) }
+  })
+
+const ownerBody = (ownerMemberIds: string[], enteredByMemberId: string | undefined) => ({
+  ownerMemberIds,
+  enteredByMemberId,
+})
+
+/** The review of an owner correction (Q-064): refused here for anything the save would refuse. */
+export const reviewOwnerCorrection = (
+  id: string,
+  ownerMemberIds: string[],
+  enteredByMemberId: string | undefined,
+) =>
+  request(`/accounts/${id}/owner-correction/review`, {
+    method: 'POST',
+    body: ownerBody(ownerMemberIds, enteredByMemberId),
+    parse: (value): OwnerReview => {
+      const data = record(value)
+      return {
+        accountId: str(data.accountId),
+        name: str(data.name),
+        type: str(data.type),
+        from: parseOwners(data.from),
+        to: parseOwners(data.to),
+        balance: str(data.balance),
+      }
+    },
+  })
+
+/** Changes who owns the account; cash, holdings and Balance stay, and the history keeps the previous owners. */
+export const correctOwners = (
+  id: string,
+  ownerMemberIds: string[],
+  enteredByMemberId: string | undefined,
+) =>
+  request(`/accounts/${id}/owner-correction`, {
+    method: 'POST',
+    body: ownerBody(ownerMemberIds, enteredByMemberId),
+    parse: parseAccount,
+  })
+
 /** One change of an account's state: who entered it (null when unknown) and when. */
 export type AccountEvent = {
   action: string

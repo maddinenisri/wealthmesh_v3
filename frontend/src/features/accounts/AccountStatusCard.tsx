@@ -28,6 +28,7 @@ const EVENT_LABEL: Record<string, string> = {
   undeleted: 'Deleted, then brought back',
   set_up: 'Set up',
   renamed: 'Renamed',
+  owner_changed: 'Owner changed',
   drafted: 'Draft saved',
   setup_finished: 'Setup finished',
   discarded: 'Draft cancelled',
@@ -41,6 +42,7 @@ export function AccountStatusCard({
   onReview,
   staleAfter = 0,
   arrivedWith,
+  closeWhen = 0,
 }: {
   account: Account
   /** Called when a review opens, so a sentence another card still shows from an earlier page can go. */
@@ -49,6 +51,8 @@ export function AccountStatusCard({
   staleAfter?: number
   /** A sentence from a change made on another page (a plain Edit): the status line shows it and takes focus. */
   arrivedWith?: string
+  /** Counts reviews opened elsewhere on the page (Finish setup, Cancel draft): this card's review then closes. */
+  closeWhen?: number
 }) {
   const [review, setReview] = useState<Review | null>(null)
   const {
@@ -57,6 +61,7 @@ export function AccountStatusCard({
     begin: beginFocus,
     changed,
     clear,
+    abandon,
   } = useStateChangeFocus(review !== null, arrivedWith)
   const begin = () => {
     beginFocus()
@@ -65,6 +70,14 @@ export function AccountStatusCard({
   // The sentence an Edit ended with does not replace the account's own explanation (Archived, Closed).
   const [edited] = useState(arrivedWith)
   const explain = !message || message === edited
+  useEffect(() => {
+    if (closeWhen > 0) {
+      abandon()
+      setReview(null)
+    }
+    // Only a review opened elsewhere closes this one.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [closeWhen])
   useEffect(() => {
     if (staleAfter > 0) clear()
     // `clear` is new every render; only a change from the other card matters.
@@ -389,8 +402,11 @@ export function AccountStatusCard({
           <ul className="mt-1 text-sm text-ink-muted">
             {events.data.map((event, index) => (
               <li key={`${event.at}-${event.action}-${index}`}>
-                {EVENT_LABEL[event.action] ?? event.action}
+                {event.action === 'owner_changed' && typeTraits(account.type).plan
+                  ? 'Participant changed'
+                  : (EVENT_LABEL[event.action] ?? event.action)}
                 {event.action === 'renamed' && event.detail && ` from ${event.detail}`}
+                {event.action === 'owner_changed' && event.detail && `: ${event.detail}`}
                 {event.memberId &&
                   members?.find((m) => m.id === event.memberId) &&
                   ` by ${memberLabel(members.find((m) => m.id === event.memberId)!)}`}

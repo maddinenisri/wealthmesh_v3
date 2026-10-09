@@ -45,12 +45,18 @@ export function AccountDetailPage() {
   const account = useAccount(id)
   const { members } = useAccountContext()
   const [reviewsOpened, setReviewsOpened] = useState(0)
+  // Only one review is open at a time on an investment account: the status card and Finish setup / Cancel draft close
+  // each other.
+  const [investmentReviews, setInvestmentReviews] = useState(0)
   const [valueActivity, setValueActivity] = useState(0)
   // The sentence an Edit arrived with is read once; a reload or Back must not say it again.
-  const updated = (location.state as { updated?: string } | null)?.updated
+  const arrival = location.state as { updated?: string; returned?: boolean } | null
+  const updated = arrival?.updated
+  // Cancel on an Edit or Change owner page returns here with the heading focused, not the page body.
+  const [returned] = useState(arrival?.returned === true)
   const navigate = useNavigate()
   useEffect(() => {
-    if (updated) navigate('.', { replace: true, state: null })
+    if (updated || returned) navigate('.', { replace: true, state: null })
     // Once, when the page opens with a sentence.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -72,6 +78,7 @@ export function AccountDetailPage() {
       {account.data && (
         <>
           <PageHeader
+            focusTitle={returned}
             title={account.data.name}
             description={`${capitalNoun(typeNoun(account.data.type))} account${
               account.data.status === 'active'
@@ -98,6 +105,7 @@ export function AccountDetailPage() {
             onReview={() => setReviewsOpened((count) => count + 1)}
             staleAfter={valueActivity}
             arrivedWith={updated}
+            closeWhen={investmentReviews}
           />
           {isValued(account.data.type) ? (
             <ValuedAccount
@@ -110,6 +118,7 @@ export function AccountDetailPage() {
               account={account.data}
               members={members}
               reviewsOpened={reviewsOpened}
+              onReview={() => setInvestmentReviews((count) => count + 1)}
             />
           ) : (
             <Activity account={account.data} members={members} />

@@ -17,10 +17,22 @@ export const ACCOUNT_TYPES = [
     singleOwner: true,
   },
   { value: 'brokerage', label: 'Brokerage', investment: true },
-  { value: '401k', label: '401(k)', noun: '401(k)', investment: true },
-  { value: 'traditional_ira', label: 'Traditional IRA', noun: 'Traditional IRA', investment: true },
-  { value: 'roth_ira', label: 'Roth IRA', noun: 'Roth IRA', investment: true },
-  { value: 'hsa', label: 'Health savings account (HSA)', noun: 'HSA', investment: true },
+  { value: '401k', label: '401(k)', noun: '401(k)', investment: true, singleOwner: true },
+  {
+    value: 'traditional_ira',
+    label: 'Traditional IRA',
+    noun: 'Traditional IRA',
+    investment: true,
+    singleOwner: true,
+  },
+  { value: 'roth_ira', label: 'Roth IRA', noun: 'Roth IRA', investment: true, singleOwner: true },
+  {
+    value: 'hsa',
+    label: 'Health savings account (HSA)',
+    noun: 'HSA',
+    investment: true,
+    singleOwner: true,
+  },
   { value: 'loan', label: 'Loan', debt: true },
   { value: 'mortgage', label: 'Mortgage', debt: true },
 ] as const satisfies readonly {
@@ -74,7 +86,7 @@ export type TypeTraits = {
   plan: boolean
   /** True for a type held by exactly one member (the server's `AccountType.singleOwner`). */
   singleOwner: boolean
-  /** The label of the owner field: "Participant" for a plan, else "Owners". */
+  /** The label of the owner field: "Participant" for a plan, "Owner" for a type held by one member, else "Owners". */
   ownerLabel: string
   /** The label of the amount typed at setup and for a new value. */
   valueLabel: string
@@ -97,6 +109,9 @@ export function typeTraits(type: string): TypeTraits {
             : 'ledger'
   const noun = valuedNoun(type)
   const plan = noun === 'plan'
+  const singleOwner = ACCOUNT_TYPES.some(
+    (candidate) => candidate.value === type && 'singleOwner' in candidate,
+  )
   return {
     kind,
     institutionLabel: plan
@@ -119,10 +134,8 @@ export function typeTraits(type: string): TypeTraits {
           investment: 'Setup date',
         }[kind],
     plan,
-    singleOwner: ACCOUNT_TYPES.some(
-      (candidate) => candidate.value === type && 'singleOwner' in candidate,
-    ),
-    ownerLabel: plan ? 'Participant' : 'Owners',
+    singleOwner,
+    ownerLabel: plan ? 'Participant' : singleOwner ? 'Owner' : 'Owners',
     valueLabel: plan
       ? 'Plan-reported value'
       : kind === 'valued'

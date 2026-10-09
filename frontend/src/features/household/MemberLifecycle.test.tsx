@@ -60,10 +60,11 @@ describe('joint owners', () => {
     const { user } = renderRoute('/')
 
     const wealth = await screen.findByRole('region', { name: 'Accounts and wealth' })
-    expect(await within(wealth).findByText('Everyday Checking')).toBeInTheDocument()
+    const bank = await within(wealth).findByRole('region', { name: 'Bank money' })
+    expect(await within(bank).findByText('Everyday Checking')).toBeInTheDocument()
     expect(within(wealth).getByText(/Financial assets/)).toHaveTextContent('$5,000.00')
-    expect(within(wealth).getAllByRole('listitem')).toHaveLength(1)
-    expect(within(wealth).getByText('Maya, Sam')).toBeInTheDocument()
+    expect(within(bank).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(bank).getByText('Maya, Sam')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Rename household' }))
     const field = screen.getByLabelText('Household name')
@@ -72,7 +73,7 @@ describe('joint owners', () => {
     await user.click(screen.getByRole('button', { name: 'Save household name' }))
 
     expect(await screen.findByRole('heading', { name: 'Our Household' })).toBeInTheDocument()
-    expect(within(wealth).getByText('Maya, Sam')).toBeInTheDocument()
+    expect(within(bank).getByText('Maya, Sam')).toBeInTheDocument()
     expect(within(wealth).getByText(/Financial assets/)).toHaveTextContent('$5,000.00')
   })
 
@@ -124,7 +125,8 @@ describe('renaming a member', () => {
     expect(await within(members).findByText('Maya Patel')).toBeInTheDocument()
     expect(within(members).getByText('Earlier name: Maya')).toBeInTheDocument()
     const wealth = screen.getByRole('region', { name: 'Accounts and wealth' })
-    expect(await within(wealth).findByText('Maya Patel, Sam')).toBeInTheDocument()
+    const bank = within(wealth).getByRole('region', { name: 'Bank money' })
+    expect(await within(bank).findByText('Maya Patel, Sam')).toBeInTheDocument()
     expect(within(wealth).getByText(/Financial assets/)).toHaveTextContent('$5,000.00')
     expect(api.activity).toHaveLength(0)
   })
@@ -158,7 +160,8 @@ describe('removing a member', () => {
     const members = screen.getByRole('region', { name: 'Members' })
     expect(within(members).queryByText('Inactive')).not.toBeInTheDocument()
     const wealth = screen.getByRole('region', { name: 'Accounts and wealth' })
-    expect(await within(wealth).findByText('Maya, Sam')).toBeInTheDocument()
+    const bank = within(wealth).getByRole('region', { name: 'Bank money' })
+    expect(await within(bank).findByText('Maya, Sam')).toBeInTheDocument()
     expect(within(wealth).getByText(/Financial assets/)).toHaveTextContent('$5,000.00')
   })
 
@@ -172,7 +175,8 @@ describe('removing a member', () => {
     const members = screen.getByRole('region', { name: 'Members' })
     expect(await within(members).findByText('Inactive')).toBeInTheDocument()
     const wealth = screen.getByRole('region', { name: 'Accounts and wealth' })
-    expect(within(wealth).getByText('Maya, Sam (inactive)')).toBeInTheDocument()
+    const bank = within(wealth).getByRole('region', { name: 'Bank money' })
+    expect(within(bank).getByText('Maya, Sam (inactive)')).toBeInTheDocument()
 
     await user.click(within(members).getByRole('button', { name: 'Restore member Sam' }))
     await within(members).findByRole('button', { name: 'Remove member Sam' })

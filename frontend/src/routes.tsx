@@ -1,7 +1,11 @@
 import { createBrowserRouter, type RouteObject } from 'react-router'
 import { AccountDetailPage } from './features/accounts/AccountDetailPage'
 import { AccountsPage } from './features/accounts/AccountsPage'
-import { EditAccountPage, NewAccountPage } from './features/accounts/AccountFormPages'
+import {
+  EditAccountPage,
+  NewAccountPage,
+  OwnerCorrectionPage,
+} from './features/accounts/AccountFormPages'
 import { HouseholdPage } from './features/household/HouseholdPage'
 import { AppLayout } from './layout/AppLayout'
 import type { RouteHandle } from './layout/navigation'
@@ -23,6 +27,11 @@ export const routes: RouteObject[] = [
       { path: 'accounts/new', Component: NewAccountPage, handle: handle('Add account') },
       { path: 'accounts/:id', Component: AccountDetailPage, handle: handle('Account') },
       { path: 'accounts/:id/edit', Component: EditAccountPage, handle: handle('Edit account') },
+      {
+        path: 'accounts/:id/owner',
+        Component: OwnerCorrectionPage,
+        handle: handle('Change owner'),
+      },
       { path: 'spending', Component: SpendingPage, handle: handle('Spending') },
       { path: 'recurring', Component: RecurringPage, handle: handle('Recurring bills') },
       { path: 'categories', Component: CategoriesPage, handle: handle('Categories') },

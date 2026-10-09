@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { wealthKey } from './useWealth'
 import {
   changeAccountStatus,
+  correctOwners,
   createAccount,
   getAccountEvents,
   getAccountLifecycle,
   getAccount,
   getToday,
   listAccounts,
+  reviewOwnerCorrection,
   updateAccount,
   type AccountDetails,
   type NewAccount,
@@ -47,6 +49,28 @@ export function useUpdateAccount(id: string) {
   return useMutation({
     mutationFn: (details: AccountDetails) => updateAccount(id, details),
     // A name or owner shows in the account, its history and the wealth groups that list it.
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: accountsKey }),
+        queryClient.invalidateQueries({ queryKey: wealthKey }),
+      ]),
+  })
+}
+
+/** The review of an owner correction: reads the server's checks, writes nothing. */
+export function useReviewOwnerCorrection(id: string) {
+  return useMutation({
+    mutationFn: (v: { ownerMemberIds: string[]; enteredByMemberId: string | undefined }) =>
+      reviewOwnerCorrection(id, v.ownerMemberIds, v.enteredByMemberId),
+  })
+}
+
+/** Changes who owns the account: the account, its history, the list and the per-person views read it. */
+export function useCorrectOwners(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { ownerMemberIds: string[]; enteredByMemberId: string | undefined }) =>
+      correctOwners(id, v.ownerMemberIds, v.enteredByMemberId),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: accountsKey }),

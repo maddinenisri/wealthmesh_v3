@@ -191,11 +191,13 @@ describe('adding a defined benefit', () => {
 })
 
 describe('editing a defined benefit', () => {
-  it('V2_DB_001 edit keeps the Balance and offers the participant as a choice of one', async () => {
+  it('V2_DB_001 edit keeps the Balance and shows the participant with a link to change it', async () => {
     const api = mockApi(seed([plan()]))
     const { user } = renderRoute(`${PLAN}/edit`)
     const name = await screen.findByLabelText('Account name')
-    expect(screen.getByRole('radio', { name: 'Sam' })).toBeChecked()
+    // The participant is shown with a link to the reviewed change, not edited here (slice 18c).
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    expect(screen.getByText('Sam', { selector: 'strong' })).toBeVisible()
     await user.clear(name)
     await user.type(name, 'Harbor Cash Balance Main')
     const institution = screen.getByLabelText('Institution')

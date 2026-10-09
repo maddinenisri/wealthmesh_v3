@@ -360,6 +360,18 @@ function monthsThrough(from: string, to: string): string[] {
   return out
 }
 
+/** The server's refusal for several owners on a one-owner type, naming the type (`AccountType.singleOwnerMessage`). */
+function singleOwnerMessage(type: string): string {
+  const names: Record<string, string> = {
+    defined_benefit: 'A defined benefit has one participant',
+    '401k': 'A 401(k) has one owner',
+    traditional_ira: 'A Traditional IRA has one owner',
+    roth_ira: 'A Roth IRA has one owner',
+    hsa: 'An HSA has one owner',
+  }
+  return `${names[type] ?? 'This account has one owner'}. Choose one member.`
+}
+
 function problem(status: number, message: string) {
   return HttpResponse.json({ status, error: 'Error', message }, { status })
 }
@@ -2831,7 +2843,15 @@ export function mockApi(
       log(request)
       const asOf = new URL(request.url).searchParams.get('asOf') ?? today
       if (asOf > today) return problem(400, 'The date cannot be in the future')
-      const tracked = state.accounts.filter((a) => a.openedOn <= asOf && a.status !== 'draft')
+      const memberId = new URL(request.url).searchParams.get('memberId')
+      if (memberId && !state.members.some((m) => m.id === memberId))
+        return problem(400, 'Choose a member from this household')
+      const tracked = state.accounts.filter(
+        (a) =>
+          a.openedOn <= asOf &&
+          a.status !== 'draft' &&
+          (!memberId || a.ownerMemberIds.includes(memberId)),
+      )
       const lines = tracked.map((a) => {
         const valued = isValuedType(a.type)
         const point = valued ? valuedPoint(state.values, a, asOf) : null
@@ -2930,7 +2950,7 @@ export function mockApi(
         validateAccount(body.name, body.ownerMemberIds) ??
         validateOwners(state.members, body.ownerMemberIds, []) ??
         (traits.singleOwner && new Set(body.ownerMemberIds).size > 1
-          ? problem(400, 'A defined benefit has one participant. Choose one member.')
+          ? problem(400, singleOwnerMessage(body.type))
           : null) ??
         validateOpening(body, today) ??
         validateSide(body) ??
@@ -2976,17 +2996,69 @@ export function mockApi(
       const failure =
         validateAccount(body.name as string, body.ownerMemberIds as string[]) ??
         validateOwners(state.members, body.ownerMemberIds as string[], account.ownerMemberIds) ??
-        (typeTraits(account.type).singleOwner && new Set(body.ownerMemberIds as string[]).size > 1
-          ? problem(400, 'A defined benefit has one participant. Choose one member.')
+        (typeTraits(account.type).recordsCreator &&
+        account.status !== 'draft' &&
+        !sameOwners(body.ownerMemberIds as string[], account.ownerMemberIds)
+          ? problem(400, 'Use Change owner to change who owns this account. It is reviewed first.')
+          : null) ??
+        ((!typeTraits(account.type).recordsCreator || account.status === 'draft') &&
+        typeTraits(account.type).singleOwner &&
+        new Set(body.ownerMemberIds as string[]).size > 1
+          ? problem(400, singleOwnerMessage(account.type))
           : null)
       if (failure) return failure
+      const ownersBefore = account.ownerMemberIds
       const renamedFrom = account.name
       account.name = (body.name as string).trim()
       if (renamedFrom !== account.name)
         noteAccountEvent(account.id, 'renamed', body.enteredByMemberId, renamedFrom)
       account.institution = (body.institution as string | undefined)?.trim() || null
       account.ownerMemberIds = body.ownerMemberIds as string[]
+      if (!sameOwners(ownersBefore, account.ownerMemberIds))
+        noteAccountEvent(
+          account.id,
+          'owner_changed',
+          body.enteredByMemberId,
+          `${ownerWords(state.members, ownersBefore)} → ${ownerWords(state.members, account.ownerMemberIds)}`,
+        )
       return HttpResponse.json(account)
+    }),
+    // The owner correction (slice 18c): the review makes every check the save makes and writes nothing.
+    http.post('*/api/v1/accounts/:id/owner-correction/review', async ({ request, params }) => {
+      log(request)
+      const checked = checkOwnerCorrection(
+        state,
+        params.id as string,
+        (await request.json()) as Record<string, unknown>,
+      )
+      if ('failure' in checked) return checked.failure
+      const named = (ids: string[]) =>
+        ids
+          .map((id) => state.members.find((m) => m.id === id)!)
+          .map((m) => ({ id: m.id, name: m.label ? `${m.name} (${m.label})` : m.name }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      return HttpResponse.json({
+        accountId: checked.account.id,
+        name: checked.account.name,
+        type: checked.account.type,
+        from: named(checked.account.ownerMemberIds),
+        to: named(checked.owners),
+        balance: checked.account.balance.amount,
+      })
+    }),
+    http.post('*/api/v1/accounts/:id/owner-correction', async ({ request, params }) => {
+      log(request)
+      const body = (await request.json()) as Record<string, unknown>
+      const checked = checkOwnerCorrection(state, params.id as string, body)
+      if ('failure' in checked) return checked.failure
+      noteAccountEvent(
+        checked.account.id,
+        'owner_changed',
+        body.enteredByMemberId,
+        `${ownerWords(state.members, checked.account.ownerMemberIds)} → ${ownerWords(state.members, checked.owners)}`,
+      )
+      checked.account.ownerMemberIds = checked.owners
+      return HttpResponse.json(checked.account)
     }),
   )
 
@@ -2999,6 +3071,55 @@ function memberBody(member: MockMember) {
 }
 
 /** An inactive member cannot become a new owner but may stay on an account they already own. */
+const sameOwners = (a: string[], b: string[]) =>
+  [...new Set(a)].sort().join() === [...new Set(b)].sort().join()
+
+/** "Maya and Sam": the owners as the history names them. */
+function ownerWords(members: MockMember[], ids: string[]): string {
+  return ids
+    .map((id) => members.find((m) => m.id === id))
+    .filter((m): m is MockMember => !!m)
+    .map((m) => (m.label ? `${m.name} (${m.label})` : m.name))
+    .sort((a, b) => a.localeCompare(b))
+    .join(' and ')
+}
+
+/** The checks the server makes for an owner correction, shared by its review and its save. */
+function checkOwnerCorrection(
+  state: { accounts: MockAccount[]; members: MockMember[] },
+  id: string,
+  body: Record<string, unknown>,
+) {
+  const account = state.accounts.find((a) => a.id === id)
+  if (!account) return { failure: problem(404, 'Account not found') }
+  const traits = typeTraits(account.type)
+  const owners = [...new Set((body.ownerMemberIds as string[] | undefined) ?? [])]
+  const failure =
+    (!traits.recordsCreator
+      ? problem(400, 'Change who owns this account from Edit account')
+      : null) ??
+    (account.status === 'draft'
+      ? problem(409, `${account.name} is a draft. Choose its owner in Finish setup.`)
+      : null) ??
+    (owners.length === 0 ? problem(400, 'Choose an owner') : null) ??
+    (traits.singleOwner && owners.length > 1
+      ? problem(400, singleOwnerMessage(account.type))
+      : null) ??
+    validateOwners(state.members, owners, account.ownerMemberIds) ??
+    (sameOwners(owners, account.ownerMemberIds)
+      ? problem(
+          400,
+          traits.plan
+            ? 'Choose a different participant'
+            : traits.singleOwner
+              ? 'Choose a different owner'
+              : 'Choose different owners',
+        )
+      : null) ??
+    (!body.enteredByMemberId ? problem(400, 'Choose who entered this') : null)
+  return failure ? { failure } : { account, owners }
+}
+
 function validateOwners(members: MockMember[], owners: string[], current: string[]) {
   const added = owners.filter((id) => !current.includes(id))
   return members.some((m) => added.includes(m.id) && m.active === false)

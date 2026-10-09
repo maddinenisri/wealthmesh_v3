@@ -71,22 +71,31 @@ export function InvestmentAccount({
   account,
   members,
   reviewsOpened = 0,
+  onReview,
 }: {
   account: Account
   members: Member[] | undefined
   /** Counts the reviews opened on the status card; the sentence the page arrived with goes when one opens. */
   reviewsOpened?: number
+  /** Called when Finish setup or Cancel draft opens, so a review on the status card closes (one review at a time). */
+  onReview?: () => void
 }) {
   const navigate = useNavigate()
   const arrived = (useLocation().state as { notice?: string } | null)?.notice
   const [finishing, setFinishing] = useState(false)
   const [asking, setAsking] = useState(false)
-  const { message, statusRef, begin, changed, clear } = useStateChangeFocus(
+  const { message, statusRef, begin, changed, clear, abandon } = useStateChangeFocus(
     finishing || asking,
     arrived,
   )
   useEffect(() => {
-    if (reviewsOpened > 0) clear()
+    if (reviewsOpened > 0) {
+      // A review opened on the status card: the one here closes, so only one review is open at a time.
+      abandon()
+      setFinishing(false)
+      setAsking(false)
+      clear()
+    }
     // `clear` is a fresh function each render; only a new review should run this.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewsOpened])
@@ -173,6 +182,7 @@ export function InvestmentAccount({
               disabled={finishing || !opening.data || !today.data || !members}
               onClick={() => {
                 begin()
+                onReview?.()
                 setFinishing(true)
               }}
             >
@@ -184,6 +194,7 @@ export function InvestmentAccount({
               aria-describedby={member ? undefined : 'cancel-needs-member'}
               onClick={() => {
                 begin()
+                onReview?.()
                 setAsking(true)
               }}
             >

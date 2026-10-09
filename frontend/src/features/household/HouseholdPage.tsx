@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import type { Household } from '../../api/household'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import {
   Amount,
   Badge,
@@ -9,6 +9,7 @@ import {
   CardTitle,
   EmptyState,
   PageHeader,
+  Select,
   buttonStyles,
 } from '../../design-system'
 import type { Account } from '../../api/accounts'
@@ -19,11 +20,11 @@ import { accountTypeLabel, isDebt, typeTraits } from '../accounts/accountTypes'
 import { BalanceFigure } from '../accounts/BalanceFigure'
 import { cardSide, isCard } from '../accounts/cardBalance'
 import { STATUS_LABEL } from '../accounts/statusLabel'
-import { ownerNames } from '../accounts/ownerNames'
+import { memberLabel, ownerNames } from '../accounts/ownerNames'
 import { useAccountContext } from '../accounts/useAccountContext'
 import { CreateHouseholdForm, RenameHouseholdForm } from './HouseholdForms'
 import { MembersCard } from './MembersCard'
-import { accountsIn, alsoIn, overlapText } from './wealthGroups'
+import { accountsIn, alsoIn, overlapText, viewAccounts, viewSentence } from './wealthGroups'
 import { WealthOverTime } from './WealthOverTime'
 import { useHousehold } from '../../hooks/useHousehold'
 import { useMembers } from '../../hooks/useMembers'
@@ -31,6 +32,10 @@ import { useMembers } from '../../hooks/useMembers'
 export function HouseholdPage() {
   const household = useHousehold()
   const members = useMembers(household.data?.id)
+  // The person whose accounts are shown is in the address (`?view=`), so a reload and Back keep it (MEMBERS_002).
+  const [search, setSearch] = useSearchParams()
+  const viewId = search.get('view') ?? ''
+  const viewed = members.data?.find((member) => member.id === viewId)
 
   return (
     <div className="flex flex-col gap-6">
@@ -58,8 +63,16 @@ export function HouseholdPage() {
       {household.data && (
         <>
           <HouseholdDetails household={household.data} />
-          <AccountsAndWealth />
-          <WealthOverTime />
+          <AccountsAndWealth
+            viewId={viewed ? viewId : ''}
+            onView={(memberId) =>
+              setSearch(memberId ? { view: memberId } : {}, {
+                replace: true,
+                preventScrollReset: true,
+              })
+            }
+          />
+          <WealthOverTime person={viewed?.name} />
           {members.isError ? (
             <EmptyState
               title="Could not load members"
@@ -95,14 +108,38 @@ function HouseholdDetails({ household }: { household: Household }) {
 }
 
 /** Household-level money: financial assets and debts, with the accounts behind them. */
-function AccountsAndWealth() {
+function AccountsAndWealth({
+  viewId,
+  onView,
+}: {
+  viewId: string
+  onView: (memberId: string) => void
+}) {
   const accounts = useAccounts()
-  const wealth = useWealth()
   const { members } = useAccountContext()
-  // A draft investment account counts nothing; it is offered under Finish setup (HOLDINGS_001).
+  const wealth = useWealth(undefined, true, viewId || undefined)
+  const person = members?.find((member) => member.id === viewId)
+  // A draft investment account counts nothing; it is offered under Finish setup (HOLDINGS_001). In a person's view
+  // only the drafts that person owns are offered.
   const investmentDrafts = (accounts.data ?? []).filter(
-    (account) => account.status === 'draft' && typeTraits(account.type).kind === 'investment',
+    (account) =>
+      account.status === 'draft' &&
+      typeTraits(account.type).kind === 'investment' &&
+      (!viewId || account.ownerMemberIds.includes(viewId)),
   )
+  // The people who can be chosen: everyone who owns an account (an inactive owner stays, labeled).
+  const choices = (members ?? []).filter(
+    (member) =>
+      member.active || (accounts.data ?? []).some((a) => a.ownerMemberIds.includes(member.id)),
+  )
+  const lines = wealth.data ? viewAccounts(wealth.data) : []
+  const jointNames = lines
+    .filter(
+      (line) =>
+        ((accounts.data ?? []).find((a) => a.id === line.accountId)?.ownerMemberIds.length ?? 0) >
+        1,
+    )
+    .map((line) => line.name)
 
   return (
     <Card aria-labelledby="wealth-heading">
@@ -115,6 +152,23 @@ function AccountsAndWealth() {
       {wealth.isError && (
         <p role="alert" className="mt-3">
           {wealth.error.message}
+        </p>
+      )}
+      {choices.length > 1 && (
+        <div className="mt-3 max-w-xs">
+          <Select label="View" value={viewId} onChange={(event) => onView(event.target.value)}>
+            <option value="">Whole household</option>
+            {choices.map((member) => (
+              <option key={member.id} value={member.id}>
+                {memberLabel(member)}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+      {wealth.data && (
+        <p role="status" className="mt-2 max-w-prose text-sm text-ink-muted">
+          {viewSentence(person ? memberLabel(person) : null, lines, jointNames)}
         </p>
       )}
       {wealth.data && (
@@ -132,6 +186,39 @@ function AccountsAndWealth() {
       )}
       {accounts.data?.length === 0 && (
         <p className="mt-3 text-ink-muted">No accounts have been added</p>
+      )}
+      {wealth.data && accounts.data && lines.length > 0 && (
+        <section aria-labelledby="view-accounts-heading" className="mt-4">
+          <h3 id="view-accounts-heading" className="font-medium">
+            Accounts in this view
+          </h3>
+          <ul className="mt-2 divide-y divide-line border-y border-line">
+            {lines.map((line) => (
+              <li key={line.accountId} className="flex items-baseline justify-between gap-4 py-2">
+                <span>
+                  <Link to={`/accounts/${line.accountId}`} className="underline">
+                    {line.name}
+                  </Link>{' '}
+                  <span className="text-sm text-ink-muted">
+                    {accountTypeLabel(line.type)} ·{' '}
+                    {ownerNames(
+                      accounts.data.find((a) => a.id === line.accountId)?.ownerMemberIds ?? [],
+                      members,
+                    )}
+                  </span>
+                </span>
+                <span className="text-right whitespace-nowrap">
+                  <BalanceFigure type={line.type} amount={line.balance} overdraft={false} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {wealth.data && lines.length === 0 && accounts.data && accounts.data.length > 0 && (
+        <p className="mt-3 text-ink-muted">
+          {person ? `${memberLabel(person)} has no accounts yet` : 'No accounts are counted yet'}
+        </p>
       )}
       {accounts.data && accounts.data.length > 0 && (
         <>
