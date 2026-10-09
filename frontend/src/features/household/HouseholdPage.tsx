@@ -199,6 +199,11 @@ function AccountsAndWealth({
                   <Link to={`/accounts/${line.accountId}`} className="underline">
                     {line.name}
                   </Link>{' '}
+                  {line.status !== 'active' && (
+                    <>
+                      <Badge>{STATUS_LABEL[line.status] ?? line.status}</Badge>{' '}
+                    </>
+                  )}
                   <span className="text-sm text-ink-muted">
                     {accountTypeLabel(line.type)} ·{' '}
                     {ownerNames(

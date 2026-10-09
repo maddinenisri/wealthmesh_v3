@@ -147,3 +147,38 @@ describe('the per-person view (MEMBERS_002)', () => {
     )
   })
 })
+
+describe('the flat list of accounts in a view', () => {
+  it('V2_MEMBERS_002 an archived or closed account carries the same status label here as in its group', async () => {
+    const data = seed()
+    mockApi({
+      ...data,
+      accounts: [
+        ...data.accounts,
+        {
+          ...make('44444444-4444-4444-8444-444444444444', 'loan', 'Old Loan', [maya.id], '-100.00'),
+          status: 'archived',
+        },
+        {
+          ...make(
+            '44444444-4444-4444-8444-444444444445',
+            'other_asset',
+            'Old Boat',
+            [maya.id],
+            '900.00',
+          ),
+          status: 'closed',
+        },
+      ],
+    })
+    renderRoute('/')
+    const { list } = await thisView()
+    const loan = (await within(list).findByText('Old Loan')).closest('li')!
+    expect(within(loan).getByText('Archived')).toBeVisible()
+    const boat = within(list).getByText('Old Boat').closest('li')!
+    expect(within(boat).getByText('Closed')).toBeVisible()
+    // An active account has no label.
+    const checking = within(list).getByText('Everyday Checking').closest('li')!
+    expect(within(checking).queryByText(/Archived|Closed|Draft/)).not.toBeInTheDocument()
+  })
+})
