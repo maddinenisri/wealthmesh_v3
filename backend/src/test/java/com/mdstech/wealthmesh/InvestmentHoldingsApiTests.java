@@ -136,6 +136,16 @@ class InvestmentHoldingsApiTests extends PriceTestBase {
         // Reading the view twice changes nothing anywhere.
         webTestClient.get().uri("/api/v1/investments/holdings").exchange().expectStatus().isOk();
         wealth("").expectBody().jsonPath("$.financialAssets").isEqualTo("136500.00");
+        // Each person's view counts an account once and the people add up to the group: Sam has Redwood, Maya the
+        // other two (the checking account is Maya's too).
+        wealth("?memberId=" + samId).expectBody().jsonPath("$.investments.total").isEqualTo("21500.00")
+                .jsonPath("$.netWorth").isEqualTo("21500.00");
+        wealth("?memberId=" + mayaId).expectBody().jsonPath("$.investments.total").isEqualTo("110000.00")
+                .jsonPath("$.netWorth").isEqualTo("115000.00");
+        // The change explanation takes the price move as its own line and still balances (HOME 50 x $10.00).
+        webTestClient.get().uri("/api/v1/wealth/change?from=2026-09-01&to=2026-10-03").exchange().expectBody()
+                .jsonPath("$.priceChange").isEqualTo("500.00").jsonPath("$.income").isEqualTo("0.00")
+                .jsonPath("$.other").isEqualTo("0.00");
     }
 
     @Order(6)
