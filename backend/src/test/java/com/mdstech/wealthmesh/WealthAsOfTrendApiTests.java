@@ -98,7 +98,7 @@ class WealthAsOfTrendApiTests extends DefinedBenefitTestBase {
         }
     }
 
-    /** Every figure the readers give for a date, once: wealth totals, each group total and line, both people, each Balance. */
+    /** Every figure the readers give for a date: wealth totals, group totals and lines, both people, each Balance. */
     private Map<String, String> snapshot(String on) {
         Map<String, String> figures = new TreeMap<>();
         String wealth = wealthOn(on);
