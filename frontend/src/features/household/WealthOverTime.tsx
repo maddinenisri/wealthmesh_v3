@@ -69,6 +69,31 @@ export function WealthOverTime({ person }: { person?: string }) {
             Household wealth is financial assets minus debts.
           </p>
           <OlderPricesNote wealth={wealth.data} />
+          {wealth.data.bankMoney.accounts.length > 0 && (
+            <section aria-label="Checking and savings balances on this date">
+              <h3 className="font-medium">Bank money</h3>
+              <ul className="mt-2 divide-y divide-line border-y border-line">
+                {wealth.data.bankMoney.accounts.map((line) => (
+                  <li key={line.accountId} className="py-2">
+                    <span className="flex flex-wrap items-baseline justify-between gap-x-4">
+                      <span>
+                        {line.name}{' '}
+                        <span className="text-sm text-ink-muted">
+                          {accountTypeLabel(line.type)}
+                        </span>
+                      </span>
+                      <span className="ml-auto">
+                        <Amount value={Number(line.balance)} />
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-sm">
+                Total <Amount value={Number(wealth.data.bankMoney.total)} />
+              </p>
+            </section>
+          )}
           {wealth.data.investments.accounts.length > 0 && (
             <section aria-label="Investment balances on this date">
               <h3 className="font-medium">Investments</h3>
@@ -82,7 +107,9 @@ export function WealthOverTime({ person }: { person?: string }) {
                           {accountTypeLabel(line.type)}
                         </span>
                       </span>
-                      <Amount value={Number(line.balance)} />
+                      <span className="ml-auto">
+                        <Amount value={Number(line.balance)} />
+                      </span>
                     </span>
                     {line.valueDate && (
                       <span className="block text-sm text-ink-muted">
@@ -107,7 +134,9 @@ export function WealthOverTime({ person }: { person?: string }) {
                           {accountTypeLabel(line.type)}
                         </span>
                       </span>
-                      <Amount value={Number(line.balance)} />
+                      <span className="ml-auto">
+                        <Amount value={Number(line.balance)} />
+                      </span>
                     </span>
                     <span className="block text-sm text-ink-muted">
                       Value dated {line.valueDate} {line.stale && <Badge>Older value</Badge>}
@@ -238,7 +267,9 @@ function Explanation({
                 {row.label}
                 {row.note && <span className="block text-sm text-ink-muted">{row.note}</span>}
               </span>
-              <Amount value={row.value} />
+              <span className="ml-auto">
+                <Amount value={row.value} />
+              </span>
             </li>
           ))}
       </ul>
@@ -295,8 +326,7 @@ function Explanation({
             return (
               <li key={move.accountId}>
                 {move.name} price {delta > 0 ? 'increase' : 'decrease'} of{' '}
-                {formatMoney(Math.abs(delta))} ({formatMoney(Number(move.start))} to{' '}
-                {formatMoney(Number(move.end))}), a price move rather than income or spending.
+                {formatMoney(Math.abs(delta))}, a price move rather than income or spending.
               </li>
             )
           })}

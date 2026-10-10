@@ -78,6 +78,7 @@ for (const width of [710, 1280]) {
     let bankBefore = 0
     let changeBefore = 0
     let priceBefore = 0
+    let flatBefore = 0
 
     test(`V2_WEALTH_001 Bank money lists both accounts with their amounts and total, an account opens to its September 30 Balance and history (${width}px)`, async ({
       page,
@@ -87,11 +88,12 @@ for (const width of [710, 1280]) {
       const before = await changeOver(page, '2026-09-30', '2026-10-03')
       changeBefore = Number(before.change)
       priceBefore = Number(before.priceChange)
+      flatBefore = Number((await changeOver(page, '2026-09-30', '2026-10-01')).change)
       checking = await openAccount(page, owner, 'checking', `${tag} Checking`, '5120.00')
       await openAccount(page, owner, 'savings', `${tag} Savings`, '12000.00')
 
       await page.goto('/')
-      const bank = page.getByRole('region', { name: 'Bank money' })
+      const bank = page.getByRole('region', { name: 'Bank money', exact: true })
       await expect(bank.getByRole('listitem').filter({ hasText: `${tag} Checking` })).toContainText(
         '$5,120.00',
       )
@@ -101,6 +103,19 @@ for (const width of [710, 1280]) {
       // The group total moved by the two accounts: $17,120.00 on Sep 30, whatever else the shared database holds.
       const after = Number((await wealthOn(page, '2026-09-30')).bankMoney.total)
       expect(after - bankBefore).toBeCloseTo(17120, 2)
+      // The dated card lists the same two accounts on September 30, with their total moved by 17,120.
+      const dated = page.getByRole('region', { name: 'Wealth on a date' })
+      await dated.getByLabel('Show wealth on').fill('2026-09-30')
+      const onDate = dated.getByRole('region', {
+        name: 'Checking and savings balances on this date',
+      })
+      await expect(
+        onDate.getByRole('listitem').filter({ hasText: `${tag} Checking` }),
+      ).toContainText('$5,120.00')
+      await expect(
+        onDate.getByRole('listitem').filter({ hasText: `${tag} Savings` }),
+      ).toContainText('$12,000.00')
+      await expect(onDate).toContainText(`Total ${money(after)}`)
       await expectNoSidewaysScroll(page)
 
       await bank.getByRole('link', { name: new RegExp(`${tag} Checking`) }).click()
@@ -190,9 +205,14 @@ for (const width of [710, 1280]) {
       await expect(shown).toContainText(
         `Wealth went from ${money(Number(flat.startWealth))} on 2026-09-30 to ${money(Number(flat.endWealth))} on 2026-10-01: a change of ${money(Number(flat.change))}.`,
       )
-      // Oct 1 has the income and not the Oct 2 price, so it differs from Oct 3 by exactly the price.
+      // Judged by delta (other specs have entries on Oct 2 and 3): since the setup of this width, Oct 3 gained the
+      // income and the price and Oct 1 only the income, so they differ by exactly the $1,000.00 price.
       expect(Number(flat.priceChange)).toBeCloseTo(0, 2)
-      expect(Number(change.change) - Number(flat.change)).toBeCloseTo(Number(change.priceChange), 2)
+      expect(Number(flat.change) - flatBefore).toBeCloseTo(2500, 2)
+      expect(Number(change.change) - changeBefore - (Number(flat.change) - flatBefore)).toBeCloseTo(
+        1000,
+        2,
+      )
       expect(octNet - sepNet).toBeCloseTo(Number(change.change), 2)
       await expectNoSidewaysScroll(page)
     })

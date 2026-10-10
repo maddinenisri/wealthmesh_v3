@@ -150,7 +150,7 @@ describe('older prices on the Household page (WEALTH_004)', () => {
     fireEvent.change(within(card).getByLabelText('To'), { target: { value: '2026-09-30' } })
     const moves = await within(card).findByRole('list', { name: 'Price changes' })
     expect(moves).toHaveTextContent(
-      'Redwood Brokerage price increase of $1,500.00 ($0.00 to $1,500.00), a price move rather than income or spending.',
+      'Redwood Brokerage price increase of $1,500.00, a price move rather than income or spending.',
     )
   })
 

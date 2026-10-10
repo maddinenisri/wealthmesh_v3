@@ -101,6 +101,23 @@ describe('the September 30 snapshot and its trend (WEALTH_001, WEALTH_009)', () 
     expect(investments).not.toHaveTextContent('$22,500.00')
   })
 
+  it('V2_WEALTH_001 the dated card lists Bank money on September 30 with both accounts and the $17,120.00 total', async () => {
+    mockApi(seed())
+    renderRoute('/')
+    const card = await screen.findByRole('region', { name: 'Wealth on a date' })
+    fireEvent.change(within(card).getByLabelText('Show wealth on'), {
+      target: { value: '2026-09-30' },
+    })
+    const bank = await within(card).findByRole('region', {
+      name: 'Checking and savings balances on this date',
+    })
+    expect(within(bank).getByText('Everyday Checking').closest('li')).toHaveTextContent('$5,120.00')
+    expect(within(bank).getByText('Emergency Savings').closest('li')).toHaveTextContent(
+      '$12,000.00',
+    )
+    expect(bank).toHaveTextContent('Total $17,120.00')
+  })
+
   it('V2_WEALTH_009 the trend reads both dates and the increase, and another end date gives another answer', async () => {
     mockApi(seed())
     renderRoute('/')
