@@ -510,3 +510,38 @@ Writers: none new (no writer is added in 19d).
 WEALTH_001's "history" is the existing Balance-on-a-date control plus the activity list: asserted, no as-of history view is built.
 
 Questions: Q-086 below.
+
+## 19d proof before Checkpoint 2
+
+Built: `WealthAsOfTrendApiTests` (5 tests, fresh context, exact scenario figures), `WealthSnapshot.test.tsx` (4 Vitest), `29-wealth-trend.spec.ts` (2 tests x 2 widths, judged by delta on the shared database), the change mock reads wealth at both ends. WEALTH_009 is off `deferred.txt` and slice 18, on slice 19 (`slices.txt`, `dependency-map.md`). Coverage: slice 19 14 of 14, slice 18 20 of 20.
+
+Plants (each alone; restored from a copy, `git status` clean after):
+
+| Plant | Backend `WealthAsOfTrendApiTests` | e2e `29-wealth-trend` (line) |
+| --- | --- | --- |
+| P1 `perAccount(":on")` to `CURRENT` (later price leaks) | red at 201, 251 | red at 158 (Sep 30 net worth moves) |
+| P2 activity `occurred_on <= :on` to a far date (later activity leaks) | red at 201, 251 | red at 149 |
+| P3 `priceChange = ZERO` | red at 206, 292 | red at 163 |
+| P4 trend sentence swaps start for end | | red at 176; Vitest red |
+| P5 Wealth on a date ignores the chosen date | | red at 172; Vitest red |
+| P6 Balance on a date never reads the date | | red at 109 |
+| P7 trend ignores a later change of its end date | | red at 190 |
+| P8 dated card has no Bank money list | | red at 110; Vitest red |
+
+Validator (independent, commit ebc548e): backend 949 tests 0 failed (8m17s), Vitest 541, e2e 382 passed (3m19s), lint, typecheck, format, check clean; three of its own plants red. No defect. Findings and handling: activity-list content and per-account card Balance asserted (fixed); e2e From/To `exact: true` (fixed); e2e second end date was Sep 30 to Sep 30 (now Oct 1, judged by delta, fixed); notes said 13 of 13 (fixed to 14 of 14); the mock `change` ignores income and spending (Low, logged: it agrees only for the 19d cases).
+
+Visual review (710 and 1280; 0 High, 3 Medium, 7 Low):
+
+| # | Finding | Sev | Result |
+| --- | --- | --- | --- |
+| 1 | The dated card could not show Bank money on Sep 30 (WEALTH_001 "opens the checking and savings total") | Medium | Fixed: "Checking and savings balances on this date" with total (Vitest and e2e red first; P8) |
+| 2 | Price-move lines "($0.00 to -$1,000.00)" read as a negative price | Medium | Fixed: brackets dropped (Prices.test red first) |
+| 3 | At 710 the Asset value change amount fell under its note, left | Medium | Fixed: amounts right-aligned when a row wraps (also the Investments and Property lists, finding 4) |
+| 5 | "Net worth" vs "Household wealth" for one figure | Low | Logged (already noted in 19c) |
+| 6 | One sentence shows amounts two ways | Low | Logged |
+| 7 | The aria-live area wraps all lists; the What changed result is not announced | Low | Logged |
+| 8 | Narrow Description column at 710; Oct rows above the Sep 30 Balance card | Low | Logged |
+| 9 | Two dev accounts share a name ("VR17 710 Empty") | Low | Logged (dev data) |
+| 10 | "Balance correction" wording for a card | Low | Logged |
+
+Full e2e on the final code after these fixes: 382 passed (3m17s, two earlier full runs failed on a pitfall-52 name collision in `13-lifecycle` ("Bank money" matched the new region by substring; the region is now "Checking and savings balances on this date") and on my own e2e assumption that nothing else is dated Oct 1 to 3 (now judged by delta)).
