@@ -460,3 +460,5 @@ Backend flake check 3 x 944, 0 failed (about 25 min). Vitest 8 x 538 passed (93 
 - Logged, not fixed: Q-080/Q-081 kept; "is restored once" wording; difference direction not stated; "Net worth" vs "Household wealth"; Wealth on a date lists only Investments and Property; no menu item for /investments; no reason field on removal; unexplained 20-cent drift in dev Household wealth.
 - Open failures: Flyway "Unable to obtain connection" x2, OwnerCorrection Vitest x1.
 - Dev DB: Cowork left two statements on VR19b Brokerage.
+
+Fault 1 and 2 follow-up (advisor): the "Record a price" click first left focus on the page (the Attach button's return-focus fired); `returnFocus.cancel()` fixed it, red first in the StatementDifference Vitest (without the fix: focus not inside the price form). Also stated plainly: the pre-fix red for faults 1 and 2 is the backend test and Vitest, not the e2e (the e2e assertions were added green-after). Fault 1's fix is wider than the report: the dated line now shows on every active investment statement whose figure differs from the Balance, not only the one backing the opening, so a card with several statements shows a line per row.

@@ -81,6 +81,8 @@ export function StatementsCard({
             onRecordPrice={
               onRecordPrice &&
               (() => {
+                // The price form takes focus itself; the Attach button must not take it back.
+                returnFocus.cancel()
                 setForm(null)
                 onRecordPrice()
               })

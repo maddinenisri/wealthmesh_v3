@@ -97,7 +97,9 @@ describe('a statement reviewed against the calculated Balance (HOLDINGS_005)', (
     await user.click(screen.getByRole('button', { name: 'Review' }))
     const review = await screen.findByRole('region', { name: 'Review the statement' })
     await user.click(within(review).getByRole('button', { name: 'Record a price' }))
-    expect(await screen.findByRole('heading', { name: /Record a price for/ })).toBeVisible()
+    const heading = await screen.findByRole('heading', { name: /Record a price for/ })
+    // The price form's Panel takes focus (its wrapper holds the heading); the Attach button must not take it back.
+    await waitFor(() => expect(document.activeElement?.contains(heading)).toBe(true))
     expect(api.statements).toHaveLength(0)
   })
 
@@ -110,7 +112,7 @@ describe('a statement reviewed against the calculated Balance (HOLDINGS_005)', (
     expect(within(review).queryByRole('button', { name: 'Record a price' })).toBeNull()
   })
 
-  it('V2_HOLDINGS_005 a saved statement dated before today says what it shows on its date and what the Balance is now, with or without supporting the opening', async () => {
+  it('V2_HOLDINGS_005 a saved investment statement says what it shows on its date and what the Balance is now, with or without supporting the opening', async () => {
     mockApi(seed)
     const { user } = renderRoute(`/accounts/${ID}`)
     await fillStatement(user, '21600')

@@ -78,3 +78,5 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
 
 One line per item: pass or fail, and the evidence.
 - [ ] A "red first" or repeated-run claim in the notes names the failing test and line per fault, or the elapsed time per run, pasted from the output (19a "872 x 3" was one run; 19b faults 2 and 3 had no red line).
+- [ ] A sentence that compares two figures is tested with two different dates (19c Cowork 1), and a button that closes one panel to open another asserts where focus lands.
+- [ ] A commit is gated on the test exit code, not chained after a grep; never overlap two Gradle runs (the pre-push hook runs the full suite).

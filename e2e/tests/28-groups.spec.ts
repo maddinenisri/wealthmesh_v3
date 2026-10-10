@@ -210,6 +210,24 @@ for (const width of [710, 1280]) {
       )
       await expect(review.getByRole('button', { name: 'Record a price' })).toBeVisible()
       await expectNoSidewaysScroll(page)
+      // Record a price opens the price form and focus stays inside it (not on the Attach button).
+      await review.getByRole('button', { name: 'Record a price' }).click()
+      await expect(page.getByRole('heading', { name: /Record a price for/ })).toBeVisible()
+      expect(
+        await page.evaluate(
+          () =>
+            !!document.activeElement?.contains(
+              [...document.querySelectorAll('h2')].find((h) =>
+                h.textContent?.startsWith('Record a price for'),
+              ) ?? null,
+            ),
+        ),
+      ).toBe(true)
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await page.getByRole('button', { name: 'Attach statement' }).click()
+      await page.getByLabel('Statement date').fill('2026-09-30')
+      await page.getByLabel('Statement balance').fill('21400')
+      await page.getByRole('button', { name: 'Review' }).click()
       // Back keeps the values and focuses the form heading; Cancel returns to the opener and saves nothing.
       await page.getByRole('button', { name: 'Back' }).click()
       await expect(page.getByRole('heading', { name: 'Attach statement' })).toBeFocused()
