@@ -151,6 +151,7 @@ export function StatementForm({
             variant="secondary"
             onClick={() => {
               cameBack.current = true
+              attach.reset()
               setDifference(null)
             }}
             disabled={saving}

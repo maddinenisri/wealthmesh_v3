@@ -117,7 +117,8 @@ function SecurityDetail({ security, total }: { security: GroupSecurity; total: s
       {partly && (
         <p className="max-w-prose text-sm">
           Full purchase cost and full gain say {NOT_AVAILABLE} because{' '}
-          {Number(security.shares) - Number(security.knownShares)} shares have unknown cost.
+          {Number((Number(security.shares) - Number(security.knownShares)).toFixed(4))} shares have
+          unknown cost.
         </p>
       )}
       {security.shareOfBalance !== null && (

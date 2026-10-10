@@ -635,6 +635,8 @@ export function mockApi(
     const owner = state.accounts.find((a) => a.id === accountId)
     if (owner?.status === 'draft')
       return problem(409, `${owner.name} is a draft. Finish setting it up first.`)
+    if (owner?.status === 'closed')
+      return problem(409, `${owner.name} is closed, so it takes no statement.`)
     if (replaces && state.statements.find((s) => s.id === replaces)?.removedAt)
       return problem(409, 'This statement was removed, so it cannot be revised.')
     const shown = owner ? signedFor(owner, body.balance, body.balanceSide) : Number(body.balance)
@@ -2691,6 +2693,8 @@ export function mockApi(
       }
       const account = state.accounts.find((a) => a.id === params.id)
       if (!account) return problem(404, `Account not found: ${String(params.id)}`)
+      if (account.status === 'closed')
+        return problem(409, `${account.name} is closed, so it takes no statement.`)
       if (body.proposedCorrection === 'cash' || body.proposedCorrection === 'quantity')
         return problem(
           400,

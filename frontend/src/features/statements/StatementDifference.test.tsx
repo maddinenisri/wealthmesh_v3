@@ -140,6 +140,40 @@ describe('a statement reviewed against the calculated Balance (HOLDINGS_005)', (
   })
 })
 
+describe('the review refuses what the save refuses (HOLDINGS_005)', () => {
+  it('V2_HOLDINGS_005 a closed account is refused in the review, shown at the form, and nothing is saved', async () => {
+    const api = mockApi({ ...seed, accounts: [{ ...brokerage(), status: 'closed' }] })
+    const { user } = renderRoute(`/accounts/${ID}`)
+    await fillStatement(user, '21400')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    expect(
+      await screen.findByText('Redwood Brokerage is closed, so it takes no statement.'),
+    ).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Review the statement' })).not.toBeInTheDocument()
+    expect(api.statements).toHaveLength(0)
+  })
+
+  it('V2_HOLDINGS_005 a save refused after the review shows its error, and Back clears it from the form', async () => {
+    const api = mockApi(seed)
+    const { user } = renderRoute(`/accounts/${ID}`)
+    await fillStatement(user, '21400')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    await screen.findByRole('heading', { name: 'Review the statement' })
+    // The account is closed by someone else between the review and Save.
+    api.accounts[0].status = 'closed'
+    await user.click(screen.getByRole('button', { name: 'Save statement' }))
+    expect(
+      await screen.findByText('Redwood Brokerage is closed, so it takes no statement.'),
+    ).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await focused(await screen.findByRole('heading', { name: 'Attach statement' }))
+    expect(
+      screen.queryByText('Redwood Brokerage is closed, so it takes no statement.'),
+    ).not.toBeInTheDocument()
+    expect(api.statements).toHaveLength(0)
+  })
+})
+
 describe('Undo of a removed statement (SUPPORTING_RECORD_002)', () => {
   const linked: MockOpening = { ...opened, statementId: STATEMENT }
   const statement = {
@@ -191,6 +225,15 @@ describe('Undo of a removed statement (SUPPORTING_RECORD_002)', () => {
     const undo = await screen.findByRole('button', { name: 'Undo removal' })
     expect(undo).toBeDisabled()
     expect(screen.getByLabelText('Entered by')).toBeVisible()
+  })
+
+  it('V2_SUPPORTING_RECORD_002 a statement that backs no opening is restored without saying it is linked', async () => {
+    mockApi({ ...seed, statements: [{ ...removed }] })
+    const { user } = renderRoute(`/accounts/${ID}`)
+    await user.click(await screen.findByRole('button', { name: 'Undo removal' }))
+    const sentence = await screen.findByText(/^September 1 statement is restored once/)
+    expect(sentence).not.toHaveTextContent('linked to the opening review')
+    expect(sentence).toHaveTextContent('The removal and the Undo are in history.')
   })
 
   it('V2_SUPPORTING_RECORD_002 the removal review says Undo is available afterwards', async () => {

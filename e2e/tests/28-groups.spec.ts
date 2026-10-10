@@ -359,7 +359,10 @@ for (const width of [710, 1280]) {
       await page.goto('/')
       const card = page.getByRole('region', { name: 'Wealth on a date' })
       await card.getByLabel('Show wealth on').fill('2026-09-30')
-      await expect(card.getByText(/^Debts/)).toBeVisible()
+      const debts = await (await page.request.get('/api/v1/wealth?asOf=2026-09-30')).json()
+      await expect(card.getByText(/^Debts/)).toContainText(
+        `$${Number(debts.debts).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+      )
       await expect(card.getByText(/^Financial assets/)).toBeVisible()
       await expectNoSidewaysScroll(page)
     })

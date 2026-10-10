@@ -319,7 +319,9 @@ function UndoRemoval({
           restore.mutate(undefined, {
             onSuccess: () =>
               onDone(
-                `${name} is restored once. It is an active supporting statement again, still linked to the opening review, and the recorded cash, shares and price and the Balance are as they were. The removal and the Undo are in history.`,
+                `${name} is restored once. It is an active supporting statement again${
+                  statement.usedByOpening ? ', still linked to the opening review,' : ''
+                } and the recorded cash, shares and price and the Balance are as they were. The removal and the Undo are in history.`,
               ),
           })
         }

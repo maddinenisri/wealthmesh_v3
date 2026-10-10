@@ -226,6 +226,6 @@ describe('Wealth on a date shows debts', () => {
       target: { value: '2026-09-30' },
     })
     expect(await within(card).findByText(/Household wealth on 2026-09-30/)).toBeVisible()
-    expect(within(card).getByText(/^Debts/)).toHaveTextContent('Debts')
+    expect(within(card).getByText(/^Debts/)).toHaveTextContent('Debts $1,000.00')
   })
 })
