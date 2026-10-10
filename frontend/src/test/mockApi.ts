@@ -2728,7 +2728,7 @@ export function mockApi(
           ? `The statement total is ${dollars(total)} and the calculated Balance on ${body.statementOn} is ${dollars(calculated)}: a difference of ${dollars(difference)}. Which cash, quantity or price needs correction? Cash and quantity corrections are not available yet. Only a price can be recorded now. Saving the statement changes no Balance.`
           : `The statement total ${dollars(total)} matches the calculated Balance on ${body.statementOn}. Nothing needs correcting, and saving the statement changes no Balance.`,
         afterSave: differs
-          ? `Statement saved. The statement total is ${dollars(total)} and the calculated Balance on ${body.statementOn} is ${dollars(calculated)}: a difference of ${dollars(difference)}. The Balance stays ${dollars(calculated)}; a statement never changes it. To correct the difference, record a price.`
+          ? `Statement saved. The statement total is ${dollars(total)} and the calculated Balance on ${body.statementOn} is ${dollars(calculated)}: a difference of ${dollars(difference)}. A statement never changes the Balance. To correct the difference, record a price.`
           : `Statement saved. It matches the calculated Balance on ${body.statementOn}. A statement never changes the Balance.`,
       })
     }),

@@ -694,7 +694,9 @@ describe('a supporting statement and the opening', () => {
     })
     renderRoute(`/accounts/${ID}`)
     expect(
-      await screen.findByText(/The statement shows \$2,600\.00; the Balance is \$20,000\.00/),
+      await screen.findByText(
+        /The statement shows \$2,600\.00 on 2026-09-01; the Balance now is \$20,000\.00/,
+      ),
     ).toBeVisible()
   })
 

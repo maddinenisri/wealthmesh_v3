@@ -250,6 +250,15 @@ export function InvestmentAccount({
           members={members}
           today={today.data}
           opening={opening.data}
+          onRecordPrice={
+            account.status === 'active' && (opening.data?.holdings.length ?? 0) > 0
+              ? () => {
+                  begin()
+                  onReview?.()
+                  setPricing(true)
+                }
+              : undefined
+          }
         />
       )}
     </>

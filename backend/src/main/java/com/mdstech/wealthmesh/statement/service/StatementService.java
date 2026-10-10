@@ -247,8 +247,8 @@ public class StatementService {
                 Money.format(difference), true, List.of("price"), message,
                 "Statement saved. The statement total is " + Money.dollars(total) + " and the calculated Balance on "
                         + parsed.statementOn() + " is " + Money.dollars(calculated) + ": a difference of "
-                        + Money.dollars(difference.abs()) + ". The Balance stays " + Money.dollars(calculated)
-                        + "; a statement never changes it. To correct the difference, record a price.");
+                        + Money.dollars(difference.abs()) + ". A statement never changes the Balance. "
+                        + "To correct the difference, record a price.");
     }
 
     /** What removing a statement does: who uses it, and that the recorded cash, shares, price and Balance stay. */

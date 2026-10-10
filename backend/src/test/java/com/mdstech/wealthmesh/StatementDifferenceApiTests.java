@@ -73,7 +73,12 @@ class StatementDifferenceApiTests extends PriceTestBase {
                         .contains(LATER).contains("changes no Balance"))
                 .jsonPath("$.afterSave").value(text -> assertThat(String.valueOf(text)).startsWith(
                         "Statement saved. The statement total is $21,400.00").contains("difference of $100.00")
-                        .contains("The Balance stays $21,500.00").contains("record a price"));
+                        .contains("A statement never changes the Balance.").doesNotContain("The Balance stays")
+                        .contains("record a price"));
+        // A date before the latest price: the sentence never calls the date's figure "the Balance" (Cowork 19c).
+        review(redwood, body("2026-09-29", "21400.00", null)).expectStatus().isOk().expectBody()
+                .jsonPath("$.afterSave").value(text -> assertThat(String.valueOf(text))
+                        .contains("calculated Balance on 2026-09-29 is $21,000.00").doesNotContain("Balance stays"));
         assertThat(statements(redwood)).isZero();
         assertBalance(redwood, "21500.00");
     }

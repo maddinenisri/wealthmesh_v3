@@ -90,6 +90,39 @@ describe('a statement reviewed against the calculated Balance (HOLDINGS_005)', (
     expect(api.accounts[0].balance.amount).toBe('21500.00')
   })
 
+  it('V2_HOLDINGS_005 the differing review offers Record a price, which opens the price form and saves no statement', async () => {
+    const api = mockApi(seed)
+    const { user } = renderRoute(`/accounts/${ID}`)
+    await fillStatement(user, '21400')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    const review = await screen.findByRole('region', { name: 'Review the statement' })
+    await user.click(within(review).getByRole('button', { name: 'Record a price' }))
+    expect(await screen.findByRole('heading', { name: /Record a price for/ })).toBeVisible()
+    expect(api.statements).toHaveLength(0)
+  })
+
+  it('V2_HOLDINGS_005 a matching review has no Record a price control', async () => {
+    mockApi(seed)
+    const { user } = renderRoute(`/accounts/${ID}`)
+    await fillStatement(user, '21500')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    const review = await screen.findByRole('region', { name: 'Review the statement' })
+    expect(within(review).queryByRole('button', { name: 'Record a price' })).toBeNull()
+  })
+
+  it('V2_HOLDINGS_005 a saved statement dated before today says what it shows on its date and what the Balance is now, with or without supporting the opening', async () => {
+    mockApi(seed)
+    const { user } = renderRoute(`/accounts/${ID}`)
+    await fillStatement(user, '21600')
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    await user.click(await screen.findByRole('button', { name: 'Save statement' }))
+    expect(
+      await screen.findByText(
+        /The statement shows \$21,600\.00 on 2026-09-30; the Balance now is \$21,500\.00/,
+      ),
+    ).toBeVisible()
+  })
+
   it('V2_HOLDINGS_005 Save statement ends with the difference in a sentence, focus on the heading, and the Balance unchanged', async () => {
     const api = mockApi(seed)
     const { user } = renderRoute(`/accounts/${ID}`)
@@ -101,7 +134,8 @@ describe('a statement reviewed against the calculated Balance (HOLDINGS_005)', (
     )
     expect(sentence).toHaveAttribute('role', 'status')
     expect(sentence).toHaveTextContent('a difference of $100.00')
-    expect(sentence).toHaveTextContent('The Balance stays $21,500.00')
+    expect(sentence).toHaveTextContent('A statement never changes the Balance.')
+    expect(sentence).not.toHaveTextContent('The Balance stays')
     expect(sentence).toHaveTextContent('To correct the difference, record a price.')
     await focused(screen.getByRole('heading', { name: 'Supporting statements' }))
     expect(api.statements).toHaveLength(1)

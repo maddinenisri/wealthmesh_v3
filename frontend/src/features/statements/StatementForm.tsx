@@ -37,6 +37,7 @@ export function StatementForm({
   today,
   replacing,
   linkable = false,
+  onRecordPrice,
   onDone,
 }: {
   accountId: string
@@ -49,6 +50,8 @@ export function StatementForm({
   replacing?: Statement
   /** An investment account whose opening review uses no statement yet can link this one to it. */
   linkable?: boolean
+  /** The review of a differing investment statement offers the price form (cash and quantity come later). */
+  onRecordPrice?: () => void
   /** `saved` is true after a statement was saved; Cancel leaves it out. `sentence` replaces the usual one. */
   onDone: (saved?: boolean, sentence?: string) => void
 }) {
@@ -135,7 +138,7 @@ export function StatementForm({
         <FormAlert message={attach.error?.message} />
         <p className="mt-3 max-w-prose text-sm">{difference.review.message}</p>
         <EnteredBy members={members} member={member} setMemberId={setMemberId} />
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           <Button
             onClick={() =>
               attach.mutate(
@@ -158,6 +161,11 @@ export function StatementForm({
           >
             Back
           </Button>
+          {difference.review.differs && onRecordPrice && (
+            <Button variant="secondary" onClick={onRecordPrice} disabled={saving}>
+              Record a price
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => onDone()} disabled={saving}>
             Cancel
           </Button>

@@ -35,6 +35,7 @@ export function StatementsCard({
   members,
   today,
   opening,
+  onRecordPrice,
 }: {
   accountId: string
   accountType: string
@@ -44,6 +45,8 @@ export function StatementsCard({
   today: string | undefined
   /** An investment account's opening: a statement can back it, and removing the statement keeps it. */
   opening?: OpeningView
+  /** An investment account that can take a price: the review of a differing statement offers it. */
+  onRecordPrice?: () => void
 }) {
   const statements = useStatements(accountId)
   const [form, setForm] = useState<{ replacing?: Statement } | null>(null)
@@ -75,6 +78,13 @@ export function StatementsCard({
             today={today}
             replacing={form.replacing}
             linkable={!!opening && opening.statementId === null}
+            onRecordPrice={
+              onRecordPrice &&
+              (() => {
+                setForm(null)
+                onRecordPrice()
+              })
+            }
             onDone={(saved, sentence) => {
               setForm(null)
               if (saved)
@@ -135,12 +145,15 @@ export function StatementsCard({
                   {statement.replacesId ? ' · replaces an earlier version' : ''}
                   {statement.usedByOpening && !statement.removedAt ? ' · supports the opening' : ''}
                 </span>
-                {statement.usedByOpening &&
+                {/* The Balance is as of now, the statement as of its own date; the line says both. */}
+                {(removable || statement.usedByOpening) &&
                   !statement.removedAt &&
+                  statement.latest &&
                   Number(statement.balance) !== Number(balance) && (
                     <span className="text-ink-muted">
-                      The statement shows {balanceText(accountType, statement.balance)}; the Balance
-                      is {balanceText(accountType, balance)}. A statement never changes the Balance.
+                      The statement shows {balanceText(accountType, statement.balance)} on{' '}
+                      {statement.statementOn}; the Balance now is{' '}
+                      {balanceText(accountType, balance)}. A statement never changes the Balance.
                     </span>
                   )}
                 {statement.removedAt && (

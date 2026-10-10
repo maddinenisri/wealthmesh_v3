@@ -208,6 +208,7 @@ for (const width of [710, 1280]) {
       await expect(review).toContainText(
         'The statement total is $21,400.00 and the calculated Balance on 2026-09-30 is $21,500.00: a difference of $100.00. Which cash, quantity or price needs correction? Cash and quantity corrections are not available yet. Only a price can be recorded now.',
       )
+      await expect(review.getByRole('button', { name: 'Record a price' })).toBeVisible()
       await expectNoSidewaysScroll(page)
       // Back keeps the values and focuses the form heading; Cancel returns to the opener and saves nothing.
       await page.getByRole('button', { name: 'Back' }).click()
@@ -234,7 +235,13 @@ for (const width of [710, 1280]) {
         .filter({ hasText: 'Statement saved. The statement total is $21,400.00' })
       await expect(status).toBeVisible()
       await expect(status).toContainText('a difference of $100.00')
-      await expect(status).toContainText('The Balance stays $21,500.00')
+      await expect(status).toContainText('A statement never changes the Balance.')
+      await expect(status).not.toContainText('The Balance stays')
+      await expect(
+        page.getByText(
+          /The statement shows \$21,400\.00 on 2026-09-30; the Balance now is \$21,500\.00/,
+        ),
+      ).toBeVisible()
       await expect(status).toContainText('To correct the difference, record a price.')
       await expect(page.getByRole('heading', { name: 'Supporting statements' })).toBeFocused()
       await expect(page.getByRole('region', { name: 'Holdings', exact: true })).toContainText(
