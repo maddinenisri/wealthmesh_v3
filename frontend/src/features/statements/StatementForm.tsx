@@ -1,11 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import type { Member } from '../../api/household'
-import type { Statement } from '../../api/statements'
+import type { NewStatement, Statement, StatementReview } from '../../api/statements'
 import { Button, Card, CardTitle, FormAlert, SelectField, TextField } from '../../design-system'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
-import { useAttachStatement, useReviseStatement } from '../../hooks/useStatements'
+import {
+  useAttachStatement,
+  useReviewStatement,
+  useReviseStatement,
+} from '../../hooks/useStatements'
 import { parseAmount } from '../../lib/money'
+import { isInvestment } from '../accounts/accountTypes'
 import { balanceText, isCard } from '../accounts/cardBalance'
 import { EnteredBy } from '../activity/EnteredBy'
 
@@ -44,13 +49,33 @@ export function StatementForm({
   replacing?: Statement
   /** An investment account whose opening review uses no statement yet can link this one to it. */
   linkable?: boolean
-  /** `saved` is true after a statement was saved; Cancel leaves it out. */
-  onDone: (saved?: boolean) => void
+  /** `saved` is true after a statement was saved; Cancel leaves it out. `sentence` replaces the usual one. */
+  onDone: (saved?: boolean, sentence?: string) => void
 }) {
   const card = isCard(accountType)
   const money = (value: string | number) => balanceText(accountType, String(value))
   const { member, setMemberId } = useEnteringAs(members)
   const [reviewing, setReviewing] = useState<Values | null>(null)
+  // An investment account's new statement is reviewed by the server against the calculated Balance on its date.
+  const differenceReview = isInvestment(accountType) && !replacing
+  const reviewMutation = useReviewStatement(accountId)
+  const [difference, setDifference] = useState<{
+    statement: NewStatement
+    review: StatementReview
+  } | null>(null)
+  const reviewHeading = useRef<HTMLHeadingElement>(null)
+  const formHeading = useRef<HTMLHeadingElement>(null)
+  const cameBack = useRef(false)
+  useEffect(() => {
+    if (difference) reviewHeading.current?.focus()
+  }, [difference])
+  useEffect(() => {
+    // Back from the review returns to the form's heading with the values kept; the first open is the Panel's.
+    if (!difference && cameBack.current) {
+      cameBack.current = false
+      formHeading.current?.focus()
+    }
+  }, [difference])
   const [supportsOpening, setSupportsOpening] = useState(false)
   const [key] = useState(newKey)
   const attach = useAttachStatement(accountId)
@@ -71,16 +96,21 @@ export function StatementForm({
     },
   })
 
+  const statementOf = (values: Values): NewStatement | null =>
+    member
+      ? {
+          statementOn: values.statementOn,
+          balance: parseAmount(values.balance)!,
+          ...(card ? { balanceSide: values.balanceSide } : {}),
+          note: values.note.trim(),
+          enteredByMemberId: member.id,
+          ...(supportsOpening ? { supportsOpening } : {}),
+        }
+      : null
+
   const save = (values: Values) => {
-    if (!member) return
-    const statement = {
-      statementOn: values.statementOn,
-      balance: parseAmount(values.balance)!,
-      ...(card ? { balanceSide: values.balanceSide } : {}),
-      note: values.note.trim(),
-      enteredByMemberId: member.id,
-      ...(supportsOpening ? { supportsOpening } : {}),
-    }
+    const statement = statementOf(values)
+    if (!statement) return
     if (replacing) {
       revise.mutate(
         { key, revision: { ...statement, reason: values.reason.trim() } },
@@ -89,6 +119,50 @@ export function StatementForm({
     } else {
       attach.mutate({ key, statement }, { onSuccess: () => onDone(true) })
     }
+  }
+
+  if (difference) {
+    return (
+      <Card aria-labelledby="statement-difference-heading">
+        <CardTitle
+          ref={reviewHeading}
+          id="statement-difference-heading"
+          tabIndex={-1}
+          className="text-lg outline-none"
+        >
+          Review the statement
+        </CardTitle>
+        <FormAlert message={attach.error?.message} />
+        <p className="mt-3 max-w-prose text-sm">{difference.review.message}</p>
+        <EnteredBy members={members} member={member} setMemberId={setMemberId} />
+        <div className="mt-3 flex gap-2">
+          <Button
+            onClick={() =>
+              attach.mutate(
+                { key, statement: difference.statement },
+                { onSuccess: () => onDone(true, difference.review.afterSave) },
+              )
+            }
+            disabled={saving || !member}
+          >
+            {saving ? 'Saving' : 'Save statement'}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              cameBack.current = true
+              setDifference(null)
+            }}
+            disabled={saving}
+          >
+            Back
+          </Button>
+          <Button variant="ghost" onClick={() => onDone()} disabled={saving}>
+            Cancel
+          </Button>
+        </div>
+      </Card>
+    )
   }
 
   if (reviewing && replacing) {
@@ -133,14 +207,27 @@ export function StatementForm({
 
   return (
     <Card aria-labelledby="statement-form-heading">
-      <CardTitle id="statement-form-heading" className="text-lg">
+      <CardTitle
+        ref={formHeading}
+        id="statement-form-heading"
+        tabIndex={-1}
+        className="text-lg outline-none"
+      >
         {replacing ? 'Replace with corrected version' : 'Attach statement'}
       </CardTitle>
-      <FormAlert message={attach.error?.message} />
+      <FormAlert message={attach.error?.message ?? reviewMutation.error?.message} />
       <form
         noValidate
         className="mt-3 flex max-w-md flex-col gap-4"
-        onSubmit={handleSubmit((values) => (replacing ? setReviewing(values) : save(values)))}
+        onSubmit={handleSubmit((values) => {
+          if (replacing) return setReviewing(values)
+          if (!differenceReview) return save(values)
+          const statement = statementOf(values)
+          if (!statement) return
+          reviewMutation.mutate(statement, {
+            onSuccess: (review) => setDifference({ statement, review }),
+          })
+        })}
       >
         <TextField
           control={control}
@@ -200,8 +287,17 @@ export function StatementForm({
         )}
         {!replacing && <EnteredBy members={members} member={member} setMemberId={setMemberId} />}
         <div className="flex gap-2">
-          <Button type="submit" disabled={saving || (!replacing && !member)}>
-            {replacing ? 'Review' : saving ? 'Saving' : 'Save statement'}
+          <Button
+            type="submit"
+            disabled={saving || reviewMutation.isPending || (!replacing && !member)}
+          >
+            {replacing || differenceReview
+              ? reviewMutation.isPending
+                ? 'Reviewing'
+                : 'Review'
+              : saving
+                ? 'Saving'
+                : 'Save statement'}
           </Button>
           <Button variant="ghost" onClick={() => onDone()} disabled={saving}>
             Cancel

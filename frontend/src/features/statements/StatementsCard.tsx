@@ -5,7 +5,12 @@ import type { OpeningView } from '../../api/investments'
 import { Button, Card, CardTitle, FormAlert } from '../../design-system'
 import { EnteredBy } from '../activity/EnteredBy'
 import { useReturnFocus } from '../activity/useReturnFocus'
-import { useRemovalReview, useRemoveStatement, useStatements } from '../../hooks/useStatements'
+import {
+  useRemovalReview,
+  useRemoveStatement,
+  useRestoreStatement,
+  useStatements,
+} from '../../hooks/useStatements'
 import { useEnteringAs } from '../../hooks/useEnteringAs'
 import { isInvestment } from '../accounts/accountTypes'
 import { balanceText } from '../accounts/cardBalance'
@@ -70,9 +75,10 @@ export function StatementsCard({
             today={today}
             replacing={form.replacing}
             linkable={!!opening && opening.statementId === null}
-            onDone={(saved) => {
+            onDone={(saved, sentence) => {
               setForm(null)
-              if (saved) announce('Statement saved. A statement never changes the Balance.')
+              if (saved)
+                announce(sentence ?? 'Statement saved. A statement never changes the Balance.')
             }}
           />
         </Panel>
@@ -142,6 +148,26 @@ export function StatementsCard({
                     Removed by {statement.removedByName} {stamp(statement.removedAt)}. The recorded
                     cash, shares and price stay.
                   </span>
+                )}
+                {/* While removed, the sentence above is the history; once restored, the list keeps both. */}
+                {statement.events.some((event) => event.action === 'restored') && (
+                  <ul aria-label="Statement history" className="text-ink-muted">
+                    {statement.events.map((event, index) => (
+                      <li key={`${event.action}-${event.at}-${index}`}>
+                        {event.action === 'removed' ? 'Removed' : 'Restored (Undo)'} by{' '}
+                        {event.memberName} {stamp(event.at)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {statement.removedAt && members && removable && (
+                  <UndoRemoval
+                    accountId={accountId}
+                    statement={statement}
+                    members={members}
+                    disabled={!ready}
+                    onDone={announce}
+                  />
                 )}
                 {statement.latest && !statement.removedAt && (
                   <span className="flex flex-wrap gap-2">
@@ -231,7 +257,7 @@ function StatementRemoval({
         <>
           <p className="mt-2 max-w-prose text-sm">{review.data.message}</p>
           <p className="mt-1 max-w-prose text-sm text-ink-muted">
-            Undo for a removed statement comes in a later release.
+            You can Undo the removal afterwards; the removal and the Undo both stay in history.
           </p>
         </>
       )}
@@ -257,5 +283,49 @@ function StatementRemoval({
         </Button>
       </div>
     </Card>
+  )
+}
+
+/**
+ * Undo of a removal (SUPPORTING_RECORD_002): the same statement is an active supporting record again, still linked to
+ * the opening review; no cash, shares, price or Balance moves. The Undo is recorded with who did it, the removal stays
+ * in history, and the sentence says so (the caller moves focus to the statements heading).
+ */
+function UndoRemoval({
+  accountId,
+  statement,
+  members,
+  disabled,
+  onDone,
+}: {
+  accountId: string
+  statement: Statement
+  members: Member[]
+  disabled: boolean
+  onDone: (sentence: string) => void
+}) {
+  const { member, setMemberId } = useEnteringAs(members)
+  const restore = useRestoreStatement(accountId, statement.id, member?.id ?? '')
+  const name = statement.note || 'The statement'
+  return (
+    <span className="flex flex-col items-start gap-2">
+      <FormAlert message={restore.error?.message} />
+      {!member && <EnteredBy members={members} member={member} setMemberId={setMemberId} />}
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={disabled || !member || restore.isPending}
+        onClick={() =>
+          restore.mutate(undefined, {
+            onSuccess: () =>
+              onDone(
+                `${name} is restored once. It is an active supporting statement again, still linked to the opening review, and the recorded cash, shares and price and the Balance are as they were. The removal and the Undo are in history.`,
+              ),
+          })
+        }
+      >
+        {restore.isPending ? 'Restoring' : 'Undo removal'}
+      </Button>
+    </span>
   )
 }

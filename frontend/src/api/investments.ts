@@ -73,6 +73,8 @@ export type Security = {
   coverage: string
   cost: string | null
   gain: string | null
+  /** The security's value over the account's Balance ("25.58%"): a different measure from cost coverage. */
+  shareOfBalance: string | null
 }
 
 /** The holdings of an investment account with the one Balance and what is known of cost. */
@@ -109,6 +111,7 @@ function parseHoldings(value: unknown): Holdings {
         coverage: str(s.coverage),
         cost: strOrNull(s.cost),
         gain: strOrNull(s.gain),
+        shareOfBalance: strOrNull(s.shareOfBalance),
       }
     }),
     cost: strOrNull(data.cost),
@@ -203,3 +206,114 @@ export const discardDraft = (accountId: string, memberId: string) =>
     body: { enteredByMemberId: memberId },
     parse: parseAccount,
   })
+
+/** One account in the whole-investment group: its one Balance and, when recorded, its cash and holdings value. */
+export type GroupAccount = {
+  accountId: string
+  name: string
+  type: string
+  status: string
+  balance: string
+  pricesOn: string | null
+  cash: string | null
+  holdingsValue: string | null
+}
+
+/** One account's holding of a security: its own shares, price and price date (a price is never shared). */
+export type GroupPosition = {
+  accountId: string
+  accountName: string
+  accountStatus: string
+  shares: string
+  price: string | null
+  priceOn: string
+  value: string
+  knownShares: string
+  knownCost: string | null
+  cost: string | null
+  gain: string | null
+  coverage: string
+}
+
+/** One security across the accounts that hold it. `cost` and `gain` are null unless every share has a known cost. */
+export type GroupSecurity = {
+  symbol: string
+  shares: string
+  value: string
+  accountCount: number
+  knownShares: string
+  knownValue: string | null
+  knownCost: string | null
+  knownGain: string | null
+  coverage: string
+  cost: string | null
+  gain: string | null
+  shareOfBalance: string | null
+  positions: GroupPosition[]
+}
+
+/** The holdings of the whole investment group (slice 19c): its Balance total, the accounts and each security. */
+export type InvestmentGroup = {
+  total: string
+  accounts: GroupAccount[]
+  securities: GroupSecurity[]
+}
+
+function parseGroup(value: unknown): InvestmentGroup {
+  const data = record(value)
+  if (!Array.isArray(data.accounts) || !Array.isArray(data.securities)) throw bad()
+  return {
+    total: str(data.total),
+    accounts: data.accounts.map((item) => {
+      const a = record(item)
+      return {
+        accountId: str(a.accountId),
+        name: str(a.name),
+        type: str(a.type),
+        status: str(a.status),
+        balance: str(a.balance),
+        pricesOn: strOrNull(a.pricesOn),
+        cash: strOrNull(a.cash),
+        holdingsValue: strOrNull(a.holdingsValue),
+      }
+    }),
+    securities: data.securities.map((item) => {
+      const s = record(item)
+      if (typeof s.accountCount !== 'number' || !Array.isArray(s.positions)) throw bad()
+      return {
+        symbol: str(s.symbol),
+        shares: str(s.shares),
+        value: str(s.value),
+        accountCount: s.accountCount,
+        knownShares: str(s.knownShares),
+        knownValue: strOrNull(s.knownValue),
+        knownCost: strOrNull(s.knownCost),
+        knownGain: strOrNull(s.knownGain),
+        coverage: str(s.coverage),
+        cost: strOrNull(s.cost),
+        gain: strOrNull(s.gain),
+        shareOfBalance: strOrNull(s.shareOfBalance),
+        positions: s.positions.map((p) => {
+          const x = record(p)
+          return {
+            accountId: str(x.accountId),
+            accountName: str(x.accountName),
+            accountStatus: str(x.accountStatus),
+            shares: str(x.shares),
+            price: strOrNull(x.price),
+            priceOn: str(x.priceOn),
+            value: str(x.value),
+            knownShares: str(x.knownShares),
+            knownCost: strOrNull(x.knownCost),
+            cost: strOrNull(x.cost),
+            gain: strOrNull(x.gain),
+            coverage: str(x.coverage),
+          }
+        }),
+      }
+    }),
+  }
+}
+
+/** The whole investment group: every completed investment account once, and each security across them. */
+export const getInvestmentGroup = () => request('/investments/holdings', { parse: parseGroup })

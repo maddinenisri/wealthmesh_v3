@@ -18,6 +18,8 @@ export type Statement = {
   removedByName: string | null
   /** True when an investment account's opening review is linked to this statement. */
   usedByOpening: boolean
+  /** Every removal and Undo with who and when, oldest first: a removal stays in history after Undo. */
+  events: { action: 'removed' | 'restored'; memberName: string; at: string }[]
 }
 
 export type NewStatement = {
@@ -29,6 +31,8 @@ export type NewStatement = {
   enteredByMemberId: string
   /** Links the statement to the completed opening review of an investment account. */
   supportsOpening?: boolean
+  /** What is proposed to fix a difference with the calculated Balance: only a price (slice 19c). */
+  proposedCorrection?: 'price'
 }
 
 /** A corrected version of a statement; the reason is required. */
@@ -65,6 +69,12 @@ function parseStatement(value: unknown): Statement {
     removedAt: strOrNull(data.removedAt),
     removedByName: strOrNull(data.removedByName),
     usedByOpening: data.usedByOpening === true,
+    events: (Array.isArray(data.events) ? data.events : []).map((item: unknown) => {
+      const event = record(item)
+      const action = str(event.action)
+      if (action !== 'removed' && action !== 'restored') throw bad()
+      return { action, memberName: str(event.memberName), at: str(event.at) }
+    }),
   }
 }
 
@@ -117,6 +127,50 @@ export const getRemovalReview = (accountId: string, statementId: string) =>
 /** Removes the statement from active records; the Balance and the opening breakdown are untouched. */
 export const removeStatement = (accountId: string, statementId: string, memberId: string) =>
   request(`/accounts/${accountId}/statements/${statementId}/removal`, {
+    method: 'POST',
+    body: { enteredByMemberId: memberId },
+    parse: parseStatement,
+  })
+
+/**
+ * The review of a statement of an investment account against the calculated Balance on its date, written by the
+ * server (slice 19c, HOLDINGS_005). `difference` is the statement total minus the calculated Balance; `corrections`
+ * is what can be corrected now (only "price"); `afterSave` is the sentence for once the statement is saved.
+ */
+export type StatementReview = {
+  statementOn: string
+  statementTotal: string
+  calculatedBalance: string | null
+  difference: string | null
+  differs: boolean
+  corrections: string[]
+  message: string
+  afterSave: string
+}
+
+export const reviewStatement = (accountId: string, statement: NewStatement) =>
+  request(`/accounts/${accountId}/statements/review`, {
+    method: 'POST',
+    body: statement,
+    parse: (value): StatementReview => {
+      const data = record(value)
+      if (typeof data.differs !== 'boolean' || !Array.isArray(data.corrections)) throw bad()
+      return {
+        statementOn: str(data.statementOn),
+        statementTotal: str(data.statementTotal),
+        calculatedBalance: strOrNull(data.calculatedBalance),
+        difference: strOrNull(data.difference),
+        differs: data.differs,
+        corrections: data.corrections.map(str),
+        message: str(data.message),
+        afterSave: str(data.afterSave),
+      }
+    },
+  })
+
+/** Undo of a removal: the statement is an active supporting record again; money is untouched. */
+export const restoreStatement = (accountId: string, statementId: string, memberId: string) =>
+  request(`/accounts/${accountId}/statements/${statementId}/restore`, {
     method: 'POST',
     body: { enteredByMemberId: memberId },
     parse: parseStatement,

@@ -6,6 +6,7 @@ import {
   NewAccountPage,
   OwnerCorrectionPage,
 } from './features/accounts/AccountFormPages'
+import { InvestmentGroupPage } from './features/investments/InvestmentGroupPage'
 import { HouseholdPage } from './features/household/HouseholdPage'
 import { AppLayout } from './layout/AppLayout'
 import type { RouteHandle } from './layout/navigation'
@@ -31,6 +32,11 @@ export const routes: RouteObject[] = [
         path: 'accounts/:id/owner',
         Component: OwnerCorrectionPage,
         handle: handle('Change owner'),
+      },
+      {
+        path: 'investments',
+        Component: InvestmentGroupPage,
+        handle: handle('Investment holdings'),
       },
       { path: 'spending', Component: SpendingPage, handle: handle('Spending') },
       { path: 'recurring', Component: RecurringPage, handle: handle('Recurring bills') },

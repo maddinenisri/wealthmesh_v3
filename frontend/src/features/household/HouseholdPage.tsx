@@ -281,7 +281,18 @@ function AccountsAndWealth({
               'retirement',
               'healthSavings',
             ])}
-            footer={<FinishSetup drafts={investmentDrafts} members={members} />}
+            footer={
+              <>
+                {(wealth.data?.investments.accounts.length ?? 0) > 0 && (
+                  <p className="mt-2 text-sm">
+                    <Link to="/investments" className="underline underline-offset-2">
+                      See investment holdings by security
+                    </Link>
+                  </p>
+                )}
+                <FinishSetup drafts={investmentDrafts} members={members} />
+              </>
+            }
           />
           <AccountGroup
             id="retirement-heading"

@@ -4,6 +4,8 @@ import {
   getRemovalReview,
   listStatements,
   removeStatement,
+  restoreStatement,
+  reviewStatement,
   reviseStatement,
   type NewStatement,
   type StatementRevision,
@@ -31,6 +33,26 @@ export function useReviseStatement(accountId: string, statementId: string) {
     mutationFn: ({ key, revision }: { key: string; revision: StatementRevision }) =>
       reviseStatement(accountId, statementId, key, revision),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: statementsKey(accountId) }),
+  })
+}
+
+/** The server's review of a statement against the calculated Balance on its date; writes nothing. */
+export function useReviewStatement(accountId: string) {
+  return useMutation({
+    mutationFn: (statement: NewStatement) => reviewStatement(accountId, statement),
+  })
+}
+
+/** Undo of a removal: the list and the opening (it names the statement) refresh; no Balance moves. */
+export function useRestoreStatement(accountId: string, statementId: string, memberId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => restoreStatement(accountId, statementId, memberId),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: statementsKey(accountId) }),
+        queryClient.invalidateQueries({ queryKey: ['opening', accountId] }),
+      ]),
   })
 }
 

@@ -12,7 +12,7 @@ import { EnteredBy } from '../activity/EnteredBy'
 import { Panel } from '../activity/Panel'
 import { StatementsCard } from '../statements/StatementsCard'
 import { FinishSetup } from './FinishSetup'
-import { HoldingsCard } from './HoldingsCard'
+import { AllInvestmentsSummary, HoldingsCard } from './HoldingsCard'
 import { PricesCard } from './PricesCard'
 import { RecordPrice } from './RecordPrice'
 import { HoldingTable } from './OpeningReview'
@@ -229,6 +229,7 @@ export function InvestmentAccount({
         </Card>
       )}
       {!draft && <HoldingsCard account={account} />}
+      {!draft && <AllInvestmentsSummary />}
       {!draft && (
         <PricesCard
           account={account}

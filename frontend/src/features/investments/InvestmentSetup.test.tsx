@@ -459,9 +459,10 @@ describe('review-pass faults of the screenshot step', () => {
       target: { value: '2026-09-01' },
     })
     await user.type(screen.getByLabelText('Statement balance'), '20000')
-    await user.click(screen.getByRole('button', { name: 'Save statement' }))
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    await user.click(await screen.findByRole('button', { name: 'Save statement' }))
     const sentence = await screen.findByText(
-      'Statement saved. A statement never changes the Balance.',
+      'Statement saved. It matches the calculated Balance on 2026-09-01. A statement never changes the Balance.',
     )
     expect(sentence).toHaveAttribute('role', 'status')
     await vi_waitFocus(screen.getByRole('heading', { name: 'Supporting statements' }))
@@ -661,9 +662,7 @@ describe('a supporting statement and the opening', () => {
         /1 opening breakdown uses this statement\. Removing it keeps the recorded cash, shares and price, and the Balance stays \$20,000\.00/,
       ),
     ).toBeVisible()
-    expect(
-      await screen.findByText(/Undo for a removed statement comes in a later release/),
-    ).toBeVisible()
+    expect(await screen.findByText(/You can Undo the removal afterwards/)).toBeVisible()
     expect(api.statements[0].removedAt).toBeUndefined()
     const review = screen.getByRole('region', { name: 'Review removing the statement' })
     await user.click(within(review).getByRole('button', { name: 'Remove statement' }))
@@ -758,7 +757,8 @@ describe('a supporting statement and the opening', () => {
     await user.click(
       screen.getByRole('checkbox', { name: /supports the opening cash and holdings/ }),
     )
-    await user.click(screen.getByRole('button', { name: 'Save statement' }))
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    await user.click(await screen.findByRole('button', { name: 'Save statement' }))
     expect(await screen.findByText(/supports the opening/)).toBeVisible()
     expect([...api.openings.values()][0].statementId).not.toBeNull()
   })

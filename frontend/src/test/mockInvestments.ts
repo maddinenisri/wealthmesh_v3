@@ -154,6 +154,7 @@ export function viewBody(opening: MockOpening, statementRemoved: boolean) {
 }
 
 const percent = (known: number, shares: number) => `${((known * 100) / shares).toFixed(2)}%`
+const percentOf = (value: number, balance: number) => `${((value * 100) / balance).toFixed(2)}%`
 
 /** The holdings read of a completed account, mirroring `Holdings.view`: lines of one symbol are added together. */
 export function holdingsBody(
@@ -194,6 +195,7 @@ export function holdingsBody(
       coverage: percent(knownShares, shares),
       cost: all ? two(knownCost) : null,
       gain: all ? two(value - knownCost) : null,
+      shareOfBalance: Number(balance) > 0 ? percentOf(value, Number(balance)) : null,
     }
   })
   const full = securities.length > 0 && securities.every((s) => s.cost !== null)
@@ -259,4 +261,93 @@ export function priceDelta(opening: MockOpening, prices: MockPrice[], on: string
       0,
     ),
   )
+}
+
+/** One account of the investment group as the mock server reads it. */
+export type GroupEntry = {
+  id: string
+  name: string
+  type: string
+  status: string
+  balance: string
+  opening: MockOpening | undefined
+  prices: MockPrice[]
+}
+
+/** The whole-investment read, mirroring `InvestmentHoldingsService`: every account once, each security across them. */
+export function groupBody(entries: GroupEntry[]) {
+  const total = cents(entries.reduce((sum, e) => sum + Number(e.balance), 0))
+  const per = entries.map((e) => ({
+    entry: e,
+    view: e.opening ? holdingsBody(e.opening, e.balance, '9999-12-31', e.prices) : null,
+    lines: e.opening
+      ? effectiveLines(e.opening, e.prices, '9999-12-31').map((now, i) => ({
+          ...e.opening!.holdings[i],
+          price: now.price,
+          valueOn: now.priceOn,
+        }))
+      : [],
+  }))
+  const symbols = [...new Set(per.flatMap((p) => p.lines.map((l) => l.symbol)))]
+  const securities = symbols.map((symbol) => {
+    const lines = per.flatMap((p) => p.lines.filter((l) => l.symbol === symbol))
+    const shares = lines.reduce((sum, l) => sum + Number(l.quantity), 0)
+    const value = cents(lines.reduce((sum, l) => sum + holdingValue(l), 0))
+    const known = lines.filter((l) => l.cost != null)
+    const knownShares = known.reduce((sum, l) => sum + Number(l.quantity), 0)
+    const knownValue = cents(known.reduce((sum, l) => sum + holdingValue(l), 0))
+    const knownCost = cents(known.reduce((sum, l) => sum + Number(l.cost), 0))
+    const all = known.length === lines.length
+    const positions = per
+      .map((p) => ({ p, security: p.view?.securities.find((s) => s.symbol === symbol) }))
+      .filter((x) => x.security)
+      .map(({ p, security }) => ({
+        accountId: p.entry.id,
+        accountName: p.entry.name,
+        accountStatus: p.entry.status,
+        shares: security!.shares,
+        price: security!.price,
+        priceOn: security!.priceOn,
+        value: security!.value,
+        knownShares: security!.knownShares,
+        knownCost: security!.knownCost,
+        cost: security!.cost,
+        gain: security!.gain,
+        coverage: security!.coverage,
+      }))
+    return {
+      symbol,
+      shares: String(shares),
+      value: two(value),
+      accountCount: positions.length,
+      knownShares: String(knownShares),
+      knownValue: known.length ? two(knownValue) : null,
+      knownCost: known.length ? two(knownCost) : null,
+      knownGain: known.length ? two(knownValue - knownCost) : null,
+      coverage: percent(knownShares, shares),
+      cost: all ? two(knownCost) : null,
+      gain: all ? two(value - knownCost) : null,
+      shareOfBalance: total > 0 ? percentOf(value, total) : null,
+      positions,
+    }
+  })
+  return {
+    total: two(total),
+    accounts: per.map(({ entry, view }) => ({
+      accountId: entry.id,
+      name: entry.name,
+      type: entry.type,
+      status: entry.status,
+      balance: entry.balance,
+      pricesOn: view
+        ? (view.securities
+            .map((s) => s.priceOn)
+            .sort()
+            .at(-1) ?? null)
+        : null,
+      cash: view ? view.cash : null,
+      holdingsValue: view ? view.holdingsValue : null,
+    })),
+    securities,
+  }
 }

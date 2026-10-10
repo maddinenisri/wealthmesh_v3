@@ -1,7 +1,8 @@
 import type { Account } from '../../api/accounts'
 import type { Security } from '../../api/investments'
-import { Card, CardTitle, FormAlert } from '../../design-system'
-import { useHoldings } from '../../hooks/useInvestments'
+import { Link } from 'react-router'
+import { Amount, Card, CardTitle, FormAlert } from '../../design-system'
+import { useHoldings, useInvestmentGroup } from '../../hooks/useInvestments'
 import { formatMoney } from '../../lib/money'
 
 const dollars = (text: string) => formatMoney(Number(text))
@@ -35,6 +36,12 @@ function SecurityBlock({ security }: { security: Security }) {
           {security.gain === null ? NOT_AVAILABLE : dollars(security.gain)}
         </dd>
       </dl>
+      {security.shareOfBalance !== null && (
+        <p className="text-sm">
+          {security.symbol} is {security.shareOfBalance} of this account&apos;s Balance. That is a
+          different measure from the share of the shares whose cost is known.
+        </p>
+      )}
       {partly && (
         <p className="text-sm">
           The cost is known for {security.knownShares} of {security.shares} shares (
@@ -102,6 +109,34 @@ export function HoldingsCard({ account }: { account: Account }) {
             ))
           )}
         </div>
+      )}
+    </Card>
+  )
+}
+
+/**
+ * The whole investment group beside one account (HOLDINGS_003): a separately labeled total that is not this account's
+ * Balance, with a link to the holdings by security. It never includes this account's own figures as if they were the
+ * group's, and the account's Holdings card never includes the other accounts.
+ */
+export function AllInvestmentsSummary() {
+  const group = useInvestmentGroup()
+  return (
+    <Card aria-label="Whole investment group, separate from this account">
+      <CardTitle className="text-lg">All investment accounts</CardTitle>
+      {group.isPending && <p className="mt-2 text-sm text-ink-muted">Loading the group</p>}
+      {group.isError && <FormAlert message={group.error.message} />}
+      {group.data && (
+        <p className="mt-2 text-sm">
+          Together {group.data.accounts.length}{' '}
+          {group.data.accounts.length === 1
+            ? 'investment account holds'
+            : 'investment accounts hold'}{' '}
+          <Amount value={Number(group.data.total)} />. This is the whole group, not this account.{' '}
+          <Link to="/investments" className="underline underline-offset-2">
+            See the holdings by security
+          </Link>
+        </p>
       )}
     </Card>
   )

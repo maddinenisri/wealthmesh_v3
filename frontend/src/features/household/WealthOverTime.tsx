@@ -62,6 +62,9 @@ export function WealthOverTime({ person }: { person?: string }) {
           <p>
             Financial assets <Amount value={Number(wealth.data.financialAssets)} />
           </p>
+          <p>
+            Debts <Amount value={Number(wealth.data.debts)} />
+          </p>
           <OlderPricesNote wealth={wealth.data} />
           {wealth.data.investments.accounts.length > 0 && (
             <section aria-label="Investment balances on this date">

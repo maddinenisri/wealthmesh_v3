@@ -4,6 +4,7 @@ import {
   discardDraft,
   finishSetup,
   getHoldings,
+  getInvestmentGroup,
   getOpening,
   previewOpening,
 } from '../api/investments'
@@ -33,6 +34,11 @@ export function useHoldings(accountId: string, enabled = true) {
     queryFn: () => getHoldings(accountId),
     enabled,
   })
+}
+
+/** The whole-investment view (slice 19c): refreshed by anything that moves a Balance (it hangs under `wealth`). */
+export function useInvestmentGroup() {
+  return useQuery({ queryKey: [...wealthKey, 'investment-group'], queryFn: getInvestmentGroup })
 }
 
 /** Finish setup: the account (and wealth, once it is complete) and its opening all refresh. */

@@ -15,6 +15,7 @@ import {
   viewBody,
   type MockOpening,
   holdingsBody,
+  groupBody,
   effectiveLines,
   priceDelta,
   type MockPrice,
@@ -96,6 +97,8 @@ export type MockStatement = {
   createdAt?: string
   removedAt?: string
   removedByMemberId?: string
+  /** Every removal and Undo, oldest first. */
+  events?: { action: 'removed' | 'restored'; memberId: string; at: string }[]
 }
 
 export type MockBudget = {
@@ -572,6 +575,12 @@ export function mockApi(
       removedByMemberId: s.removedByMemberId ?? null,
       removedByName: s.removedByMemberId ? nameOf(s.removedByMemberId) : null,
       usedByOpening: [...state.openings.values()].some((o) => o.statementId === s.id),
+      events: (s.events ?? []).map((e) => ({
+        action: e.action,
+        memberId: e.memberId,
+        memberName: nameOf(e.memberId),
+        at: e.at,
+      })),
     }
   }
   /** The header of an investment setup and its judged components, or the problem the server would answer. */
@@ -2648,8 +2657,99 @@ export function mockApi(
       if (!statement.removedAt) {
         statement.removedAt = '2026-10-03T13:00:00Z'
         statement.removedByMemberId = body.enteredByMemberId
+        statement.events = [
+          ...(statement.events ?? []),
+          { action: 'removed', memberId: body.enteredByMemberId, at: '2026-10-03T13:00:00Z' },
+        ]
       }
       return HttpResponse.json(statementView(statement))
+    }),
+    http.post('*/api/v1/accounts/:id/statements/:sid/restore', async ({ request, params }) => {
+      log(request)
+      const body = (await request.json()) as { enteredByMemberId?: string }
+      const statement = state.statements.find(
+        (s) => s.id === params.sid && s.accountId === params.id,
+      )
+      if (!statement) return problem(404, `Statement not found: ${String(params.sid)}`)
+      if (!body.enteredByMemberId) return problem(400, 'Choose who entered this')
+      if (statement.removedAt) {
+        delete statement.removedAt
+        delete statement.removedByMemberId
+        statement.events = [
+          ...(statement.events ?? []),
+          { action: 'restored', memberId: body.enteredByMemberId, at: '2026-10-03T14:00:00Z' },
+        ]
+      }
+      return HttpResponse.json(statementView(statement))
+    }),
+    http.post('*/api/v1/accounts/:id/statements/review', async ({ request, params }) => {
+      log(request)
+      const body = (await request.json()) as {
+        statementOn: string
+        balance: string
+        proposedCorrection?: string
+      }
+      const account = state.accounts.find((a) => a.id === params.id)
+      if (!account) return problem(404, `Account not found: ${String(params.id)}`)
+      if (body.proposedCorrection === 'cash' || body.proposedCorrection === 'quantity')
+        return problem(
+          400,
+          'Cash and quantity corrections come in a later release. Only a price can be recorded now.',
+        )
+      if (body.statementOn > today) return problem(400, 'A statement cannot be dated in the future')
+      if (!/^-?\d+(\.\d{1,2})?$/.test(body.balance)) return problem(400, 'Enter a valid amount')
+      const opening = state.openings.get(account.id)
+      const calculated =
+        balanceOn(account, body.statementOn) +
+        (opening
+          ? priceDelta(
+              opening,
+              state.prices.filter((p) => p.accountId === account.id),
+              body.statementOn,
+            )
+          : 0)
+      const total = Number(body.balance)
+      const difference = total - calculated
+      const dollars = (value: number) =>
+        `$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      const differs = Math.abs(difference) >= 0.005
+      return HttpResponse.json({
+        statementOn: body.statementOn,
+        statementTotal: total.toFixed(2),
+        calculatedBalance: calculated.toFixed(2),
+        difference: difference.toFixed(2),
+        differs,
+        corrections: differs ? ['price'] : [],
+        message: differs
+          ? `The statement total is ${dollars(total)} and the calculated Balance on ${body.statementOn} is ${dollars(calculated)}: a difference of ${dollars(difference)}. Which cash, quantity or price needs correction? Cash and quantity corrections come in a later release. Only a price can be recorded now. Saving the statement changes no Balance.`
+          : `The statement total ${dollars(total)} matches the calculated Balance on ${body.statementOn}. Nothing needs correcting, and saving the statement changes no Balance.`,
+        afterSave: differs
+          ? `Statement saved. The statement total is ${dollars(total)} and the calculated Balance on ${body.statementOn} is ${dollars(calculated)}: a difference of ${dollars(difference)}. The Balance stays ${dollars(calculated)}; a statement never changes it. To correct the difference, record a price.`
+          : `Statement saved. It matches the calculated Balance on ${body.statementOn}. A statement never changes the Balance.`,
+      })
+    }),
+    http.get('*/api/v1/investments/holdings', ({ request }) => {
+      log(request)
+      return HttpResponse.json(
+        groupBody(
+          state.accounts
+            .filter(
+              (a) =>
+                typeTraits(a.type).kind === 'investment' &&
+                a.status !== 'draft' &&
+                state.openings.has(a.id),
+            )
+            .map((a) => ({
+              id: a.id,
+              name: a.name,
+              type: a.type,
+              status: a.status,
+              balance: a.balance.amount,
+              opening: state.openings.get(a.id),
+              prices: state.prices.filter((p) => p.accountId === a.id),
+            })),
+        ),
+      )
     }),
     http.get('*/api/v1/accounts/:id/statements', ({ request, params }) => {
       log(request)
