@@ -448,3 +448,15 @@ Why it slipped: the line was written in 19a-era code against today's Balance; th
 - **Undo removal.** `POST .../statements/{sid}/restore` takes no key (D-044): `lockAccount`, closed check, member check, `markRestored`, a 'restored' event. A repeat on an active statement returns it with no second event. Removal also writes an event. `V35__statement_event.sql`; `StatementResponse.events` carries who and when; the card shows the history. The opening link and the Balance are untouched.
 - **Debts line.** `features/household/WealthOverTime.tsx` shows Debts beside Financial assets with "Household wealth is financial assets minus debts."
 - **Test keys.** `twoInitialAmounts` `[201,409]` was a plain static counter in test helpers (two threads drew one key; the second got a correct 409). Now `AtomicInteger` in `CardPaymentTestBase`, `TransferRaceApiTests`, `AccountStateRaceApiTests`; `both()` keeps refusal bodies. The mechanism was reproduced by a planted delay; the original timing was not. Flyway connection failure (2 hits) and the OwnerCorrection Vitest failure (1 hit) stay open.
+
+## 19c proof at Land (final code, commit `794429c`)
+
+Backend flake check 3 x 944, 0 failed (about 25 min). Vitest 8 x 538 passed (93 s). Full e2e 378 passed (3m12s). Lint and typecheck clean.
+
+## Handoff (19c)
+
+- Done: HOLDINGS_002, 003, 005, SUPPORTING_RECORD_002. Not pushed (`7865785`..`794429c`); push only when the owner says.
+- 19d: WEALTH_001, WEALTH_009 (as-of reads). Reuse `HoldingDeltaSql` for any price reader; counted-once tests across net worth, assets, person views, Household total, group totals, change explanation.
+- Logged, not fixed: Q-080/Q-081 kept; "is restored once" wording; difference direction not stated; "Net worth" vs "Household wealth"; Wealth on a date lists only Investments and Property; no menu item for /investments; no reason field on removal; unexplained 20-cent drift in dev Household wealth.
+- Open failures: Flyway "Unable to obtain connection" x2, OwnerCorrection Vitest x1.
+- Dev DB: Cowork left two statements on VR19b Brokerage.
