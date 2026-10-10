@@ -462,3 +462,49 @@ Backend flake check 3 x 944, 0 failed (about 25 min). Vitest 8 x 538 passed (93 
 - Dev DB: Cowork left two statements on VR19b Brokerage.
 
 Fault 1 and 2 follow-up (advisor): the "Record a price" click first left focus on the page (the Attach button's return-focus fired); `returnFocus.cancel()` fixed it, red first in the StatementDifference Vitest (without the fix: focus not inside the price form). Also stated plainly: the pre-fix red for faults 1 and 2 is the backend test and Vitest, not the e2e (the e2e assertions were added green-after). Fault 1's fix is wider than the report: the dated line now shows on every active investment statement whose figure differs from the Balance, not only the one backing the opening, so a card with several statements shows a line per row.
+
+## 19d kickoff (2026-10-10)
+
+- Kickoff (owner, 2026-10-10): feature-session for slice 19d: V2_WEALTH_001 and V2_WEALTH_009 (deferred from slice 18). Process review is run separately by the owner: skipped. Check each Background against the code; WEALTH_009 uses the dated-price rule of 19b and the existing two-date read (Q-071), no new chart; move WEALTH_009 from `deferred.txt` to line 19 of `slices.txt` when it passes. Every wealth reader in the inventory; an earlier date ignores a later price and later activity, and the increase between two dates equals the explained change; a sentence comparing two figures is tested with two dates; overlapping groups are views (D-065, D-067). Cowork-fix e2e assertions are planted red (pitfall 53); full `npm run e2e` on the final code. Flyway x2, OwnerCorrection x1, LoanCorrection timing stay open unless reproduced with output kept. Repeated runs reported with elapsed time; commits gated on the test exit code, no overlapping Gradle runs. Validator, then visual-reviewer, before Checkpoint 2; advisor at Checkpoint 1 and before Land. Report the Cowork count against 8, 8, 5, 5, 5, 7, 9, 9, 8, 5, 6, 2, 5, 1, 1, 1, 3 and 2.
+
+## 19d gap analysis (from the code)
+
+Backgrounds checked against the code (D-016): every account type in WEALTH_001 exists (checking, savings, card, brokerage, 401k, Traditional IRA, defined benefit plan "Harbor Cash Balance"); the household of `WealthOverlapApiTests` already produces 188,620 / 1,780 / 186,840 on its figures. WEALTH_009 has no Background (checked in 18b).
+
+| ID | Scenario says | Code today | Gap |
+| --- | --- | --- | --- |
+| WEALTH_001 | Sep 30 snapshot: assets 188,620, card debt 1,780, net worth 186,840, 17,120 in checking and savings; open that total and see both accounts; open an account for its Sep 30 balance and history | `GET /wealth?asOf`, Bank money group with its accounts, Household page, `Balance on a date` on the account page, `activity/history` all exist; the 002 test holds the same figures but no test cites WEALTH_001 or pins the 17,120 total, the two lines, or the per-account Sep 30 Balance and history | A test pinning the scenario at Sep 30 (API, Vitest, e2e). No new feature expected; the group is titled "Bank money", not "checking and savings" (kept: D-067 titles) |
+| WEALTH_009 | Sep 30 net worth 186,840 ignoring later activity and prices; Oct 31 190,960; the trend shows both; increase 4,120 | `GET /wealth?asOf` and `/wealth/change` (start and end wealth, change, components incl. `priceChange`) exist from 15 and 19b; the price term is date-aware (`HoldingDeltaSql`); the Household page "What changed" shows "Wealth went from X on D1 to Y on D2: a change of Z" | No test that an earlier date ignores a later price AND later activity in every reader, nor one that the increase equals the explained change with a price term. The page has no "trend" control: Q-071 says reuse the two-date read, so the From/To read is the trend |
+
+Both IDs citeable now (2 of 2). The e2e stack's today is fixed at 2026-10-03, so Oct 31 is a future date there: the API test moves the clock to Oct 31 (exact scenario figures); the UI and e2e use dates up to Oct 3 (Sep 30 and Oct 3) with the same checks.
+
+## 19d design
+
+- No new endpoint, table or chart expected. If a test finds a reader that applies a later price or later activity to an earlier date, that is a fault fixed first (red first).
+- WEALTH_001: tests only, unless the scenario's Household page reads fail (the title "Bank money" stays).
+- WEALTH_009: the existing two-date read is the trend; tests prove it. The sentence "Wealth went from X to Y: a change of Z" is tested with two different dates (19c lesson).
+
+## 19d inventory (readers of wealth by date)
+
+| Reader | Where | Price term | Test |
+| --- | --- | --- | --- |
+| Net worth, financial assets, debts | `WealthService.summary(asOf)` | `WealthStore` rows: delta + `priceDelta` | Sep 30 vs Oct 31, later price and later activity |
+| Each person's view | `summary(asOf, memberId)` | same rows | person sums to the household for their accounts; earlier date ignores later |
+| Household total | Household page `HouseholdPage` (today) and `WealthOverTime` (a date) | server | Vitest, e2e |
+| Each group total (Bank money, Cards, Loans, Mortgages, Investments, Retirement, Health savings, Property) | `summary(asOf)` groups | lines | totals at Sep 30 unaffected by Oct activity; overlapping groups never summed (D-065, D-067) |
+| Account Balance on a date | `/accounts/{id}/balance?asOf` | `HoldingDeltaSql` | Sep 30 Balance of each Background account |
+| Account history | `/accounts/{id}/activity/history` | n/a | Sep 30 history |
+| Change explanation | `WealthService.change(from,to)` | `priceChange` | increase = sum of components; Sep 30 to Oct 31 = 4,120 |
+Writers: none new (no writer is added in 19d).
+
+## 19d task list (to be approved at Checkpoint 1)
+
+| Group | Scenarios | Level | Work |
+| --- | --- | --- | --- |
+| 1 | WEALTH_001 | API | Seven-account household at Sep 30: assets 188,620, debt 1,780, net worth 186,840, Bank money 17,120 with its two lines, each account's Sep 30 Balance and history, the Retirement/Investments overlap not added |
+| 2 | WEALTH_009 | API | Oct activity (income, card spending, a HOME price rise) summing to +4,120 with the clock at Oct 31: Sep 30 unchanged (net worth, assets, each person's view, each group total, each account Balance); Oct 31 190,960; change Sep 30 to Oct 31 = 4,120 with components adding up; a later price and later activity are ignored on the earlier date; a price recorded on a date after the read date is ignored |
+| 3 | WEALTH_001, 009 | UI (Vitest) | Household page shows the Sep 30 snapshot and Bank money; Wealth on a date and What changed show both dates and the increase |
+| 4 | WEALTH_001, 009 | e2e at 710 and 1280 | Same on the packaged stack with today fixed at 2026-10-03 (Sep 30 to Oct 3); open an account from the Bank money list |
+| 5 | | Docs | `deferred.txt` line removed, WEALTH_009 added to line 19 of `slices.txt`, `npm run coverage -- --require --slice 19` passes 13 of 13, INDEX, retro, handoff, walkthrough |
+
+Questions: Q-086 below.
