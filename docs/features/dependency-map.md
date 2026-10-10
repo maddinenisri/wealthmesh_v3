@@ -434,7 +434,7 @@ Capabilities needed beyond the four built ones. "Slice" 0 means done in row 01.
 | V2_WEALTH_006 | household/overview/understand-wealth | I4, L2, L3, L4, L5, L6, P1, P2, S1, T1, T2, T7, W1 | 21 |  |
 | V2_WEALTH_007 | household/overview/understand-wealth | I6, L6, S1, T1, T2, T6, T7, W1, W5 | 22 | U |
 | V2_WEALTH_008 | household/overview/understand-wealth | T1, T2, T6, T7, W1, W3 | 18 |  |
-| V2_WEALTH_009 | household/overview/understand-wealth | T1, T2, T6, T7, W1, W4 | 18 | U |
+| V2_WEALTH_009 | household/overview/understand-wealth | T1, T2, T6, T7, W1, W4 | 19 |  |
 | V2_WEALTH_010 | household/overview/understand-wealth | I5, I6, S1, T7, W1, W5 | 23 |  |
 | V2_WEALTH_011 | household/overview/understand-wealth | L2, L4, T1, T2, W1, W2 | 12 |  |
 | V2_HOUSEHOLD_SETUP_001 | household/setup/set-up-household | M2, W1 | 5 |  |
