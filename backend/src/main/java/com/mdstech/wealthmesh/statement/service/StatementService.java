@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -26,6 +27,7 @@ import com.mdstech.wealthmesh.statement.domain.Statement;
 import com.mdstech.wealthmesh.statement.dto.RemovalReview;
 import com.mdstech.wealthmesh.statement.dto.StatementRequest;
 import com.mdstech.wealthmesh.statement.dto.StatementResponse;
+import com.mdstech.wealthmesh.statement.dto.StatementReview;
 import com.mdstech.wealthmesh.statement.repository.StatementRepository;
 import com.mdstech.wealthmesh.statement.repository.StatementStore;
 
@@ -160,6 +162,7 @@ public class StatementService {
 
     private Mono<Parsed> parse(Account account, StatementRequest request, boolean revision) {
         return Mono.fromCallable(() -> {
+            requireCorrection(account, request.proposedCorrection());
             if (request.statementOn() == null) {
                 throw EntryValidator.bad("Enter the statement date");
             }
@@ -179,6 +182,64 @@ public class StatementService {
         }).flatMap(parts -> validator.member(account, request.enteredByMemberId())
                 .map(memberId -> new Parsed(request.statementOn(), (BigDecimal) parts[0], (String) parts[1],
                         (String) parts[2], memberId, Boolean.TRUE.equals(request.supportsOpening()))));
+    }
+
+    private static final String LATER = "Cash and quantity corrections come in a later release. "
+            + "Only a price can be recorded now.";
+
+    /** The same rule for the review and the save: only a price may be proposed, and only for an investment account. */
+    private static void requireCorrection(Account account, String proposed) {
+        if (proposed == null || proposed.isBlank()) {
+            return;
+        }
+        if (!AccountType.isInvestment(account.type())) {
+            throw EntryValidator.bad("A correction is proposed for an investment account's statement only");
+        }
+        switch (proposed.strip()) {
+            case "price" -> {
+            }
+            case "cash", "quantity" -> throw EntryValidator.bad(LATER);
+            default -> throw EntryValidator.bad("Choose a price correction");
+        }
+    }
+
+    /**
+     * The review of a statement for an investment account (V2_HOLDINGS_005): the statement total against the calculated
+     * Balance on its date, computed here and shown as it is. Writes nothing; the same checks as the save.
+     */
+    public Mono<StatementReview> review(UUID accountId, StatementRequest request) {
+        return account(accountId).flatMap(account -> {
+            if (!AccountType.isInvestment(account.type())) {
+                return Mono.<StatementReview>error(EntryValidator.bad(
+                        "A difference is reviewed for an investment account's statement only"));
+            }
+            return parse(account, request, false).flatMap(parsed -> lock.changeUpTo(accountId, parsed.statementOn(),
+                    null).map(change -> reviewOf(account, parsed, change)));
+        });
+    }
+
+    private static StatementReview reviewOf(Account account, Parsed parsed, BigDecimal change) {
+        BigDecimal total = parsed.balance();
+        if (parsed.statementOn().isBefore(account.openedOn())) {
+            return new StatementReview(parsed.statementOn(), Money.format(total), null, null, false, List.of(),
+                    account.name() + " began tracking on " + account.openedOn() + ", so there is no calculated "
+                            + "Balance on " + parsed.statementOn() + " to compare. Saving the statement changes "
+                            + "no Balance.");
+        }
+        BigDecimal calculated = account.openingAmount().add(change);
+        BigDecimal difference = total.subtract(calculated);
+        if (difference.signum() == 0) {
+            return new StatementReview(parsed.statementOn(), Money.format(total), Money.format(calculated),
+                    Money.format(difference), false, List.of(), "The statement total " + Money.dollars(total)
+                            + " matches the calculated Balance on " + parsed.statementOn() + ". Nothing needs "
+                            + "correcting, and saving the statement changes no Balance.");
+        }
+        String message = "The statement total is " + Money.dollars(total) + " and the calculated Balance on "
+                + parsed.statementOn() + " is " + Money.dollars(calculated) + ": a difference of "
+                + Money.dollars(difference.abs()) + ". Which cash, quantity or price needs correction? " + LATER
+                + " Saving the statement changes no Balance.";
+        return new StatementReview(parsed.statementOn(), Money.format(total), Money.format(calculated),
+                Money.format(difference), true, List.of("price"), message);
     }
 
     /** What removing a statement does: who uses it, and that the recorded cash, shares, price and Balance stay. */

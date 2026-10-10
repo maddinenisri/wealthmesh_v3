@@ -17,6 +17,7 @@ import com.mdstech.wealthmesh.account.dto.LifecycleRequest;
 import com.mdstech.wealthmesh.statement.dto.RemovalReview;
 import com.mdstech.wealthmesh.statement.dto.StatementRequest;
 import com.mdstech.wealthmesh.statement.dto.StatementResponse;
+import com.mdstech.wealthmesh.statement.dto.StatementReview;
 import com.mdstech.wealthmesh.statement.service.StatementService;
 
 import reactor.core.publisher.Flux;
@@ -43,6 +44,12 @@ public class StatementController {
             @RequestHeader(name = "Idempotency-Key", required = false) String key,
             @RequestBody StatementRequest request) {
         return service.attach(accountId, key, request).map(StatementController::response);
+    }
+
+    /** The review of a statement against the calculated Balance on its date: writes nothing (V2_HOLDINGS_005). */
+    @PostMapping("/review")
+    public Mono<StatementReview> review(@PathVariable UUID accountId, @RequestBody StatementRequest request) {
+        return service.review(accountId, request);
     }
 
     @PostMapping("/{statementId}/revision")
