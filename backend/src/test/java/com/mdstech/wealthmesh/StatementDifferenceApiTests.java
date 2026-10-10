@@ -69,8 +69,11 @@ class StatementDifferenceApiTests extends PriceTestBase {
                 .isEqualTo("21500.00").jsonPath("$.difference").isEqualTo("-100.00").jsonPath("$.differs")
                 .isEqualTo(true).jsonPath("$.corrections.length()").isEqualTo(1).jsonPath("$.corrections[0]")
                 .isEqualTo("price").jsonPath("$.message").value(text -> assertThat(String.valueOf(text))
-                        .contains("a difference of $100.00").contains("which cash, quantity or price needs correction"
-                                .replace("which", "Which")).contains(LATER).contains("changes no Balance"));
+                        .contains("a difference of $100.00").contains("Which cash, quantity or price needs correction?")
+                        .contains(LATER).contains("changes no Balance"))
+                .jsonPath("$.afterSave").value(text -> assertThat(String.valueOf(text)).startsWith(
+                        "Statement saved. The statement total is $21,400.00").contains("difference of $100.00")
+                        .contains("The Balance stays $21,500.00").contains("record a price"));
         assertThat(statements(redwood)).isZero();
         assertBalance(redwood, "21500.00");
     }

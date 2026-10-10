@@ -8,8 +8,8 @@ import java.util.List;
  * written by the server and shown as it is. `difference` is the statement total minus the calculated Balance on the
  * statement date (money strings; null when the date is before tracking began), `differs` is false when they match, and
  * `corrections` is what can be corrected now: only a price (cash and quantity corrections come in a later release).
- * Saving the statement never changes the Balance.
+ * Saving the statement never changes the Balance. `afterSave` is the sentence shown once the statement is saved.
  */
 public record StatementReview(LocalDate statementOn, String statementTotal, String calculatedBalance,
-        String difference, boolean differs, List<String> corrections, String message) {
+        String difference, boolean differs, List<String> corrections, String message, String afterSave) {
 }

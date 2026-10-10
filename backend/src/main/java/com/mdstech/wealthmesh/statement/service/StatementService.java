@@ -224,7 +224,7 @@ public class StatementService {
             return new StatementReview(parsed.statementOn(), Money.format(total), null, null, false, List.of(),
                     account.name() + " began tracking on " + account.openedOn() + ", so there is no calculated "
                             + "Balance on " + parsed.statementOn() + " to compare. Saving the statement changes "
-                            + "no Balance.");
+                            + "no Balance.", "Statement saved. A statement never changes the Balance.");
         }
         BigDecimal calculated = account.openingAmount().add(change);
         BigDecimal difference = total.subtract(calculated);
@@ -232,14 +232,20 @@ public class StatementService {
             return new StatementReview(parsed.statementOn(), Money.format(total), Money.format(calculated),
                     Money.format(difference), false, List.of(), "The statement total " + Money.dollars(total)
                             + " matches the calculated Balance on " + parsed.statementOn() + ". Nothing needs "
-                            + "correcting, and saving the statement changes no Balance.");
+                            + "correcting, and saving the statement changes no Balance.",
+                    "Statement saved. It matches the calculated Balance on " + parsed.statementOn()
+                            + ". A statement never changes the Balance.");
         }
         String message = "The statement total is " + Money.dollars(total) + " and the calculated Balance on "
                 + parsed.statementOn() + " is " + Money.dollars(calculated) + ": a difference of "
                 + Money.dollars(difference.abs()) + ". Which cash, quantity or price needs correction? " + LATER
                 + " Saving the statement changes no Balance.";
         return new StatementReview(parsed.statementOn(), Money.format(total), Money.format(calculated),
-                Money.format(difference), true, List.of("price"), message);
+                Money.format(difference), true, List.of("price"), message,
+                "Statement saved. The statement total is " + Money.dollars(total) + " and the calculated Balance on "
+                        + parsed.statementOn() + " is " + Money.dollars(calculated) + ": a difference of "
+                        + Money.dollars(difference.abs()) + ". The Balance stays " + Money.dollars(calculated)
+                        + "; a statement never changes it. To correct the difference, record a price.");
     }
 
     /** What removing a statement does: who uses it, and that the recorded cash, shares, price and Balance stay. */
