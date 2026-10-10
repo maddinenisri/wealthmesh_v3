@@ -183,7 +183,7 @@ export function InvestmentGroupPage() {
             <Card aria-label="Selected security">
               <CardTitle className="text-lg">Securities</CardTitle>
               <label className="mt-2 flex max-w-xs flex-col gap-1 text-sm">
-                Security
+                Choose a security
                 <select
                   value={selected.symbol}
                   onChange={(event) => setPicked(event.target.value)}
