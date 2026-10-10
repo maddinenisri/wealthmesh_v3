@@ -68,6 +68,16 @@ public class StatementController {
         return service.remove(accountId, statementId, request.enteredByMemberId());
     }
 
+    /** Undo of a removal: the statement is an active supporting record again; money is untouched. */
+    @PostMapping("/{statementId}/restore")
+    public Mono<StatementResponse> restore(@PathVariable UUID accountId, @PathVariable UUID statementId,
+            @RequestBody(required = false) LifecycleRequest request) {
+        if (request == null || request.enteredByMemberId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose who entered this");
+        }
+        return service.restore(accountId, statementId, request.enteredByMemberId());
+    }
+
     private static ResponseEntity<StatementResponse> response(StatementService.Saved saved) {
         return ResponseEntity.status(saved.created() ? HttpStatus.CREATED : HttpStatus.OK)
                 .body(saved.statement());

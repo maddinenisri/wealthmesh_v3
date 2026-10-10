@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.r2dbc.core.DatabaseClient;
@@ -37,11 +38,12 @@ public class StatementStore {
     /** Every version of every statement of the account, newest first. */
     public Flux<StatementResponse> ofAccount(UUID accountId) {
         return client.sql(COLUMNS + " WHERE s.account_id = :id ORDER BY s.seq DESC")
-                .bind("id", accountId).map(StatementStore::response).all();
+                .bind("id", accountId).map(StatementStore::response).all().concatMap(this::withEvents);
     }
 
     public Mono<StatementResponse> byId(UUID id) {
-        return client.sql(COLUMNS + " WHERE s.id = :id").bind("id", id).map(StatementStore::response).one();
+        return client.sql(COLUMNS + " WHERE s.id = :id").bind("id", id).map(StatementStore::response).one()
+                .flatMap(this::withEvents);
     }
 
     /** The statement the account's opening review uses, if any (read under the account lock). */
@@ -69,6 +71,37 @@ public class StatementStore {
                 .bind("id", statementId).map((row, meta) -> row.get("n", Long.class)).one();
     }
 
+    private Mono<StatementResponse> withEvents(StatementResponse statement) {
+        return client.sql("""
+                SELECT e.action, e.member_id, m.name, e.at
+                FROM statement_event e JOIN household_member m ON m.id = e.member_id
+                WHERE e.statement_id = :id ORDER BY e.seq""").bind("id", statement.id())
+                .map((row, meta) -> new StatementResponse.Event(row.get("action", String.class),
+                        row.get("member_id", UUID.class), row.get("name", String.class),
+                        row.get("at", OffsetDateTime.class).toInstant()))
+                .all().collectList().map(events -> new StatementResponse(statement.id(), statement.accountId(),
+                        statement.statementOn(), statement.balance(), statement.note(), statement.reason(),
+                        statement.replacesId(), statement.replacedById(), statement.latest(),
+                        statement.enteredByMemberId(), statement.enteredByName(), statement.createdAt(),
+                        statement.removedAt(), statement.removedByMemberId(), statement.removedByName(),
+                        statement.usedByOpening(), events));
+    }
+
+    /** Writes one removal or Undo into the statement's history. Run under the account lock. */
+    public Mono<Long> addEvent(UUID statementId, String action, UUID memberId, Instant at) {
+        return client.sql("INSERT INTO statement_event (statement_id, action, member_id, at) "
+                        + "VALUES (:id, :action, :member, :at)")
+                .bind("id", statementId).bind("action", action).bind("member", memberId).bind("at", at)
+                .fetch().rowsUpdated();
+    }
+
+    /** Brings a removed statement back (rows touched: 1) unless it is not removed. Run under the account lock. */
+    public Mono<Long> markRestored(UUID statementId) {
+        return client.sql("UPDATE statement SET removed_at = NULL, removed_by_member_id = NULL "
+                        + "WHERE id = :id AND removed_at IS NOT NULL")
+                .bind("id", statementId).fetch().rowsUpdated();
+    }
+
     /** Marks a statement removed (rows touched: 1) unless it already is. Run under the account lock. */
     public Mono<Long> markRemoved(UUID statementId, UUID memberId, Instant at) {
         return client.sql("UPDATE statement SET removed_at = :at, removed_by_member_id = :member "
@@ -92,7 +125,7 @@ public class StatementStore {
                 row.get("entered_by_name", String.class), row.get("created_at", OffsetDateTime.class).toInstant(),
                 instant(row.get("removed_at", OffsetDateTime.class)), row.get("removed_by_member_id", UUID.class),
                 row.get("removed_by_name", String.class),
-                Boolean.TRUE.equals(row.get("used_by_opening", Boolean.class)));
+                Boolean.TRUE.equals(row.get("used_by_opening", Boolean.class)), List.of());
     }
 
     private static Instant instant(OffsetDateTime time) {

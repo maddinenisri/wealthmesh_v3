@@ -124,6 +124,9 @@ class DeletedAccountSweepApiTests extends ValuedTestBase {
         expectNotFound(found, "POST statements", statusOf(post(gone, "statements", "s-7", """
                 {"statementOn": "2026-09-30", "balance": "0.00", "note": "Sep", "enteredByMemberId": "%s"}"""
                 .formatted(mayaId))));
+        expectNotFound(found, "POST statement restore", statusOf(post(gone,
+                "statements/" + java.util.UUID.randomUUID() + "/restore", "s-9", """
+                {"enteredByMemberId": "%s"}""".formatted(mayaId))));
     }
 
     private void lifecycleWriters(List<String> found) {

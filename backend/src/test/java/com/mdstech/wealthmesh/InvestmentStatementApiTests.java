@@ -232,6 +232,133 @@ class InvestmentStatementApiTests extends InvestmentTestBase {
         assertStatementCount(id, 1);
     }
 
+    private WebTestClient.ResponseSpec restore(String account, String id, String member) {
+        return webTestClient.post().uri("/api/v1/accounts/{a}/statements/{s}/restore", account, id)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(member == null ? "{}" : "{\"enteredByMemberId\": \"%s\"}".formatted(member)).exchange();
+    }
+
+    @Order(15)
+    @Test
+    @DisplayName("V2_SUPPORTING_RECORD_002 Undo brings the removed statement back once: the same statement, the same "
+            + "opening link, the Balance and the breakdown untouched, the removal still in history")
+    void undoRestoresOnce() {
+        restore(brokerage, statement, mayaId).expectStatus().isOk().expectBody().jsonPath("$.id")
+                .isEqualTo(statement).jsonPath("$.removedAt").isEmpty().jsonPath("$.removedByName").isEmpty()
+                .jsonPath("$.usedByOpening").isEqualTo(true).jsonPath("$.events.length()").isEqualTo(2)
+                .jsonPath("$.events[0].action").isEqualTo("removed").jsonPath("$.events[0].memberName")
+                .isEqualTo("Sam").jsonPath("$.events[1].action").isEqualTo("restored")
+                .jsonPath("$.events[1].memberName").isEqualTo("Maya");
+        assertBalance(brokerage, "20000.00");
+        webTestClient.get().uri("/api/v1/wealth").exchange().expectBody()
+                .jsonPath("$.investments.accounts[?(@.accountId == '" + brokerage + "')].balance")
+                .value(java.util.List.class, found -> assertThat(found).containsExactly("20000.00"));
+        assertStatementCount(brokerage, 1);
+        webTestClient.get().uri("/api/v1/accounts/{id}/opening", brokerage).exchange().expectBody()
+                .jsonPath("$.cash").isEqualTo("15000.00").jsonPath("$.holdings.length()").isEqualTo(1)
+                .jsonPath("$.holdings[0].quantity").isEqualTo("50").jsonPath("$.statementId")
+                .isEqualTo(statement).jsonPath("$.statementRemoved").isEqualTo(false);
+    }
+
+    @Order(16)
+    @Test
+    @DisplayName("V2_SUPPORTING_RECORD_002 Undo twice changes nothing the second time: one statement, one restored "
+            + "event, no duplicate holdings, the same Balance")
+    void undoTwice() {
+        restore(brokerage, statement, samId).expectStatus().isOk().expectBody().jsonPath("$.events.length()")
+                .isEqualTo(2).jsonPath("$.events[1].memberName").isEqualTo("Maya");
+        assertStatementCount(brokerage, 1);
+        assertBalance(brokerage, "20000.00");
+        webTestClient.get().uri("/api/v1/accounts/{id}/opening", brokerage).exchange().expectBody()
+                .jsonPath("$.holdings.length()").isEqualTo(1);
+        // A removed statement is not revised, but a restored one is again.
+        remove(brokerage, statement, samId).expectStatus().isOk().expectBody().jsonPath("$.events.length()")
+                .isEqualTo(3);
+        restore(brokerage, statement, samId).expectStatus().isOk().expectBody().jsonPath("$.events.length()")
+                .isEqualTo(4).jsonPath("$.events[3].memberName").isEqualTo("Sam");
+        revise(brokerage, statement, "inv-undo-1", """
+                {"statementOn": "2026-09-01", "balance": "20000.00", "reason": "Same figures",
+                 "enteredByMemberId": "%s"}""".formatted(mayaId)).expectStatus().isCreated();
+    }
+
+    @Order(17)
+    @Test
+    @DisplayName("V2_SUPPORTING_RECORD_002 Undo names a person and an existing statement of this investment account; "
+            + "an unknown member is refused and a checking statement is not restorable")
+    void undoRules() {
+        restore(brokerage, statement, null).expectStatus().isBadRequest();
+        restore(brokerage, java.util.UUID.randomUUID().toString(), mayaId).expectStatus().isNotFound();
+        remove(brokerage, statement, samId).expectStatus().isOk();
+        restore(brokerage, statement, java.util.UUID.randomUUID().toString()).expectStatus().isBadRequest();
+        restore(brokerage, statement, mayaId).expectStatus().isOk();
+        String other = investment(TYPE, "Other Undo Brokerage", "2026-09-01", opening(null, "10.00"));
+        restore(other, statement, mayaId).expectStatus().isNotFound();
+        String checking = account("Undo Checking", "100.00");
+        AtomicReference<String> sid = new AtomicReference<>();
+        attach(checking, "inv-u1", statementBody("100.00", false)).expectStatus().isCreated().expectBody()
+                .jsonPath("$.id").value(String.class, sid::set);
+        restore(checking, sid.get(), mayaId).expectStatus().is4xxClientError();
+    }
+
+    @Order(18)
+    @Test
+    @DisplayName("V2_SUPPORTING_RECORD_002 an Undo waits for the account lock, then sees the committed state: a "
+            + "close that commits first refuses it")
+    void undoTakesTheLock() throws Exception {
+        String id = investment(TYPE, "Race Undo", "2026-09-01", opening(null, "100.00"));
+        AtomicReference<String> sid = new AtomicReference<>();
+        attach(id, "inv-z2", statementBody("100.00", false)).expectStatus().isCreated().expectBody()
+                .jsonPath("$.id").value(String.class, sid::set);
+        remove(id, sid.get(), mayaId).expectStatus().isOk();
+        int status = afterUncommitted(id, "UPDATE wealthmesh.account SET status = 'closed' WHERE id = $1",
+                () -> restore(id, sid.get(), mayaId));
+        assertThat(status).isEqualTo(409);
+        webTestClient.get().uri("/api/v1/accounts/{id}/statements", id).exchange().expectBody()
+                .jsonPath("$[0].removedAt").isNotEmpty();
+    }
+
+    @Order(19)
+    @Test
+    @DisplayName("V2_SUPPORTING_RECORD_002 two Undos at once restore once: one restored event, both answered 200")
+    void twoUndosAtOnce() throws Exception {
+        String id = investment(TYPE, "Race Two Undos", "2026-09-01", opening(null, "100.00"));
+        AtomicReference<String> sid = new AtomicReference<>();
+        attach(id, "inv-z3", statementBody("100.00", false)).expectStatus().isCreated().expectBody()
+                .jsonPath("$.id").value(String.class, sid::set);
+        remove(id, sid.get(), mayaId).expectStatus().isOk();
+        java.util.List<Integer> statuses = both(id, () -> restore(id, sid.get(), mayaId),
+                () -> restore(id, sid.get(), samId));
+        assertThat(statuses).as("refusals: %s", refusals).containsExactly(200, 200);
+        webTestClient.get().uri("/api/v1/accounts/{id}/statements", id).exchange().expectBody()
+                .jsonPath("$[0].removedAt").isEmpty().jsonPath("$[0].events.length()").isEqualTo(2);
+    }
+
+    @Order(20)
+    @Test
+    @DisplayName("V2_SUPPORTING_RECORD_002 D-034 the entering member is read under a share lock: an Undo by a member "
+            + "deactivated while it waits is refused (400) and the statement stays removed")
+    void undoByMemberDeactivatedWhileWaiting() throws Exception {
+        String id = investment(TYPE, "Race Undo Member", "2026-09-01", opening(null, "100.00"));
+        AtomicReference<String> sid = new AtomicReference<>();
+        attach(id, "inv-z4", statementBody("100.00", false)).expectStatus().isCreated().expectBody()
+                .jsonPath("$.id").value(String.class, sid::set);
+        remove(id, sid.get(), mayaId).expectStatus().isOk();
+        io.r2dbc.spi.Connection other = holdUncommitted(
+                "UPDATE wealthmesh.household_member SET active = false WHERE id = $1", samId);
+        try {
+            java.util.concurrent.CompletableFuture<Integer> status = async(
+                    () -> statusOf(restore(id, sid.get(), samId)));
+            Thread.sleep(600);
+            assertThat(status).as("the Undo waits for the member row").isNotDone();
+            commit(other);
+            assertThat(status.get(10, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(400);
+        } finally {
+            close(other);
+        }
+        webTestClient.get().uri("/api/v1/accounts/{id}/statements", id).exchange().expectBody()
+                .jsonPath("$[0].removedAt").isNotEmpty().jsonPath("$[0].events.length()").isEqualTo(1);
+    }
+
     private void assertStatementCount(String account, int count) {
         webTestClient.get().uri("/api/v1/accounts/{id}/statements", account).exchange().expectBody()
                 .jsonPath("$.length()").isEqualTo(count);

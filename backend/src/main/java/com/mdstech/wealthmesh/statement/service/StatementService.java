@@ -136,7 +136,7 @@ public class StatementService {
         }
         return store.openingStatement(account.id()).flatMap(existing -> Mono.<Void>error(
                 conflict(account.name() + "'s opening already uses a statement, even if it was removed. "
-                        + "Revise the active one; bringing a removed one back comes in a later release.")));
+                        + "Undo the removal to use it again, or revise the active one.")));
     }
 
     private Mono<Saved> replay(Statement existing, UUID accountId, UUID replacesId, Parsed parsed) {
@@ -208,7 +208,30 @@ public class StatementService {
                         .flatMap(statement -> statement.removedAt() != null ? Mono.just(statement)
                                 : Mono.fromCallable(() -> AccountState.requireNotClosed(locked))
                                         .then(Mono.defer(() -> validator.memberLocked(locked, memberId)))
-                                        .flatMap(member -> store.markRemoved(statementId, member, clock.instant()))
+                                        .flatMap(member -> {
+                                            Instant at = clock.instant();
+                                            return store.markRemoved(statementId, member, at)
+                                                    .then(store.addEvent(statementId, "removed", member, at));
+                                        })
+                                        .then(Mono.defer(() -> store.byId(statementId))))))));
+    }
+
+    /**
+     * Undo of a removal (SUPPORTING_RECORD_002): the statement is an active supporting record again, once, with the
+     * same opening link; no money moves. It takes the account lock first, so it waits for a racing lifecycle change
+     * and then sees what committed. Undoing a statement that is not removed changes nothing and returns it (D-044).
+     * The removal and the Undo both stay in `events`, with who did each.
+     */
+    public Mono<StatementResponse> restore(UUID accountId, UUID statementId, UUID memberId) {
+        return investmentAccount(accountId).then(Mono.defer(() -> transactions.transactional(lock.lockAccount(accountId)
+                .then(Mono.defer(() -> investmentAccount(accountId)))
+                .flatMap(locked -> ownStatement(accountId, statementId)
+                        .flatMap(statement -> statement.removedAt() == null ? Mono.just(statement)
+                                : Mono.fromCallable(() -> AccountState.requireNotClosed(locked))
+                                        .then(Mono.defer(() -> validator.memberLocked(locked, memberId)))
+                                        .flatMap(member -> store.markRestored(statementId)
+                                                .then(store.addEvent(statementId, "restored", member,
+                                                        clock.instant())))
                                         .then(Mono.defer(() -> store.byId(statementId))))))));
     }
 
