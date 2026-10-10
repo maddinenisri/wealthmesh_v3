@@ -4,6 +4,10 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
 (a test name or a command result). A blank item counts as a failure. Every item came from a defect found in slices
 01 to 06 (see `review-2026-10-05.md`).
 
+**Upkeep** (`review-2026-10-10.md`): a line names the slice and the defect that added it. At each process review, a line
+under which the validator found nothing in five slices is marked retired and struck out, not kept. Keep this file one
+page per theme; do not add a line for a bug a listed line already covers.
+
 ## Inventory (written at checkpoint 1, in the slice notes)
 
 - [ ] Every shared row or state this slice changes is listed (account row, member status, entry, category), with every
@@ -37,6 +41,9 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
       Name the outcome that only the lock produces, assert it, and plant the lock away to see it red. A plant counts
       only when the method it names goes red (slice 17b: a plant on `move()` stayed green because delete is another
       method). Restore a plant from a copy, never with `git checkout` on a file that holds uncommitted work.
+- [ ] A race test for a lock uses an update when a foreign key to the locked row would make an insert wait anyway (plant the
+      lock's removal and see it red). A screen that lists rows is checked in a short month and at 1280px; a history row
+      says what changed, not only who and when.
 - [ ] A removed UI state or option (a "coming soon" type, a flag) is grepped in `e2e/tests` and `docs` as well as
       `frontend/src` before the full e2e run (slice 17b: `04-income.spec.ts` still expected it).
 
@@ -55,12 +62,11 @@ Yes or no items. The builder works through it before Prove; the `validator` agen
       inside the form, and a removal or Undo (slice 11: Back, Remove portion and Confirm of a removal lost focus). A
       status line says what changed. Run each new e2e assertion red on its own (`--grep`): a serial run stops at the first
       failure and hides the rest.
+- [ ] An e2e spec on the shared database makes every account name, symbol and short label with `uniq()` from
+      `e2e/support/unique.ts`, not a literal.
 - [ ] An e2e spec on the shared database judges deltas and scopes every negative assertion (`not.toContainText`, a count of zero) and every short label (`getByLabel('To')`) to the block the spec created, with `exact: true` (slices 18a and 18b: both failed only in the full run).
 - [ ] A plant is real only when `npm run package` printed `BUILD SUCCESSFUL` before the e2e run (slice 18b: a plant that broke the TypeScript build left the old jar and looked harmless).
 - [ ] Edit forms start from the current values and show the original. A long name and label wrap at 710px.
-- [ ] A race test for a lock uses an update when a foreign key to the locked row would make an insert wait anyway (plant the
-      lock's removal and see it red). A screen that lists rows is checked in a short month and at 1280px; a history row
-      says what changed, not only who and when.
 - [ ] A panel or form that holds state for one row is keyed by the row (and action) and a test opens it on a second row
       (slice 14: Change opened on another bill saved the first bill's values). A mutation error is reset when a new
       panel opens. Assert the computed colour of each Button variant once (slice 14: `cn` dropped a label colour).

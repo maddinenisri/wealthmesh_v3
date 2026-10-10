@@ -51,8 +51,7 @@ stable `@V2_...` IDs; a read-only snapshot). Status board: `docs/features/INDEX.
 
 Claude Code skills in `.claude/skills/`: `preflight`, `bootstrap-fullstack`, `feature-session`, `feature-slice`, `release-jar`.
 Claude Code agents in `.claude/agents/` (use on request): `validator` (independent evidence, no edits),
-`visual-reviewer` (screenshots of new screens at 710px and 1280px read against the UI checklist),
-`pattern-reviewer` (conformance to `docs/guides/patterns.md`).
+`visual-reviewer` (screenshots of new screens at 710px and 1280px read against the UI checklist).
 
 Other tools: the skill files are plain Markdown runbooks. Open the matching `SKILL.md` and follow it step by step;
 the validator and reviewer files describe the checks to run and report.

@@ -33,7 +33,7 @@ One slice (capabilities plus the scenario IDs they make citeable; D-018) is buil
 ## Roles
 
 You decide scope and approve at the two checkpoints. The assistant builds. The `validator` agent checks the result
-independently and cannot edit. The `pattern-reviewer` agent checks conformance to `guides/patterns.md`. Hooks check
+independently and cannot edit. Hooks check
 every commit and push. No agent approves its own work, and no agent approves on your behalf.
 
 ## Rules that never bend

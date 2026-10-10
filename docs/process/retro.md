@@ -3,6 +3,8 @@
 The feedback loop. Each session appends one row when it finishes: what slowed it down, and one change to try. Do
 not rewrite old rows.
 
+**Length:** a row is about 80 words; the detail belongs in the slice notes.
+
 **Promotion rule:** when the same problem appears in two rows, change the process in that session: update a skill,
 `AGENTS.md`, a doc or a script, put the commit hash in the last column and add a row to `improvements.md`. A problem that only shows up once stays
 a note.

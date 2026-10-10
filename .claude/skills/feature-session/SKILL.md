@@ -29,6 +29,8 @@ Record the start time. If a limit is hit, apply the stop rule below instead of p
 ## Stop rules
 
 - A scenario blocked for 15 minutes: add it to `docs/features/deferred.txt` as `<ID> <reason>`, move on.
+- A failure that hits twice and is not reproduced (an unexplained flake) gets its own group in the next slice: reproduce it
+  with the output kept, or close it with a reason. A third hit is fixed before any new building.
 - Budget used up: commit a green checkpoint, mark the row `partial`, write the handoff.
 - `main` must be green and `npm run e2e` passing at the end of every session, even a partial one.
 - Never report a check as passing unless you ran it. Never edit a `.feature` file; record disagreements as decisions.

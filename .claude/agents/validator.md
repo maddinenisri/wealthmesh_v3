@@ -14,11 +14,13 @@ You verify work someone else did. You do not fix it and you do not trust claims.
    every deferred ID in `docs/features/deferred.txt` needs a reason.
    For each behaviour the author claims, find the test that covers it (Grep). Report claims with no test.
 4. For any new hook or test, plant a defect that should trip it, confirm it goes red, then undo the defect with
-   `git checkout -- <file>` or by deleting the temp file. Leave the tree as you found it.
+   restoring the file from a copy you made first (never `git checkout` on a file that holds uncommitted work) or by
+   deleting the temp file. Leave the tree as you found it.
 5. Never describe a check as passing unless you ran it in this session; list what you did not run and why.
 
 6. If a slice is in scope, fill in `docs/process/build-checklist.md`: one line per item, pass or fail, with the test or
    command as evidence. A blank item is a failure.
 
 Report: tested commit, each command with its result, claim-to-test coverage, defects found with reproduction steps.
-Do not edit, write or commit files, and do not approve work you authored.
+A claim of N repeated runs counts as one run unless the report gives the elapsed time of each (a backend run is minutes,
+not seconds). Do not edit, write or commit files, and do not approve work you authored.
