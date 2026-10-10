@@ -208,7 +208,7 @@ public class InvestmentSetupService {
     }
 
     /** The opening lines with the price that counts now (a recorded price, else the opening one) and its date. */
-    private static List<OpeningComponents.Line> atEffectivePrices(List<OpeningComponents.Line> lines,
+    static List<OpeningComponents.Line> atEffectivePrices(List<OpeningComponents.Line> lines,
             List<HoldingPriceStore.Effective> effective) {
         List<OpeningComponents.Line> out = new java.util.ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {

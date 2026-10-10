@@ -17,9 +17,11 @@ public record HoldingsView(String cash, String holdingsValue, String balance, Lo
     /**
      * One security in the account (its lines added together). `price` is null when its lines carry different prices;
      * `priceOn` is the latest price date. `coverage` is known-cost shares over shares, as "14.29%".
+     * `shareOfBalance` is the security's value over the account's one Balance ("25.58%"), a different measure from
+     * coverage; null when the Balance is not above zero.
      */
     public record Security(String symbol, String shares, String price, LocalDate priceOn, String value,
             String knownShares, String knownValue, String knownCost, String knownGain, String coverage, String cost,
-            String gain) {
+            String gain, String shareOfBalance) {
     }
 }

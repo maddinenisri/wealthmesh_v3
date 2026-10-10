@@ -18,7 +18,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
  */
 class AccountStateRaceApiTests extends LifecycleTestBase {
 
-    private static int n;
+    private static final java.util.concurrent.atomic.AtomicInteger N = new java.util.concurrent.atomic.AtomicInteger();
 
     @Order(0)
     @Test
@@ -28,7 +28,7 @@ class AccountStateRaceApiTests extends LifecycleTestBase {
     }
 
     private String fresh() {
-        return account("Race Checking " + (++n), "1000.00");
+        return account("Race Checking " + N.incrementAndGet(), "1000.00");
     }
 
     private void refusedAfter(String sql, String held, Supplier<WebTestClient.ResponseSpec> call) throws Exception {
@@ -85,10 +85,10 @@ class AccountStateRaceApiTests extends LifecycleTestBase {
             refusedAfter(ARCHIVED, held, () -> postTransfer("r-t" + held, from, to, "5.00", "2026-09-07", mayaId));
         }
         String bank = fresh();
-        String card = card("Race Card " + (++n), "100.00", "owed", "2026-09-01");
+        String card = card("Race Card " + N.incrementAndGet(), "100.00", "owed", "2026-09-01");
         refusedAfter(ARCHIVED, card, () -> postPayment("r-p1", bank, card, "5.00", "2026-09-07", mayaId));
         String bank2 = fresh();
-        String card2 = card("Race Card " + (++n), "100.00", "owed", "2026-09-01");
+        String card2 = card("Race Card " + N.incrementAndGet(), "100.00", "owed", "2026-09-01");
         refusedAfter(ARCHIVED, bank2, () -> postPayment("r-p2", bank2, card2, "5.00", "2026-09-07", mayaId));
     }
 

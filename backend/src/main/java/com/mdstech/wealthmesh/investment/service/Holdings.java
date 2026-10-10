@@ -81,14 +81,15 @@ public final class Holdings {
         return quantity.stripTrailingZeros().toPlainString();
     }
 
-    private static Security security(Position p) {
+    private static Security security(Position p, BigDecimal balance) {
         boolean some = p.knownShares().signum() > 0;
         String price = p.samePrice() ? OpeningComponents.priceText(p.price()) : null;
         String knownGain = some ? Money.format(p.knownValue().subtract(p.knownCost())) : null;
         return new Security(p.symbol(), shown(p.shares()), price, p.priceOn(), Money.format(p.value()),
                 shown(p.knownShares()), some ? Money.format(p.knownValue()) : null,
                 some ? Money.format(p.knownCost()) : null, knownGain, coverage(p.knownShares(), p.shares()),
-                p.cost() == null ? null : Money.format(p.cost()), p.gain() == null ? null : Money.format(p.gain()));
+                p.cost() == null ? null : Money.format(p.cost()), p.gain() == null ? null : Money.format(p.gain()),
+                InvestmentHoldingsService.share(p.value(), balance));
     }
 
     /** The view of an account whose Balance is `balance` on `balanceOn`, opened with `cash` and these lines. */
@@ -102,7 +103,7 @@ public final class Holdings {
         BigDecimal cost = allKnown ? positions.stream().map(Position::cost).reduce(BigDecimal.ZERO, BigDecimal::add)
                 : null;
         return new HoldingsView(Money.format(cash), Money.format(value), Money.format(balance), balanceOn,
-                positions.stream().map(Holdings::security).toList(), cost == null ? null : Money.format(cost),
+                positions.stream().map(p -> security(p, balance)).toList(), cost == null ? null : Money.format(cost),
                 cost == null ? null : Money.format(value.subtract(cost)));
     }
 }
