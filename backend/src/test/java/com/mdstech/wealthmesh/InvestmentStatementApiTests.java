@@ -297,7 +297,7 @@ class InvestmentStatementApiTests extends InvestmentTestBase {
         AtomicReference<String> sid = new AtomicReference<>();
         attach(checking, "inv-u1", statementBody("100.00", false)).expectStatus().isCreated().expectBody()
                 .jsonPath("$.id").value(String.class, sid::set);
-        restore(checking, sid.get(), mayaId).expectStatus().is4xxClientError();
+        assertRefused(restore(checking, sid.get(), mayaId), "statement can be removed or restored");
     }
 
     @Order(18)

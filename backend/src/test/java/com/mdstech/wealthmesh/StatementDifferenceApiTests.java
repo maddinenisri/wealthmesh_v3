@@ -144,6 +144,33 @@ class StatementDifferenceApiTests extends PriceTestBase {
                         .contains("began tracking on 2026-09-01"));
     }
 
+    @Order(7)
+    @Test
+    @DisplayName("V2_HOLDINGS_005 the review refuses what the save refuses: a closed account and a draft are 409 in "
+            + "both, an archived account may still take a statement")
+    void stateRulesAreTheSavesToo() {
+        String closed = held("brokerage", "Diff Closed Brokerage", mayaId, "2026-09-01", "100.00",
+                holding("HOME", "1", "100.00", "2026-09-01"));
+        io.r2dbc.spi.Connection other = hold(closed, CLOSED);
+        try {
+            commit(other);
+        } finally {
+            close(other);
+        }
+        review(closed, body("2026-09-30", "200.00", null)).expectStatus().isEqualTo(409);
+        save(closed, "diff-closed", body("2026-09-30", "200.00", null)).expectStatus().isEqualTo(409);
+        String draft = investment("brokerage", "Diff Draft Brokerage", "2026-09-01",
+                opening("30000.00", null, holding("HOME", "10", "100.00", "2026-09-01")));
+        review(draft, body("2026-09-30", "200.00", null)).expectStatus().isEqualTo(409);
+        save(draft, "diff-draft", body("2026-09-30", "200.00", null)).expectStatus().isEqualTo(409);
+        String archived = held("brokerage", "Diff Archived Brokerage", mayaId, "2026-09-01", "100.00",
+                holding("HOME", "1", "100.00", "2026-09-01"));
+        webTestClient.post().uri("/api/v1/accounts/{id}/archive", archived).contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"enteredByMemberId\": \"" + mayaId + "\"}").exchange().expectStatus().isOk();
+        review(archived, body("2026-09-30", "200.00", null)).expectStatus().isOk();
+        save(archived, "diff-archived", body("2026-09-30", "200.00", null)).expectStatus().isCreated();
+    }
+
     @Order(6)
     @Test
     @DisplayName("V2_HOLDINGS_005 the review judges the statement as the save does: a future date, a bad amount, no "

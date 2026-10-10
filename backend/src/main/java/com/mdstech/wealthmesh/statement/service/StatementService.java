@@ -213,8 +213,11 @@ public class StatementService {
                 return Mono.<StatementReview>error(EntryValidator.bad(
                         "A difference is reviewed for an investment account's statement only"));
             }
-            return parse(account, request, false).flatMap(parsed -> lock.changeUpTo(accountId, parsed.statementOn(),
-                    null).map(change -> reviewOf(account, parsed, change)));
+            // The save's state gate, told before Confirm: a closed account or a draft takes no statement.
+            return Mono.fromCallable(() -> AccountState.requireNotDraft(AccountState.requireNotClosed(account)))
+                    .then(Mono.defer(() -> parse(account, request, false)))
+                    .flatMap(parsed -> lock.changeUpTo(accountId, parsed.statementOn(), null)
+                            .map(change -> reviewOf(account, parsed, change)));
         });
     }
 
@@ -306,7 +309,7 @@ public class StatementService {
     private Mono<Account> investmentAccount(UUID accountId) {
         return account(accountId).filter(account -> AccountType.isInvestment(account.type()))
                 .switchIfEmpty(Mono.error(EntryValidator.bad(
-                        "Only an investment account's statement can be removed")));
+                        "Only an investment account's statement can be removed or restored")));
     }
 
     private Mono<StatementResponse> ownStatement(UUID accountId, UUID statementId) {
