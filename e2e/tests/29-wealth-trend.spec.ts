@@ -92,10 +92,12 @@ for (const width of [710, 1280]) {
 
       await page.goto('/')
       const bank = page.getByRole('region', { name: 'Bank money' })
-      await expect(bank).toContainText(`${tag} Checking`)
-      await expect(bank).toContainText(`${tag} Savings`)
-      await expect(bank).toContainText('$5,120.00')
-      await expect(bank).toContainText('$12,000.00')
+      await expect(bank.getByRole('listitem').filter({ hasText: `${tag} Checking` })).toContainText(
+        '$5,120.00',
+      )
+      await expect(bank.getByRole('listitem').filter({ hasText: `${tag} Savings` })).toContainText(
+        '$12,000.00',
+      )
       // The group total moved by the two accounts: $17,120.00 on Sep 30, whatever else the shared database holds.
       const after = Number((await wealthOn(page, '2026-09-30')).bankMoney.total)
       expect(after - bankBefore).toBeCloseTo(17120, 2)
@@ -170,8 +172,8 @@ for (const width of [710, 1280]) {
       const card = page.getByRole('region', { name: 'Wealth on a date' })
       await card.getByLabel('Show wealth on').fill('2026-09-30')
       await expect(card.getByText(/^Household wealth on 2026-09-30/)).toContainText(money(sepNet))
-      await card.getByLabel('From').fill('2026-09-30')
-      await card.getByLabel('To').fill('2026-10-03')
+      await card.getByLabel('From', { exact: true }).fill('2026-09-30')
+      await card.getByLabel('To', { exact: true }).fill('2026-10-03')
       const shown = card.getByRole('region', { name: 'Wealth change' })
       await expect(shown).toContainText(
         `Wealth went from ${money(Number(change.startWealth))} on 2026-09-30 to ${money(Number(change.endWealth))} on 2026-10-03: a change of ${money(Number(change.change))}.`,
@@ -183,12 +185,14 @@ for (const width of [710, 1280]) {
         shown.getByText('Income', { exact: true }).locator('xpath=ancestor::li'),
       ).toContainText('$')
       // The same start, an end date before the income and the price: a different answer (two dates).
-      await card.getByLabel('To').fill('2026-09-30')
-      const flat = await changeOver(page, '2026-09-30', '2026-09-30')
+      await card.getByLabel('To', { exact: true }).fill('2026-10-01')
+      const flat = await changeOver(page, '2026-09-30', '2026-10-01')
       await expect(shown).toContainText(
-        `Wealth went from ${money(Number(flat.startWealth))} on 2026-09-30 to ${money(Number(flat.endWealth))} on 2026-09-30: a change of ${money(Number(flat.change))}.`,
+        `Wealth went from ${money(Number(flat.startWealth))} on 2026-09-30 to ${money(Number(flat.endWealth))} on 2026-10-01: a change of ${money(Number(flat.change))}.`,
       )
-      expect(Number(flat.change)).toBeCloseTo(0, 2)
+      // Oct 1 has the income and not the Oct 2 price, so it differs from Oct 3 by exactly the price.
+      expect(Number(flat.priceChange)).toBeCloseTo(0, 2)
+      expect(Number(change.change) - Number(flat.change)).toBeCloseTo(Number(change.priceChange), 2)
       expect(octNet - sepNet).toBeCloseTo(Number(change.change), 2)
       await expectNoSidewaysScroll(page)
     })

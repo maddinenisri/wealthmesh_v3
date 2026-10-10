@@ -179,8 +179,11 @@ class WealthAsOfTrendApiTests extends DefinedBenefitTestBase {
         assertBalanceAsOf(planId, SEP30, "40000.00");
         // "Open either account": its history is there for the day.
         for (String account : List.of(checking, savings)) {
-            webTestClient.get().uri("/api/v1/accounts/{id}/activity/history", account).exchange().expectStatus().isOk();
+            webTestClient.get().uri("/api/v1/accounts/{id}/activity/history", account).exchange().expectStatus().isOk()
+                    .expectBody().jsonPath("$.length()").isEqualTo(0);
+            assertActivityCount(account, 0);
         }
+        assertBalanceAsOf(cardId, SEP30, "-1780.00");
         // Each person's view: Maya owns checking, savings and the card; Sam the investments and the plan.
         assertThat(num(viewOf(mayaId, SEP30), "$.netWorth")).isEqualByComparingTo("15340.00");
         assertThat(num(viewOf(samId, SEP30), "$.netWorth")).isEqualByComparingTo("171500.00");
@@ -196,6 +199,9 @@ class WealthAsOfTrendApiTests extends DefinedBenefitTestBase {
             saveIncome(checking, "t-inc", "2500.00", "2026-10-05");
             saveExpense(cardId, "t-card", "380.00", "2026-10-10", "Dining");
             recordPrice(redwood, "t-price", "HOME", "150.00", "2026-10-20");
+            // The account's list now holds the October income; its September 30 Balance still excludes it.
+            assertActivityCount(checking, 1);
+            assertBalanceAsOf(checking, SEP30, "5120.00");
             assertThat(num(wealthOn(OCT31), "$.netWorth")).isEqualByComparingTo("190960.00");
             String change = changeOver(SEP30, OCT31);
             assertThat(num(change, "$.startWealth")).isEqualByComparingTo("186840.00");
