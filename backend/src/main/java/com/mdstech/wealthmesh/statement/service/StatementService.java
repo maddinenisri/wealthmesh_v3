@@ -184,7 +184,7 @@ public class StatementService {
                         (String) parts[2], memberId, Boolean.TRUE.equals(request.supportsOpening()))));
     }
 
-    private static final String LATER = "Cash and quantity corrections come in a later release. "
+    private static final String LATER = "Cash and quantity corrections are not available yet. "
             + "Only a price can be recorded now.";
 
     /** The same rule for the review and the save: only a price may be proposed, and only for an investment account. */

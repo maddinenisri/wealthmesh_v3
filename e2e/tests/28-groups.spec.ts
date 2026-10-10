@@ -164,7 +164,7 @@ for (const width of [710, 1280]) {
       ).toContainText('200 shares at $100.00 on 2026-09-01')
       await expect(
         byAccount.getByRole('listitem').filter({ hasText: `Group Willow IRA ${width}` }),
-      ).toContainText('Purchase cost unknown (0.00% of the shares). Full cost: Not available.')
+      ).toContainText('Purchase cost unknown for all 100 shares. Full cost: Not available.')
       await expectNoSidewaysScroll(page)
 
       // Each account opens from the list.
@@ -188,7 +188,7 @@ for (const width of [710, 1280]) {
       })
       await expect(group).toContainText('This is the whole group, not this account.')
       await expect(group).not.toContainText(symbol)
-      await group.getByRole('link', { name: 'See the holdings by security' }).click()
+      await group.getByRole('link', { name: 'See investment holdings by security' }).click()
       await expect(page).toHaveURL(/\/investments$/)
       await expectNoSidewaysScroll(page)
     })
@@ -206,7 +206,7 @@ for (const width of [710, 1280]) {
       await expect(heading).toBeVisible()
       const review = page.getByRole('region', { name: 'Review the statement' })
       await expect(review).toContainText(
-        'The statement total is $21,400.00 and the calculated Balance on 2026-09-30 is $21,500.00: a difference of $100.00. Which cash, quantity or price needs correction? Cash and quantity corrections come in a later release. Only a price can be recorded now.',
+        'The statement total is $21,400.00 and the calculated Balance on 2026-09-30 is $21,500.00: a difference of $100.00. Which cash, quantity or price needs correction? Cash and quantity corrections are not available yet. Only a price can be recorded now.',
       )
       await expectNoSidewaysScroll(page)
       // Back keeps the values and focuses the form heading; Cancel returns to the opener and saves nothing.
@@ -254,7 +254,7 @@ for (const width of [710, 1280]) {
         proposedCorrection: proposed,
       })
       const later =
-        'Cash and quantity corrections come in a later release. Only a price can be recorded now.'
+        'Cash and quantity corrections are not available yet. Only a price can be recorded now.'
       for (const proposed of ['cash', 'quantity']) {
         const reviewed = await page.request.post(`/api/v1/accounts/${redwood}/statements/review`, {
           data: body(proposed),

@@ -9,6 +9,8 @@ import { STATUS_LABEL } from '../accounts/statusLabel'
 
 const dollars = (text: string) => formatMoney(Number(text))
 const NOT_AVAILABLE = 'Not available'
+/** A share count with thousands separators and up to four decimals. */
+const shares = (text: string) => Number(text).toLocaleString('en-US', { maximumFractionDigits: 4 })
 
 /** The status label of an account that is not active: archived and closed accounts stay in the group, labeled. */
 function Status({ status }: { status: string }) {
@@ -64,7 +66,7 @@ function PositionLine({ position }: { position: GroupPosition }) {
         <span className="normal-nums">{dollars(position.value)}</span>
       </span>
       <span className="block text-ink-muted">
-        {position.shares} shares at{' '}
+        {shares(position.shares)} shares at{' '}
         {position.price === null ? 'prices that differ by line' : dollars(position.price)} on{' '}
         <span className="whitespace-nowrap">{position.priceOn}</span>.
       </span>
@@ -72,8 +74,8 @@ function PositionLine({ position }: { position: GroupPosition }) {
         {position.cost !== null
           ? `Purchase cost ${dollars(position.cost)}, gain ${dollars(position.gain ?? '0')}.`
           : partly
-            ? `Purchase cost known for ${position.knownShares} of ${position.shares} shares (${position.coverage}): ${dollars(position.knownCost ?? '0')}. Full cost: ${NOT_AVAILABLE}.`
-            : `Purchase cost unknown (${position.coverage} of the shares). Full cost: ${NOT_AVAILABLE}.`}
+            ? `Purchase cost known for ${shares(position.knownShares)} of ${shares(position.shares)} shares (${position.coverage}): ${dollars(position.knownCost ?? '0')}. Full cost: ${NOT_AVAILABLE}.`
+            : `Purchase cost unknown for all ${shares(position.shares)} shares. Full cost: ${NOT_AVAILABLE}.`}
       </span>
     </li>
   )
@@ -89,19 +91,19 @@ function SecurityDetail({ security, total }: { security: GroupSecurity; total: s
         {security.symbol}
       </h3>
       <p>
-        {security.shares} shares valued at <strong>{dollars(security.value)}</strong> across{' '}
+        {shares(security.shares)} shares valued at <strong>{dollars(security.value)}</strong> across{' '}
         {security.accountCount} {security.accountCount === 1 ? 'account' : 'accounts'}.
       </p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
         <dt className="text-ink-muted">Known purchase cost</dt>
         <dd className="normal-nums">
           {security.knownCost === null ? NOT_AVAILABLE : dollars(security.knownCost)}
-          {security.knownCost !== null && <> for {security.knownShares} shares</>}
+          {security.knownCost !== null && <> for {shares(security.knownShares)} shares</>}
         </dd>
         <dt className="text-ink-muted">Known gain</dt>
         <dd className="normal-nums">
           {security.knownGain === null ? NOT_AVAILABLE : dollars(security.knownGain)}
-          {security.knownGain !== null && <> for {security.knownShares} shares</>}
+          {security.knownGain !== null && <> for {shares(security.knownShares)} shares</>}
         </dd>
         <dt className="text-ink-muted">Full purchase cost</dt>
         <dd className="normal-nums">
@@ -117,7 +119,7 @@ function SecurityDetail({ security, total }: { security: GroupSecurity; total: s
       {partly && (
         <p className="max-w-prose text-sm">
           Full purchase cost and full gain say {NOT_AVAILABLE} because{' '}
-          {Number((Number(security.shares) - Number(security.knownShares)).toFixed(4))} shares have
+          {shares(String(Number(security.shares) - Number(security.knownShares)))} shares have
           unknown cost.
         </p>
       )}
@@ -148,7 +150,9 @@ function SecurityDetail({ security, total }: { security: GroupSecurity; total: s
 export function InvestmentGroupPage() {
   const group = useInvestmentGroup()
   const [picked, setPicked] = useState('')
-  const securities = group.data?.securities ?? []
+  const securities = [...(group.data?.securities ?? [])].sort((a, b) =>
+    a.symbol.localeCompare(b.symbol),
+  )
   const selected = securities.find((s) => s.symbol === picked) ?? securities[0]
   return (
     <div className="flex flex-col gap-6">
@@ -160,6 +164,29 @@ export function InvestmentGroupPage() {
       {group.isError && <FormAlert message={group.error.message} />}
       {group.data && (
         <>
+          {securities.length > 0 && selected && (
+            <Card aria-label="Selected security">
+              <CardTitle className="text-lg">Securities</CardTitle>
+              <div className="mt-2 flex max-w-xs flex-col gap-1 text-sm">
+                <label htmlFor="security-chooser">Choose a security</label>
+                <select
+                  id="security-chooser"
+                  value={selected.symbol}
+                  onChange={(event) => setPicked(event.target.value)}
+                  className="rounded-control border border-line bg-surface px-3 py-2"
+                >
+                  {securities.map((s) => (
+                    <option key={s.symbol} value={s.symbol}>
+                      {s.symbol}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-4">
+                <SecurityDetail security={selected} total={group.data.total} />
+              </div>
+            </Card>
+          )}
           <Card aria-label="All investment accounts summary">
             <CardTitle className="text-lg">All investment accounts</CardTitle>
             {group.data.accounts.length === 0 ? (
@@ -180,28 +207,6 @@ export function InvestmentGroupPage() {
               </>
             )}
           </Card>
-          {securities.length > 0 && selected && (
-            <Card aria-label="Selected security">
-              <CardTitle className="text-lg">Securities</CardTitle>
-              <label className="mt-2 flex max-w-xs flex-col gap-1 text-sm">
-                Choose a security
-                <select
-                  value={selected.symbol}
-                  onChange={(event) => setPicked(event.target.value)}
-                  className="rounded-control border border-line bg-surface px-3 py-2"
-                >
-                  {securities.map((s) => (
-                    <option key={s.symbol} value={s.symbol}>
-                      {s.symbol}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="mt-4">
-                <SecurityDetail security={selected} total={group.data.total} />
-              </div>
-            </Card>
-          )}
           {group.data.accounts.length > 0 && securities.length === 0 && (
             <p className="text-ink-muted">No holdings are recorded in these accounts.</p>
           )}

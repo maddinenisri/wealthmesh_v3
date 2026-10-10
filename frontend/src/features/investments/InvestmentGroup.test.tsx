@@ -131,7 +131,7 @@ describe('the whole investment group (HOLDINGS_002)', () => {
     expect(harbor).toHaveTextContent('Purchase cost $15,000.00, gain $5,000.00')
     const willow = within(list).getByText('Willow Traditional IRA').closest('li')!
     expect(willow).toHaveTextContent(
-      'Purchase cost unknown (0.00% of the shares). Full cost: Not available.',
+      'Purchase cost unknown for all 100 shares. Full cost: Not available.',
     )
     // Each account can be opened from the list.
     expect(within(redwood).getByRole('link', { name: 'Redwood Brokerage' })).toHaveAttribute(
@@ -167,6 +167,23 @@ describe('the whole investment group (HOLDINGS_002)', () => {
     expect(
       await screen.findByRole('region', { name: 'All investment accounts summary' }),
     ).toHaveTextContent('$132,000.00')
+  })
+
+  it('V2_HOLDINGS_002 the chooser is named by its label alone, comes before the long account list, and share counts have thousands separators', async () => {
+    const data = seed()
+    mockApi({
+      ...data,
+      openings: { ...data.openings, [HARBOR]: opening('60000.00', '2469.1356', '15000.00') },
+    })
+    renderRoute('/investments')
+    const chooser = await screen.findByRole('combobox', { name: 'Choose a security' })
+    const accounts = screen.getByRole('region', { name: 'All investment accounts summary' })
+    expect(
+      chooser.compareDocumentPosition(accounts) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Selected security' })).toHaveTextContent(
+      '2,469.1356 shares at $100.00',
+    )
   })
 
   it('V2_HOLDINGS_001 no completed investment account says so and shows no security', async () => {
@@ -206,7 +223,7 @@ describe('the selected account beside the group (HOLDINGS_003)', () => {
     expect(group).toHaveTextContent('3 investment accounts hold $131,500.00')
     expect(group).toHaveTextContent('This is the whole group, not this account.')
     expect(
-      within(group).getByRole('link', { name: 'See the holdings by security' }),
+      within(group).getByRole('link', { name: 'See investment holdings by security' }),
     ).toHaveAttribute('href', '/investments')
   })
 })
@@ -227,5 +244,8 @@ describe('Wealth on a date shows debts', () => {
     })
     expect(await within(card).findByText(/Household wealth on 2026-09-30/)).toBeVisible()
     expect(within(card).getByText(/^Debts/)).toHaveTextContent('Debts $1,000.00')
+    expect(
+      within(card).getByText('Household wealth is financial assets minus debts.'),
+    ).toBeVisible()
   })
 })

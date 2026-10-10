@@ -80,7 +80,7 @@ describe('a statement reviewed against the calculated Balance (HOLDINGS_005)', (
     await focused(heading)
     const review = screen.getByRole('region', { name: 'Review the statement' })
     expect(review).toHaveTextContent(
-      'The statement total is $21,400.00 and the calculated Balance on 2026-09-30 is $21,500.00: a difference of $100.00. Which cash, quantity or price needs correction? Cash and quantity corrections come in a later release. Only a price can be recorded now.',
+      'The statement total is $21,400.00 and the calculated Balance on 2026-09-30 is $21,500.00: a difference of $100.00. Which cash, quantity or price needs correction? Cash and quantity corrections are not available yet. Only a price can be recorded now.',
     )
     // Nothing is saved by the review, and the Balance is untouched.
     expect(api.statements).toHaveLength(0)

@@ -65,6 +65,9 @@ export function WealthOverTime({ person }: { person?: string }) {
           <p>
             Debts <Amount value={Number(wealth.data.debts)} />
           </p>
+          <p className="text-sm text-ink-muted">
+            Household wealth is financial assets minus debts.
+          </p>
           <OlderPricesNote wealth={wealth.data} />
           {wealth.data.investments.accounts.length > 0 && (
             <section aria-label="Investment balances on this date">

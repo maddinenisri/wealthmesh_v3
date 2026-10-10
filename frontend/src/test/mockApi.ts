@@ -2698,7 +2698,7 @@ export function mockApi(
       if (body.proposedCorrection === 'cash' || body.proposedCorrection === 'quantity')
         return problem(
           400,
-          'Cash and quantity corrections come in a later release. Only a price can be recorded now.',
+          'Cash and quantity corrections are not available yet. Only a price can be recorded now.',
         )
       if (body.statementOn > today) return problem(400, 'A statement cannot be dated in the future')
       if (!/^-?\d+(\.\d{1,2})?$/.test(body.balance)) return problem(400, 'Enter a valid amount')
@@ -2725,7 +2725,7 @@ export function mockApi(
         differs,
         corrections: differs ? ['price'] : [],
         message: differs
-          ? `The statement total is ${dollars(total)} and the calculated Balance on ${body.statementOn} is ${dollars(calculated)}: a difference of ${dollars(difference)}. Which cash, quantity or price needs correction? Cash and quantity corrections come in a later release. Only a price can be recorded now. Saving the statement changes no Balance.`
+          ? `The statement total is ${dollars(total)} and the calculated Balance on ${body.statementOn} is ${dollars(calculated)}: a difference of ${dollars(difference)}. Which cash, quantity or price needs correction? Cash and quantity corrections are not available yet. Only a price can be recorded now. Saving the statement changes no Balance.`
           : `The statement total ${dollars(total)} matches the calculated Balance on ${body.statementOn}. Nothing needs correcting, and saving the statement changes no Balance.`,
         afterSave: differs
           ? `Statement saved. The statement total is ${dollars(total)} and the calculated Balance on ${body.statementOn} is ${dollars(calculated)}: a difference of ${dollars(difference)}. The Balance stays ${dollars(calculated)}; a statement never changes it. To correct the difference, record a price.`

@@ -20,7 +20,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
  */
 class StatementDifferenceApiTests extends PriceTestBase {
 
-    private static final String LATER = "Cash and quantity corrections come in a later release. "
+    private static final String LATER = "Cash and quantity corrections are not available yet. "
             + "Only a price can be recorded now.";
 
     private static String redwood;

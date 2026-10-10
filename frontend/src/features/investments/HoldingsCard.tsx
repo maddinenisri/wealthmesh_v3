@@ -134,7 +134,7 @@ export function AllInvestmentsSummary() {
             : 'investment accounts hold'}{' '}
           <Amount value={Number(group.data.total)} />. This is the whole group, not this account.{' '}
           <Link to="/investments" className="underline underline-offset-2">
-            See the holdings by security
+            See investment holdings by security
           </Link>
         </p>
       )}
