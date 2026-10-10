@@ -403,3 +403,25 @@ First validator run stalled on a silent long command (no progress for 600s); the
 | D4 Low | The Debts tests checked the label only | Fixed: Vitest asserts "Debts $1,000.00", e2e compares with the API figure |
 | D5 | The unknown-share count is worked out in the browser | Fixed with a 4-place rounding; logged: the server should supply it |
 | D6 | Restore on a checking statement said "removed"; notes stale | Message says "removed or restored" and the test names it; notes updated |
+
+## 19c visual review (710px and 1280px; 0 High, 2 Medium, 9 Low; commit 922d6e5)
+
+No sideways scroll on 44 shots; nothing pressed (Save, Undo, Remove). Dev data had no restored statement, no empty group and no closed investment account, so those states are covered by Vitest and e2e only (the Save, Undo and Remove sentences and their focus: `StatementDifference.test.tsx`, `28-groups.spec.ts`).
+
+| # | Finding | Result |
+| --- | --- | --- |
+| 1 Medium | Wealth on a date showed Debts but did not say why Household wealth is far below Financial assets | Fixed: "Household wealth is financial assets minus debts." (Vitest) |
+| 2 Medium | The security chooser sat about 3,400px down, under a 51-row account list | Fixed: the Securities card comes first (Vitest: chooser before the list) |
+| 3 Low | Focus after opening Attach statement is on the Panel wrapper, not the heading | Logged: the same Panel pattern as Record a price (19b); the heading takes focus after Back |
+| 4 Low | "Purchase cost unknown (0.00% of the shares)" read as "0% unknown" | Fixed: "Purchase cost unknown for all 100 shares. Full cost: Not available." |
+| 5 Low | "come in a later release" is developer wording | Fixed: "are not available yet" (server, mock, tests) |
+| 6 Low | Cancel from the review shows no sentence | Logged, by design: Cancel of a form or review saves nothing and returns focus to the opener, as everywhere else; the design line asking for a sentence was wrong |
+| 7 Low | No menu item highlighted on `/investments`; account links not underlined | Logged (no menu entry by Q-082 decision; list links follow the Household list style) |
+| 8 Low | Two wordings for the same link | Fixed: "See investment holdings by security" in both places |
+| 9 Low | Share counts without separators ("2469.1356") | Fixed: "2,469.1356" (Vitest red with the formatting planted away) |
+| 10 Low | The chooser's accessible name included every option; options unsorted | Fixed: label and select are separate, options sorted |
+| 11 Low (old) | A removed statement shows who and when, not why | Logged: the removal review has no reason field (slice 16/17 behaviour) |
+
+Taste, not fixed: "That is a different measure from the share of the shares whose cost is known"; a long name puts the amount on its own line at 710; the whole-group total uses the large serif amount style inside a sentence. Odd, unexplained: Household wealth on 2026-09-30 read $851,372.76 in the first shots and $851,372.56 minutes later; I did not find a writer (pitfall 33: look at the dev database before the next session).
+
+Proof on the final code (`bef76c5`): Vitest 535 passed, full e2e 378 passed (3m17s), lint and Checkstyle clean. The full backend run after the last backend change, the 3-run flake check and the 8-run Vitest loop come after your Cowork fixes, before Land.
