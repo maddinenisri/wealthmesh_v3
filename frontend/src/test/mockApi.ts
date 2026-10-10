@@ -3184,11 +3184,33 @@ export function mockApi(
       const moved = moves.reduce((x, m) => x + Number(m.change), 0)
       const pay = creditRows.reduce((x, c) => x + Number(c.payCredit), 0)
       const interest = creditRows.reduce((x, c) => x + Number(c.interestCredit), 0)
+      // The two ends read as the wealth read does: ledger accounts at their Balance, valued ones at their value in
+      // force, investment accounts at their opening plus the price term (the change then comes from the ends).
+      const netOn = (date: string) =>
+        state.accounts
+          .filter((a) => a.openedOn <= date && a.status !== 'draft')
+          .reduce((x, a) => {
+            const holdings =
+              typeTraits(a.type).kind === 'investment' ? state.openings.get(a.id) : undefined
+            const mine = state.prices.filter((p) => p.accountId === a.id)
+            return (
+              x +
+              Number(
+                isValuedType(a.type)
+                  ? valuedPoint(state.values, a, date).amount
+                  : holdings
+                    ? Number(a.openingAmount) + priceDelta(holdings, mine, date)
+                    : a.balance.amount,
+              )
+            )
+          }, 0)
+      const startNet = netOn(from)
+      const endNet = netOn(to)
       return HttpResponse.json({
         from,
         to,
-        startWealth: '0.00',
-        endWealth: (moved + priced + pay + interest).toFixed(2),
+        startWealth: startNet.toFixed(2),
+        endWealth: endNet.toFixed(2),
         change: (moved + priced + pay + interest).toFixed(2),
         priceChange: priced.toFixed(2),
         priceMoves,
