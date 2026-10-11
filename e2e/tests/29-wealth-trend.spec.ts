@@ -241,6 +241,17 @@ for (const width of [710, 1280]) {
       })
       expect(made.ok()).toBeTruthy()
       const archivedId = ((await made.json()) as { id: string }).id
+      // A later price ($100.00 to $200.00 on Oct 2), recorded while the account is active (Q-070).
+      const later = await page.request.post(`/api/v1/accounts/${archivedId}/prices`, {
+        headers: { 'Idempotency-Key': `t19d-retired-${width}` },
+        data: {
+          symbol: `${tag}A`,
+          price: '200.00',
+          valueOn: '2026-10-02',
+          enteredByMemberId: owner,
+        },
+      })
+      expect(later.status()).toBe(201)
       const archive = await page.request.post(`/api/v1/accounts/${archivedId}/archive`, {
         data: { enteredByMemberId: owner },
       })
@@ -338,6 +349,11 @@ for (const width of [710, 1280]) {
       await expect(
         page.getByRole('status').filter({ hasText: 'Balance on 2026-09-30' }),
       ).toContainText('$1,100.00')
+      // The price term is read: the later price counts on Oct 3 ($1,000.00 cash + 1 share at $200.00).
+      await page.getByLabel('View Balance on').fill('2026-10-03')
+      await expect(
+        page.getByRole('status').filter({ hasText: 'Balance on 2026-10-03' }),
+      ).toContainText('$1,200.00')
       // Fault 8: before tracking began the sentence says when it began.
       await page.getByLabel('View Balance on').fill('2026-08-01')
       await expect(page.getByRole('status')).toHaveText(
