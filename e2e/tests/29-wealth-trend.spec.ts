@@ -115,7 +115,9 @@ for (const width of [710, 1280]) {
       await expect(
         onDate.getByRole('listitem').filter({ hasText: `${tag} Savings` }),
       ).toContainText('$12,000.00')
-      await expect(onDate).toContainText(`Total ${money(after)}`)
+      await expect(onDate.getByText('Total', { exact: true }).locator('xpath=..')).toContainText(
+        money(after),
+      )
       await expectNoSidewaysScroll(page)
 
       await bank.getByRole('link', { name: new RegExp(`${tag} Checking`) }).click()
@@ -214,6 +216,133 @@ for (const width of [710, 1280]) {
         2,
       )
       expect(octNet - sepNet).toBeCloseTo(Number(change.change), 2)
+      await expectNoSidewaysScroll(page)
+    })
+
+    test(`V2_WEALTH_001 V2_WEALTH_009 Cowork 19d: labels, totals in the amount column, lists that add up, From and To messages, Balance on a date on an investment account (${width}px)`, async ({
+      page,
+    }) => {
+      const owner = await enteringMember(page)
+      const archivedName = `${tag} Retired Brokerage`
+      const made = await page.request.post('/api/v1/accounts', {
+        data: {
+          type: 'brokerage',
+          name: archivedName,
+          ownerMemberIds: [owner],
+          openedOn: '2026-09-01',
+          enteredByMemberId: owner,
+          opening: {
+            cash: '1000.00',
+            holdings: [
+              { symbol: `${tag}A`, quantity: '1', price: '100.00', valueOn: '2026-09-01' },
+            ],
+          },
+        },
+      })
+      expect(made.ok()).toBeTruthy()
+      const archivedId = ((await made.json()) as { id: string }).id
+      const archive = await page.request.post(`/api/v1/accounts/${archivedId}/archive`, {
+        data: { enteredByMemberId: owner },
+      })
+      expect(archive.ok()).toBeTruthy()
+
+      // An overdrawn checking account and an owed card, so Debts has lines and Bank money has an overdraft.
+      const tight = await openAccount(page, owner, 'checking', `${tag} Tight Checking`, '50.00')
+      const overdraft = await page.request.post(`/api/v1/accounts/${tight}/expenses`, {
+        headers: { 'Idempotency-Key': `t19d-tight-${width}` },
+        data: {
+          description: 'Rent',
+          amount: '80.00',
+          occurredOn: '2026-09-05',
+          category: 'Utilities',
+          enteredByMemberId: owner,
+        },
+      })
+      expect(overdraft.status()).toBe(201)
+      const owedCard = await page.request.post('/api/v1/accounts', {
+        data: {
+          type: 'credit_card',
+          name: `${tag} Owed Card`,
+          ownerMemberIds: [owner],
+          openedOn: '2026-09-01',
+          openingBalance: '300.00',
+          balanceSide: 'owed',
+        },
+      })
+      expect(owedCard.ok()).toBeTruthy()
+
+      await page.goto('/')
+      const card = page.getByRole('region', { name: 'Wealth on a date' })
+      await card.getByLabel('Show wealth on').fill('2026-09-30')
+      await expect(card.getByText(/^Household wealth on 2026-09-30/)).toBeVisible()
+      // Fault 2: the archived account is labeled in the Investments list.
+      const investments = card.getByRole('region', { name: 'Investment balances on this date' })
+      await expect(
+        investments.getByRole('listitem').filter({ hasText: archivedName }),
+      ).toContainText('Archived')
+      // Fault 3: each Total sits in the amount column, under the amounts (Bank money and Investments).
+      for (const list of [
+        card.getByRole('region', { name: 'Checking and savings balances on this date' }),
+        investments,
+      ]) {
+        const rowAmount = list
+          .getByRole('listitem')
+          .first()
+          .locator('xpath=.//span[@class="ml-auto"]')
+        const total = list
+          .getByText('Total', { exact: true })
+          .locator('xpath=..')
+          .locator('span')
+          .last()
+        const rowBox = (await rowAmount.boundingBox())!
+        const totalBox = (await total.boundingBox())!
+        expect(Math.abs(rowBox.x + rowBox.width - (totalBox.x + totalBox.width))).toBeLessThan(2)
+      }
+      // Fault 4 and 5: the lists add up to the figures above them, whatever else the shared database holds.
+      const wealth = (await (await page.request.get('/api/v1/wealth?asOf=2026-09-30')).json()) as {
+        debts: string
+        debtLines: unknown[]
+        bankMoney: { accounts: { balance: string }[] }
+      }
+      expect(wealth.bankMoney.accounts.some((line) => Number(line.balance) < 0)).toBe(true)
+      await expect(
+        card.getByRole('region', { name: 'Checking and savings balances on this date' }),
+      ).toContainText('counted once, as debt')
+      const debts = card.getByRole('region', { name: 'Debts on this date' })
+      await expect(
+        debts.getByRole('listitem').filter({ hasText: `${tag} Owed Card` }),
+      ).toContainText('$300.00')
+      await expect(
+        debts.getByRole('listitem').filter({ hasText: `${tag} Tight Checking` }),
+      ).toContainText('$30.00')
+      await expect(debts.getByText('Total', { exact: true }).locator('xpath=..')).toContainText(
+        money(Number(wealth.debts)),
+      )
+      await expectNoSidewaysScroll(page)
+
+      // Fault 6 and 7: From after To is said with the field names; the same date twice shows $0.00, never -$0.00.
+      await card.getByLabel('From', { exact: true }).fill('2026-10-03')
+      await card.getByLabel('To', { exact: true }).fill('2026-09-30')
+      await expect(card.getByRole('alert')).toHaveText('From must be on or before To.')
+      await card.getByLabel('From', { exact: true }).fill('2026-09-30')
+      await card.getByLabel('To', { exact: true }).fill('2026-09-30')
+      const shown = card.getByRole('region', { name: 'Wealth change' })
+      await expect(shown).toContainText('a change of $0.00')
+      await expect(
+        shown.getByText('Spending', { exact: true }).locator('xpath=ancestor::li'),
+      ).not.toContainText('-$0.00')
+
+      // Fault 1: an investment account has Balance on a date, here the Sep 30 Balance of this width's brokerage.
+      await page.goto(`/accounts/${archivedId}`)
+      await page.getByLabel('View Balance on').fill('2026-09-30')
+      await expect(
+        page.getByRole('status').filter({ hasText: 'Balance on 2026-09-30' }),
+      ).toContainText('$1,100.00')
+      // Fault 8: before tracking began the sentence says when it began.
+      await page.getByLabel('View Balance on').fill('2026-08-01')
+      await expect(page.getByRole('status')).toHaveText(
+        'Balance on 2026-08-01: not available. Tracking began on 2026-09-01.',
+      )
       await expectNoSidewaysScroll(page)
     })
   })
