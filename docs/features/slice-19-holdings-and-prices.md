@@ -560,3 +560,44 @@ Count against 8, 8, 5, 5, 5, 7, 9, 9, 8, 5, 6, 2, 5, 1, 1, 1, 3 and 2. Not count
 | 6 | 3, From later than To | Message says "start date ... end date" for fields named From and To, no full stop | Low | "From must be on or before To." (UI and server) |
 | 7 | 3, same date twice | Spending row shows "-$0.00" | Low | `Amount` and `formatMoney` show -0 as $0.00 |
 | 8 | 4, before tracking began | Does not say when tracking began, no full stop | Low | "Balance on D: not available. Tracking began on <date>." |
+
+Red first (Vitest `WealthDateLists.test.tsx`: 10 of 11 failed on the old code for the intended reasons; the Wealth change message also failed in `WealthAsOfApiTests` before the server fix). Plants on the fixed code, each alone, restored from a copy (`cmp`/identical check), e2e spec 29 after `npm run package`:
+
+| Plant | Old behaviour back | e2e `29-wealth-trend` (line) |
+| --- | --- | --- |
+| Q1 fault 2 | no status badge in a date list | red at 282 (first pass was green: the account name itself contained "Archived"; renamed to "Retired") |
+| Q2 fault 3 | Total not in the amount column | red at 274 (488.5px off) |
+| Q3 fault 6 | old From/To message | red at 298 |
+| Q4 fault 7 | -0 not normalised | red at 305 ("Spending-$0.00") |
+| Q5 fault 8 | old not-available sentence | red at 315 |
+| Q6 fault 1 | date only on ledger accounts | red at 309 |
+| Q7 fault 5 | no debts list | red at 314 (first pass was green: the assertion was conditional and a fresh database had no debt; the test now creates an owed card and an overdraft) |
+| Q8 fault 4 | no overdraft note | red at 310 (same first-pass reason) |
+
+Fault 5's second list, "Plans and card credit", is proven in Vitest only (a plan and a card in credit need setup the e2e does not have). Fault 4 is a note, not a changed figure: the Bank money total stays the signed sum of its accounts, as on the Household page (D-022, D-067), so it is not re-filed as a mismatch. The server's Balance on a date reads the price term (WealthAsOfTrendApiTests, the 401(k) is $80,000.00 on Oct 14 and $81,000.00 on Oct 15); the e2e now checks an investment account at $1,100.00 on Sep 30 and $1,200.00 on Oct 3 after a later price.
+
+## 19d proof at Land (final code)
+
+Backend 3 x 949 tests, 0 failed, 24m59.9s (`scripts/flake-check.sh 3`). Vitest 8 x 554 passed, 95 s. Full `npm run e2e` 384 passed (3m19s), then spec 29 re-run after the e2e edit that checks the price term on an investment account ($1,100.00 on Sep 30, $1,200.00 on Oct 3), and Q6 re-planted red at that line (348). Lint, typecheck, format, `npm run coverage -- --require --slice 19` (14/14) clean.
+
+Open failure kept as evidence: the first flake-check run of this stage failed 868 of 949 tests with `FlywaySqlUnableToConnectToDbException` caused by a `SocketTimeoutException` connecting to the Testcontainers Postgres on the first context (log kept as `/tmp/flyway-run1.log`, not committed); run 2 then hung 2h24m and was killed; the clean restart passed 3 of 3. Cause not found (Docker on this machine is shared with the dev stack and e2e compose). It still reads like the earlier "Unable to obtain connection" hits: a connect timeout in the first context, not a Flyway or SQL error.
+
+## Handoff (19d)
+
+- Done: WEALTH_001, WEALTH_009; slice 19 is 14 of 14. Commits `5d96211`..`8e35884` plus the notes; push only when the owner says (the Cowork fixes `80d8429`, `8e35884` and later are not pushed).
+- Logged, not fixed: mock `change` ignores income and spending; "Net worth" vs "Household wealth"; mixed amount formats in one sentence; the aria-live area covers every list and the What changed result is not announced; narrow Description column at 710; duplicate dev account names; "Balance correction" wording for a card; the date list drops "Overdrawn by" labels and owner names; no sentence under the top figures on the Household page.
+- Fault 4 is a note, not a changed figure (Bank money total stays the signed sum, D-022/D-067).
+- Open failures: Flyway connect timeout (evidence above), OwnerCorrection Vitest x1, LoanCorrection 409 original timing.
+- Dev DB: Cowork left CARE prices on CW Meadow HSA Plan ($240.00 on 2026-09-30, $250.00 on 2026-10-02).
+
+## How it works (19d)
+
+Checked against the code (`WealthStore.balancesAsOf`, `HoldingDeltaSql`, `WealthService.change`, `WealthOverTime.tsx`, `BalanceOnDate.tsx`); one agent claim was too narrow and is corrected below.
+
+- **Nothing new underneath.** 19d added no endpoint, table or chart. It proves the existing date reads and fixes how they are shown.
+- **One reader for a date.** Every wealth figure for a date (net worth, financial assets, each person's view, the Household total, each group total) comes from `WealthStore.balancesAsOf`. For each account it takes the opening amount, adds activity dated on or before the day, and, for a property or plan, the latest value dated on or before the day that is not a plan. An account opened after the day is left out and named under "Not tracking yet".
+- **Prices by their date.** `HoldingDeltaSql` is the one place that picks a holding's price: the newest recorded price dated on or before the day (a recorded price wins a tie with the opening price); replaced and removed prices never count. A price dated Oct 15 is ignored on Sep 30; one dated Sep 30 but entered in October counts on Sep 30. Income entered in October but dated in September counts at Sep 30 too.
+- **What changed.** From and To are both read with the same reader. `WealthService.change` splits the difference into income, spending, asset value changes, investment price changes, plan pay credits and benefit interest, Balance corrections, accounts added, and "Not explained" (transfers and card or loan payments cancel). The sentence reads "Wealth went from X on D1 to Y on D2: a change of Z" and the rows add up to Z. In the scenario: income $2,500, card spending $380, a $2,000 price rise, total $4,120 (backend test, fresh context).
+- **Balance on a date.** Every non-draft account page has it (a property or plan says "Value"). Before tracking began it says "not available. Tracking began on <date>." Looking at an earlier date never changes the current Balance.
+- **The lists on Wealth on a date.** Bank money, Investments, Property and other assets, Plans and card credit (a defined benefit plan, a card in credit) and What makes up debts, each from `DatedList`: archived or closed accounts carry a status badge, and each list ends with a Total in the amount column. The Bank money total is the signed sum (an overdrawn account is negative and the note says it is counted once, as debt); What makes up debts totals to Debts. Retirement and Health savings accounts sit inside Investments and no group is added twice (D-065, D-067).
+- **The 8 Cowork fixes** are in the table under "19d Cowork pass"; the plants are under it.
