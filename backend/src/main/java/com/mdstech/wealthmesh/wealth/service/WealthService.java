@@ -81,7 +81,7 @@ public class WealthService {
             LocalDate start = requireDate(from, "The start date");
             LocalDate end = requireDate(to, "The end date");
             if (start.isAfter(end)) {
-                throw bad("The start date must be on or before the end date");
+                throw bad("From must be on or before To.");
             }
             return new LocalDate[] { start, end };
         }).flatMap(dates -> Mono.zip(store.balancesAsOf(dates[0]).collectList(), store.balancesAsOf(dates[1])

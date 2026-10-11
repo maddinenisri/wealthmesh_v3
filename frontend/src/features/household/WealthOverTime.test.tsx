@@ -167,9 +167,7 @@ describe('what changed', () => {
       target: { value: '2026-09-30' },
     })
     fireEvent.change(within(card).getByLabelText('To'), { target: { value: '2026-09-01' } })
-    expect(
-      await within(card).findByText('The start date must be on or before the end date'),
-    ).toBeInTheDocument()
+    expect(await within(card).findByText('From must be on or before To.')).toBeInTheDocument()
     expect(api.requests.some((r) => r.includes('/wealth/change'))).toBe(false)
   })
 

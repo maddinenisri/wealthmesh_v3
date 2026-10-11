@@ -115,7 +115,7 @@ describe('the September 30 snapshot and its trend (WEALTH_001, WEALTH_009)', () 
     expect(within(bank).getByText('Emergency Savings').closest('li')).toHaveTextContent(
       '$12,000.00',
     )
-    expect(bank).toHaveTextContent('Total $17,120.00')
+    expect(within(bank).getByText('Total').parentElement).toHaveTextContent('$17,120.00')
   })
 
   it('V2_WEALTH_009 the trend reads both dates and the increase, and another end date gives another answer', async () => {

@@ -1,6 +1,5 @@
 import type { ValueRow } from '../../api/values'
 import { useEffect, useState } from 'react'
-import { useBalanceAsOf } from '../../hooks/useActivity'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import type { Account } from '../../api/accounts'
 import type { Member } from '../../api/household'
@@ -34,7 +33,8 @@ import { capitalNoun, debtNounOf, isDebt, isValued, typeNoun, typeTraits } from 
 import { AccountStatusCard } from './AccountStatusCard'
 import { STATUS_LABEL } from './statusLabel'
 import { BalanceFigure } from './BalanceFigure'
-import { balanceText, isCard } from './cardBalance'
+import { isCard } from './cardBalance'
+import { BalanceOnDate } from './BalanceOnDate'
 import { OVERDRAFT_NOTICE } from './Overdrawn'
 import { ownerNames } from './ownerNames'
 import { useAccountContext } from './useAccountContext'
@@ -43,6 +43,7 @@ export function AccountDetailPage() {
   const { id = '' } = useParams()
   const location = useLocation()
   const account = useAccount(id)
+  const today = useToday()
   const { members } = useAccountContext()
   const [reviewsOpened, setReviewsOpened] = useState(0)
   // Only one review is open at a time on an investment account: the status card and Finish setup / Cancel draft close
@@ -122,6 +123,9 @@ export function AccountDetailPage() {
             />
           ) : (
             <Activity account={account.data} members={members} />
+          )}
+          {today.data && account.data.status !== 'draft' && (
+            <BalanceOnDate account={account.data} today={today.data} />
           )}
         </>
       )}
@@ -215,45 +219,6 @@ function Details({ account, owners }: { account: Account; owners: string }) {
           </>
         )}
       </dl>
-    </Card>
-  )
-}
-
-/** Reads the Balance on an earlier date without changing the current one (V2_CHECKING_018). */
-function BalanceOnDate({ account, today }: { account: Account; today: string }) {
-  const [date, setDate] = useState('')
-  const view = useBalanceAsOf(account.id, date > today ? '' : date)
-
-  return (
-    <Card aria-labelledby="as-of-heading">
-      <CardTitle id="as-of-heading" className="text-lg">
-        Balance on a date
-      </CardTitle>
-      <div className="mt-3 flex max-w-md flex-wrap items-end gap-4">
-        <label className="flex flex-col gap-1 text-sm">
-          View Balance on
-          <input
-            type="date"
-            value={date}
-            max={today}
-            onChange={(event) => setDate(event.target.value)}
-            className="rounded-control border border-line bg-surface px-3 py-2"
-          />
-        </label>
-      </div>
-      {view.data && (
-        <p className="mt-3 text-sm" role="status">
-          {view.data.amount === null ? (
-            <>Balance on {view.data.asOn}: not available (before tracking began)</>
-          ) : (
-            <>
-              Balance on {view.data.asOn}:{' '}
-              <strong>{balanceText(account.type, view.data.amount)}</strong>. The current Balance (
-              {balanceText(account.type, account.balance.amount)}) is unchanged.
-            </>
-          )}
-        </p>
-      )}
     </Card>
   )
 }
@@ -811,7 +776,6 @@ function Activity({ account, members }: { account: Account; members: Member[] | 
       </Card>
       {!debt && (
         <>
-          {today.data && <BalanceOnDate account={account} today={today.data} />}
           <RemindersCard accountId={account.id} />
           <StatementsCard
             accountId={account.id}

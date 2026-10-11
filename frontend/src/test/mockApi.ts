@@ -3124,7 +3124,7 @@ export function mockApi(
       const query = new URL(request.url).searchParams
       const from = query.get('from') ?? today
       const to = query.get('to') ?? today
-      if (from > to) return problem(400, 'The start date must be on or before the end date')
+      if (from > to) return problem(400, 'From must be on or before To.')
       if (to > today) return problem(400, 'The end date cannot be in the future')
       const creditRows = state.values
         .filter(

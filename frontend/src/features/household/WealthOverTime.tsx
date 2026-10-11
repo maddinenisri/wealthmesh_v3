@@ -4,8 +4,10 @@ import { useToday } from '../../hooks/useAccounts'
 import { useWealth, useWealthChange } from '../../hooks/useWealth'
 import { formatMoney } from '../../lib/money'
 import { accountTypeLabel, isDebt } from '../accounts/accountTypes'
-import { balanceText } from '../accounts/cardBalance'
+import { balanceText, isCard } from '../accounts/cardBalance'
+import { STATUS_LABEL } from '../accounts/statusLabel'
 import { Dated } from '../values/Dated'
+import type { Wealth, WealthGroup, WealthLine } from '../../api/wealth'
 import { OlderPricesNote } from './OlderPricesNote'
 
 /**
@@ -23,6 +25,8 @@ export function WealthOverTime({ person }: { person?: string }) {
   // A date after today is explained, not sent: the server refuses it, and today's figure must not stand in for it.
   const wealth = useWealth(future ? undefined : asOf || undefined, !future)
   const change = useWealthChange(from, to)
+  // Assets no list above carries: a defined benefit plan, and a card whose balance is Card credit.
+  const otherAssets = wealth.data ? plansAndCredit(wealth.data) : { total: '0.00', accounts: [] }
 
   return (
     <Card aria-labelledby="over-time-heading">
@@ -69,83 +73,54 @@ export function WealthOverTime({ person }: { person?: string }) {
             Household wealth is financial assets minus debts.
           </p>
           <OlderPricesNote wealth={wealth.data} />
-          {wealth.data.bankMoney.accounts.length > 0 && (
-            <section aria-label="Checking and savings balances on this date">
-              <h3 className="font-medium">Bank money</h3>
-              <ul className="mt-2 divide-y divide-line border-y border-line">
-                {wealth.data.bankMoney.accounts.map((line) => (
-                  <li key={line.accountId} className="py-2">
-                    <span className="flex flex-wrap items-baseline justify-between gap-x-4">
-                      <span>
-                        {line.name}{' '}
-                        <span className="text-sm text-ink-muted">
-                          {accountTypeLabel(line.type)}
-                        </span>
-                      </span>
-                      <span className="ml-auto">
-                        <Amount value={Number(line.balance)} />
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-1 text-sm">
-                Total <Amount value={Number(wealth.data.bankMoney.total)} />
-              </p>
-            </section>
-          )}
-          {wealth.data.investments.accounts.length > 0 && (
-            <section aria-label="Investment balances on this date">
-              <h3 className="font-medium">Investments</h3>
-              <ul className="mt-2 divide-y divide-line border-y border-line">
-                {wealth.data.investments.accounts.map((line) => (
-                  <li key={line.accountId} className="py-2">
-                    <span className="flex flex-wrap items-baseline justify-between gap-x-4">
-                      <span>
-                        {line.name}{' '}
-                        <span className="text-sm text-ink-muted">
-                          {accountTypeLabel(line.type)}
-                        </span>
-                      </span>
-                      <span className="ml-auto">
-                        <Amount value={Number(line.balance)} />
-                      </span>
-                    </span>
-                    {line.valueDate && (
-                      <span className="block text-sm text-ink-muted">
-                        Prices last updated <Dated on={line.valueDate} />
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {wealth.data.propertyAndOther.accounts.length > 0 && (
-            <section aria-label="Property and other assets on this date">
-              <h3 className="font-medium">Property and other assets</h3>
-              <ul className="mt-2 divide-y divide-line border-y border-line">
-                {wealth.data.propertyAndOther.accounts.map((line) => (
-                  <li key={line.accountId} className="py-2">
-                    <span className="flex flex-wrap items-baseline justify-between gap-x-4">
-                      <span>
-                        {line.name}{' '}
-                        <span className="text-sm text-ink-muted">
-                          {accountTypeLabel(line.type)}
-                        </span>
-                      </span>
-                      <span className="ml-auto">
-                        <Amount value={Number(line.balance)} />
-                      </span>
-                    </span>
-                    <span className="block text-sm text-ink-muted">
-                      Value dated {line.valueDate} {line.stale && <Badge>Older value</Badge>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          <DatedList
+            label="Checking and savings balances on this date"
+            title="Bank money"
+            group={wealth.data.bankMoney}
+            note={
+              wealth.data.bankMoney.accounts.some((line) => Number(line.balance) < 0)
+                ? 'An overdrawn account shows its negative amount here and is counted once, as debt.'
+                : undefined
+            }
+          />
+          <DatedList
+            label="Investment balances on this date"
+            title="Investments"
+            group={wealth.data.investments}
+            detail={(line) =>
+              line.valueDate && (
+                <>
+                  Prices last updated <Dated on={line.valueDate} />
+                </>
+              )
+            }
+          />
+          <DatedList
+            label="Property and other assets on this date"
+            title="Property and other assets"
+            group={wealth.data.propertyAndOther}
+            detail={(line) => (
+              <>
+                Value dated {line.valueDate} {line.stale && <Badge>Older value</Badge>}
+              </>
+            )}
+          />
+          <DatedList
+            label="Plans and card credit on this date"
+            title="Plans and card credit"
+            group={otherAssets}
+          />
+          <DatedList
+            label="Debts on this date"
+            title="What makes up debts"
+            group={{ total: wealth.data.debts, accounts: wealth.data.debtLines }}
+            owed
+          />
+          <p className="text-sm text-ink-muted">
+            The assets add up from Bank money without any overdrawn account, Investments, Property
+            and other assets, and Plans and card credit. Retirement and Health savings accounts are
+            in Investments, so no group is added twice.
+          </p>
           {wealth.data.notTracked.length > 0 && (
             <div className="text-sm text-ink-muted">
               <p>
@@ -190,7 +165,7 @@ export function WealthOverTime({ person }: { person?: string }) {
       </div>
       {from && to && from > to && (
         <p role="alert" className="mt-3 text-sm">
-          The start date must be on or before the end date
+          From must be on or before To.
         </p>
       )}
       {change.isError && (
@@ -353,5 +328,80 @@ function Explanation({
         </ul>
       )}
     </div>
+  )
+}
+
+/** Assets no other list carries: a defined benefit plan, and a card whose Balance is Card credit. */
+function plansAndCredit(wealth: Wealth): WealthGroup {
+  const listed = ['bankMoney', 'investments', 'propertyAndOther']
+  const seen = new Set<string>()
+  const accounts = [...wealth.retirement.accounts, ...wealth.cards.accounts].filter((line) => {
+    if (seen.has(line.accountId)) return false
+    seen.add(line.accountId)
+    return Number(line.balance) > 0 && !line.groups.some((group) => listed.includes(group))
+  })
+  const total = accounts.reduce((sum, line) => sum + Number(line.balance), 0)
+  return { total: total.toFixed(2), accounts }
+}
+
+/**
+ * One list of accounts on the chosen date with its total in the amount column. An archived or closed account is
+ * labeled; `owed` shows each debt as an amount owed (or overdrawn), `detail` adds a line under a row.
+ */
+function DatedList({
+  label,
+  title,
+  group,
+  note,
+  detail,
+  owed = false,
+}: {
+  label: string
+  title: string
+  group: WealthGroup
+  note?: string
+  detail?: (line: WealthLine) => React.ReactNode
+  owed?: boolean
+}) {
+  if (group.accounts.length === 0) return null
+  return (
+    <section aria-label={label}>
+      <h3 className="font-medium">{title}</h3>
+      <ul className="mt-2 divide-y divide-line border-y border-line">
+        {group.accounts.map((line) => (
+          <li key={line.accountId} className="py-2">
+            <span className="flex flex-wrap items-baseline justify-between gap-x-4">
+              <span>
+                {line.name}{' '}
+                <span className="text-sm text-ink-muted">{accountTypeLabel(line.type)}</span>{' '}
+                {line.status !== 'active' && (
+                  <Badge>{STATUS_LABEL[line.status] ?? line.status}</Badge>
+                )}
+              </span>
+              <span className="ml-auto">
+                {owed ? (
+                  <>
+                    <Amount value={Math.abs(Number(line.balance))} />{' '}
+                    <span className="text-sm text-ink-muted">
+                      {isCard(line.type) || isDebt(line.type) ? 'owed' : 'overdrawn'}
+                    </span>
+                  </>
+                ) : (
+                  <Amount value={Number(line.balance)} />
+                )}
+              </span>
+            </span>
+            {detail?.(line) ? (
+              <span className="block text-sm text-ink-muted">{detail(line)}</span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-4 text-sm font-medium">
+        <span>Total</span>
+        <Amount value={Number(group.total)} className="ml-auto" />
+      </div>
+      {note && <p className="mt-1 text-sm text-ink-muted">{note}</p>}
+    </section>
   )
 }

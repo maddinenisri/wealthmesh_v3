@@ -18,7 +18,9 @@ export function Amount({
   className,
   ...props
 }: AmountProps) {
-  const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency }).formatToParts(value)
+  // -0 (a spending of nothing, negated) must read $0.00, never -$0.00.
+  const shown = Object.is(value, -0) ? 0 : value
+  const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency }).formatToParts(shown)
   const cents = parts.filter((p) => p.type === 'decimal' || p.type === 'fraction')
   const main = parts.filter((p) => p.type !== 'decimal' && p.type !== 'fraction')
   const text = (list: typeof parts) => list.map((p) => p.value).join('')

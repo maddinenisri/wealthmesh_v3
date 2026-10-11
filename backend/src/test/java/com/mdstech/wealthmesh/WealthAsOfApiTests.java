@@ -202,7 +202,7 @@ class WealthAsOfApiTests extends DebtTestBase {
                 .isEqualTo("The date cannot be in the future");
         change("2026-09-01", "2026-10-04").expectStatus().isBadRequest();
         change("2026-09-30", "2026-09-01").expectStatus().isBadRequest().expectBody().jsonPath("$.message")
-                .isEqualTo("The start date must be on or before the end date");
+                .isEqualTo("From must be on or before To.");
         webTestClient.get().uri("/api/v1/wealth/change?from=2026-09-01").exchange().expectStatus().isBadRequest();
     }
 
