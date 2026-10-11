@@ -545,3 +545,18 @@ Visual review (710 and 1280; 0 High, 3 Medium, 7 Low):
 | 10 | "Balance correction" wording for a card | Low | Logged |
 
 Full e2e on the final code after these fixes: 382 passed (3m17s, two earlier full runs failed on a pitfall-52 name collision in `13-lifecycle` ("Bank money" matched the new region by substring; the region is now "Checking and savings balances on this date") and on my own e2e assumption that nothing else is dated Oct 1 to 3 (now judged by delta)).
+
+## 19d Cowork pass (owner, 2026-10-10): 8 faults (1 Medium, 7 Low)
+
+Count against 8, 8, 5, 5, 5, 7, 9, 9, 8, 5, 6, 2, 5, 1, 1, 1, 3 and 2. Not counted: the five Low items already logged, the real-clock date on the dev server (2026-10-10), the missing sentence under the top figures, the date list dropping "Overdrawn by" and owner names.
+
+| # | Step | What the owner saw | Sev | Fix |
+| --- | --- | --- | --- | --- |
+| 1 | 4, Balance on a date | Only bank-ledger accounts have it; an investment account, a plan, a property and a loan have no date field | Medium | `BalanceOnDate` is its own component and renders on every non-draft account page ("Value" for a property or plan) |
+| 2 | 2, Investments list | Archived Brokerage has no Archived label | Low | One `DatedList` for every list: the status badge |
+| 3 | 2, Bank money list | "Total" sits left in small text; Investments and Property have no Total | Low | Every list ends with a Total row, amount in the amount column |
+| 4 | 1 and 2, Bank money | Total subtracts overdrafts that are counted in Debts, so it does not match Financial assets | Low | The note "counted once, as debt" under Bank money when an account is overdrawn |
+| 5 | 2, lists vs figures | Lists cannot be added up to Financial assets or Debts (no plans, card credit or debts) | Low | New lists "Plans and card credit" and "What makes up debts" (Total = Debts) and a sentence on how the assets add up |
+| 6 | 3, From later than To | Message says "start date ... end date" for fields named From and To, no full stop | Low | "From must be on or before To." (UI and server) |
+| 7 | 3, same date twice | Spending row shows "-$0.00" | Low | `Amount` and `formatMoney` show -0 as $0.00 |
+| 8 | 4, before tracking began | Does not say when tracking began, no full stop | Low | "Balance on D: not available. Tracking began on <date>." |
